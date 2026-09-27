@@ -1,0 +1,58 @@
+// SIP-FNC — Postgres 16 + Prisma.
+// audit_log: retención INDEFINIDA (acta F0) → particionar por año (declarative
+// partitioning) cuando supere ~1M filas; adjuntos/Excel fuera (solo hash+ruta).
+// notification/task: realtime A+B; con varias instancias migrar hub SSE a Redis.
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  displayName   String
+  kcSub         String?  @unique
+  roles         String[] @default([])
+  mustChangePwd Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  createdAt  DateTime @default(now())
+  actorSub   String
+  actorEmail String
+  action     String
+  module     String
+  entityId   String?
+  detail     String?
+  ip         String?
+
+  @@index([actorSub, createdAt])
+  @@index([module, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  audience  String[] @default([])
+  title     String
+  body      String?
+  readBy    String[] @default([])
+}
+
+model Task {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  role      String
+  title     String
+  detail    String?
+  status    String   @default("pendiente")
+  doneBy    String?
+}

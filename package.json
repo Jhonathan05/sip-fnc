@@ -1,0 +1,37 @@
+{
+  "name": "sip-fnc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SIP-FNC: Sistema de Información de Proyectos — gestión e informes contables por periodos (perfil impactovisual: Next.js + React + Postgres)",
+  "scripts": {
+    "dev": "next dev -p 3020",
+    "build": "next build",
+    "start": "next start -p 3020",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3",
+    "bcryptjs": "3.0.3",
+    "framer-motion": "13.4.4",
+    "iron-session": "8.0.4",
+    "next": "15.5.26",
+    "next-themes": "0.4.6",
+    "openid-client": "5.7.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "prisma": "6.19.3",
+    "tailwindcss": "4.3.3",
+    "typescript": "^5.0.0"
+  }
+}

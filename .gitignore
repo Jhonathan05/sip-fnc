@@ -1,0 +1,28 @@
+# Deps / build
+node_modules/
+.next/
+out/
+dist/
+
+# Env y secretos — JAMÁS commitear
+.env
+.env.local
+.env.*.local
+
+# Datos y backups locales
+data/
+backups/
+*.db
+*.db-journal
+
+# Prisma
+prisma/migrations/dev/
+
+# Logs / OS / IDE
+*.log
+*.tsbuildinfo
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

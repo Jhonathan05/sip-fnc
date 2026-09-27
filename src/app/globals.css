@@ -1,0 +1,643 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Public+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800&family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+/* ============================================================
+   Design System Tokens — Stitch "The Institutional Vanguard"
+   ============================================================ */
+
+:root {
+  /* ── Primary (FNC Tinto) ── */
+  --primary: #8d1024;
+  --primary-container: #a5122a;
+  --on-primary: #ffffff;
+  --on-primary-container: #ffd9dc;
+
+  /* ── Secondary (FNC Verde Institucional) ── */
+  --secondary: #1b502d;
+  --secondary-container: #2e7d32;
+  --on-secondary: #ffffff;
+  --on-secondary-container: #c8e6c9;
+
+  /* ── Surfaces (The Institutional Vanguard) ── */
+  --background: #fdfdfd;
+  --surface: #fdfdfd;
+  --surface-dim: #eef1ee;
+  --surface-container: #f0f4f0;
+  --surface-container-high: #e6ebe6;
+  --surface-container-highest: #dde2dd;
+  --surface-container-low: #f7faf7;
+  --surface-container-lowest: #ffffff;
+
+  /* ── Text ── */
+  --on-surface: #0a1a0d;
+  --on-surface-variant: #3a4a3d;
+  --on-background: #0a1a0d;
+  --inverse-surface: #2f332f;
+  --inverse-on-surface: #f0f4f0;
+
+  /* ── Outline ── */
+  --outline: #717a6d;
+  --outline-variant: #c0c9bb;
+
+  /* ── Error ── */
+  --error: #ba1a1a;
+  --error-container: #ffdad6;
+  --on-error: #ffffff;
+
+  /* ── Category Colors (Calendario) ── */
+  --cat-desarrollo-social: #9E9E9E;
+  --cat-proyectos: #F48FB1;
+  --cat-direccion-ejecutiva: #2196F3;
+  --cat-cafes-especiales: #FFEB3B;
+  --cat-comunicaciones: #FF9800;
+  --cat-extension-rural: #4CAF50;
+  --cat-fortalecimiento-gremial: #9C27B0;
+
+  /* ── Shadows ── */
+  --shadow-ambient: 0px 8px 32px rgba(141, 16, 36, 0.05);
+  --shadow-float: 0px 16px 48px rgba(141, 16, 36, 0.08);
+
+  /* ── Fonts (canónicas: Outfit headline + Inter body) ── */
+  --font-headline: 'Outfit', 'Public Sans', sans-serif;
+  --font-body: 'Inter', sans-serif;
+
+  /* ── Login theming por app (ver themes/README-themes.md) ── */
+  --login-hero-from: var(--primary);
+  --login-hero-to: var(--primary-container);
+  --login-btn-from: var(--primary);
+  --login-btn-to: var(--primary-container);
+  /* Regla logo (default claro): originales. Solo temas oscuros usan blanco. */
+  --logo-filter: none;
+  --logo-asset: logo-fnc-tolima.png;
+
+  /* ── Roundness ── */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.25rem;
+  --radius-full: 9999px;
+}
+
+[data-theme='premium'] {
+  --primary: #004d1a;
+  --primary-container: #1b5e20;
+  --secondary: #1a3a7a;
+  --secondary-container: #d4e3ff;
+  --background: #f0f4f1;
+  --surface-container-lowest: #ffffff;
+  --shadow-ambient: 0px 8px 32px rgba(0, 77, 26, 0.08);
+}
+
+[data-theme='dark'] {
+  --background: #0a0c0a;
+  --surface: #0a0c0a;
+  --surface-dim: #121512;
+  --surface-container: #1a1e1a;
+  --surface-container-high: #242a24;
+  --surface-container-highest: #2d342d;
+  --surface-container-low: #141814;
+  --surface-container-lowest: #050605;
+  --on-surface: #e1e3e1;
+  --on-surface-variant: #bfc9bc;
+  --on-background: #e1e3e1;
+  --primary: #90d689;
+  --primary-container: #1b5e20;
+  --on-primary: #00390a;
+  --secondary: #adc6ff;
+  --secondary-container: #004494;
+  --outline: #8b9388;
+  --shadow-ambient: 0px 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-float: 0px 16px 48px rgba(0, 0, 0, 0.6);
+}
+
+@theme inline {
+  --color-primary: var(--primary);
+  --color-primary-container: var(--primary-container);
+  --color-on-primary: var(--on-primary);
+  --color-secondary: var(--secondary);
+  --color-secondary-container: var(--secondary-container);
+  --color-on-secondary: var(--on-secondary);
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-dim: var(--surface-dim);
+  --color-surface-container: var(--surface-container);
+  --color-surface-high: var(--surface-container-high);
+  --color-surface-highest: var(--surface-container-highest);
+  --color-surface-low: var(--surface-container-low);
+  --color-surface-lowest: var(--surface-container-lowest);
+  --color-on-surface: var(--on-surface);
+  --color-on-surface-variant: var(--on-surface-variant);
+  --color-outline: var(--outline);
+  --color-outline-variant: var(--outline-variant);
+  --color-error: var(--error);
+  --color-error-container: var(--error-container);
+  --color-on-error: var(--on-error);
+
+  /* Category colors */
+  --color-cat-desarrollo-social: var(--cat-desarrollo-social);
+  --color-cat-proyectos: var(--cat-proyectos);
+  --color-cat-direccion-ejecutiva: var(--cat-direccion-ejecutiva);
+  --color-cat-cafes-especiales: var(--cat-cafes-especiales);
+  --color-cat-comunicaciones: var(--cat-comunicaciones);
+  --color-cat-extension-rural: var(--cat-extension-rural);
+  --color-cat-fortalecimiento-gremial: var(--cat-fortalecimiento-gremial);
+
+  --font-headline: 'Public Sans', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+
+/* ── Base Styles ── */
+body {
+  background: var(--background);
+  color: var(--on-surface);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-headline);
+  color: var(--on-surface);
+}
+
+/* ── Glassmorphism Utility & Modal Customization ── */
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+/* Usar backdrop-blur solo si el navegador lo soporta eficientemente (Performance ZimaOS) */
+@supports (backdrop-filter: blur(4px)) {
+  .modal-overlay {
+    backdrop-filter: blur(4px) !important;
+    background: rgba(0, 0, 0, 0.35) !important;
+  }
+}
+
+/* Fallback para dispositivos sin soporte o hardware limitado */
+.modal-overlay {
+  background: rgba(0, 0, 0, 0.55) !important;
+}
+
+/* ── Gradient Utility (Primary CTA) ── */
+.gradient-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-container) 100%);
+}
+
+/* ── Ambient Shadow ── */
+.shadow-ambient {
+  box-shadow: var(--shadow-ambient);
+}
+
+.shadow-float {
+  box-shadow: var(--shadow-float);
+}
+
+/* ── Ghost Border (Stitch: outline-variant at 15% opacity) ── */
+.ghost-border {
+  border: 1px solid rgba(192, 201, 187, 0.15);
+}
+
+/* ── FullCalendar Overrides ── */
+.fc {
+  border: none !important;
+  border-radius: var(--radius-lg) !important;
+  overflow: visible !important;
+  background: var(--surface-container-lowest) !important;
+}
+
+/* Eliminar el borde externo del grid del calendario */
+.fc .fc-scrollgrid,
+.fc-theme-standard .fc-scrollgrid {
+  border: none !important;
+}
+
+/* Remover bordes que tocan los extremos de la tabla */
+.fc .fc-scrollgrid-section>td,
+.fc .fc-scrollgrid-section>th {
+  border-left: none !important;
+  border-right: none !important;
+}
+
+.fc .fc-scrollgrid-section-header>th {
+  border-top: none !important;
+}
+
+.fc .fc-scrollgrid-section-body:last-child>td {
+  border-bottom: none !important;
+}
+
+/* Esquinas superiores de la tabla de cabecera */
+.fc .fc-col-header-cell:first-child {
+  border-top-left-radius: var(--radius-lg) !important;
+}
+
+.fc .fc-col-header-cell:last-child {
+  border-top-right-radius: var(--radius-lg) !important;
+}
+
+/* Neutralizar fondos que se filtran tras las esquinas redondeadas en modo oscuro */
+.fc .fc-scrollgrid-section-header,
+.fc .fc-scrollgrid-section-header>th,
+.fc .fc-scrollgrid-section-header table,
+.fc .fc-col-header {
+  background: transparent !important;
+}
+
+/* Esquinas inferiores */
+.fc .fc-daygrid-body tr:last-child td:first-child {
+  border-bottom-left-radius: var(--radius-lg) !important;
+}
+
+.fc .fc-daygrid-body tr:last-child td:last-child {
+  border-bottom-right-radius: var(--radius-lg) !important;
+}
+
+.fc .fc-toolbar-title {
+  font-family: var(--font-headline) !important;
+  /* text-transform: capitalize eliminada para manejo vía JS */
+  font-size: 16px !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.01em !important;
+  color: var(--on-surface);
+}
+
+/* ── FIX 2 & 4: Segmented Control & Toolbar ── */
+.fc .fc-header-toolbar {
+  padding: 14px 18px !important;
+  /* FIX 4 - Padding */
+  margin-bottom: 0 !important;
+  /*border-bottom: 0.5px solid var(--outline-variant) !important;
+  /* FIX 4 - Separador */
+  background: transparent !important;
+}
+
+.fc .fc-button-group {
+  /*background: var(--surface-container) !important;*/
+  /* FIX 2 - Contenedor segmented */
+  border-radius: 8px !important;
+  padding: 3px !important;
+  border: none !important;
+  display: inline-flex !important;
+  gap: 0 !important;
+}
+
+.fc .fc-button {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 6px !important;
+  color: var(--on-surface-variant) !important;
+  padding: 5px 14px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  margin: 0 !important;
+  font-family: var(--font-body) !important;
+}
+
+.fc .fc-button:hover:not(.fc-button-active) {
+  background: var(--surface-container-high) !important;
+  color: var(--on-surface) !important;
+}
+
+/* FIX 2 - Botón activo flotante */
+.fc .fc-button.fc-button-active {
+  background: var(--surface-container-lowest) !important;
+  color: var(--primary) !important;
+  border: 0.5px solid var(--outline-variant) !important;
+  box-shadow: none !important;
+  font-weight: 600 !important;
+}
+
+/* Modo oscuro botón activo */
+[data-theme="dark"] .fc .fc-button.fc-button-active {
+  color: #90d689 !important;
+}
+
+/* ── FIX 3: Botones ‹ › y Hoy ── */
+.fc .fc-prev-button,
+.fc .fc-next-button {
+  background: transparent !important;
+  border: 0.5px solid var(--outline-variant) !important;
+  border-radius: 6px !important;
+  color: var(--on-surface-variant) !important;
+  width: 32px !important;
+  height: 32px !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.fc .fc-today-button {
+  background: transparent !important;
+  border: 0.5px solid var(--outline-variant) !important;
+  border-radius: 6px !important;
+  color: var(--on-surface-variant) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  padding: 5px 12px !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  text-transform: capitalize !important;
+}
+
+.fc .fc-prev-button:hover,
+.fc .fc-next-button:hover,
+.fc .fc-today-button:hover:not(:disabled) {
+  background: var(--surface-container) !important;
+  color: var(--on-surface) !important;
+}
+
+
+.fc .fc-daygrid-day-number {
+  font-family: var(--font-body);
+  font-weight: 800 !important;
+  color: var(--on-surface);
+  font-size: 0.9rem !important;
+  padding: 8px 12px !important;
+}
+
+.fc .fc-daygrid-day-top {
+  flex-direction: row-reverse !important;
+  justify-content: flex-end !important;
+}
+
+.fc .fc-daygrid-day.fc-day-today {
+  background: var(--surface-container-low) !important;
+}
+
+.fc .fc-day-today .fc-daygrid-day-number {
+  background: var(--primary) !important;
+  color: var(--on-primary) !important;
+  border-radius: 50% !important;
+  width: 24px !important;
+  height: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 4px !important;
+  padding: 0 !important;
+  font-size: 11px !important;
+}
+
+.fc .fc-daygrid-day {
+  border-radius: 4px !important;
+  transition: background 0.2s ease;
+}
+
+.fc .fc-daygrid-day:hover {
+  background: rgba(0, 0, 0, 0.02) !important;
+}
+
+.fc .fc-daygrid-day-frame {
+  min-height: 120px !important;
+  /* Aproximadamente para 3-4 eventos + cabecera */
+}
+
+.fc .fc-daygrid-event-harness {
+  margin-bottom: 3px !important;
+}
+
+.fc .fc-event {
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+  padding: 0 !important;
+  font-size: 0.8rem;
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.06) !important;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease !important;
+}
+
+.fc .fc-event:hover {
+  filter: brightness(0.92) !important;
+  z-index: 50 !important;
+}
+
+/* Días de otros meses */
+.fc .fc-day-other .fc-daygrid-day-number {
+  opacity: 0.4 !important;
+}
+
+/* Hint "+ agregar" */
+.day-add-hint {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--outline);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.fc-daygrid-day:hover .day-add-hint {
+  opacity: 0.5;
+}
+
+.fc .fc-col-header-cell {
+  background: var(--surface-container-low) !important;
+  border-bottom: 0.5px solid rgba(113, 122, 109, 0.3) !important;
+  padding: 10px 0 !important;
+  border-radius: 0 !important;
+}
+
+.fc .fc-col-header-cell-cushion {
+  font-family: var(--font-headline);
+  font-weight: 500;
+  color: var(--outline);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+/* Sábado y Domingo más tenues */
+.fc .fc-day-sat .fc-col-header-cell-cushion,
+.fc .fc-day-sun .fc-col-header-cell-cushion {
+  opacity: 0.6;
+}
+
+.fc th {
+  border: none !important;
+  background: var(--surface-container-low);
+}
+
+.fc td {
+  border-color: rgba(192, 201, 187, 0.15) !important;
+}
+
+.fc .fc-daygrid-more-link {
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  color: var(--outline) !important;
+  text-decoration: none !important;
+  padding: 1px 6px !important;
+  margin-top: 2px !important;
+  display: inline-block !important;
+  transition: color 0.2s ease;
+}
+
+.fc .fc-daygrid-more-link:hover {
+  color: var(--primary) !important;
+  background: transparent !important;
+}
+
+.fc .fc-daygrid-more-link:hover {
+  background: rgba(0, 0, 0, 0.05) !important;
+  border-radius: 4px !important;
+}
+
+/* ── FIX: Popover "+N más" — bordes redondeados en el grid interior ── */
+.fc .fc-view-harness {
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg) !important;
+  overflow: hidden !important;
+}
+
+.fc .fc-col-header {
+  overflow: hidden !important;
+}
+
+.fc-more-popover {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.fc-popover {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface-container-low);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--outline-variant);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--outline);
+}
+
+/* ── FullCalendar Custom Events (Neutralized for Custom content) ── */
+.fc-event {
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer !important;
+  box-shadow: none !important;
+  margin: 1px 2px !important;
+}
+
+.fc-event-title,
+.fc-event-time {
+  color: inherit !important;
+}
+
+/* Texto de eventos ahora se controla vía JS para mayor precisión de contraste */
+
+.fc-daygrid-event-dot {
+  display: none !important;
+}
+
+.fc-v-event,
+.fc-h-event {
+  border: none !important;
+}
+
+/* ── Global Input Overrides ── */
+input,
+select,
+textarea {
+  background: #ffffff !important;
+  color: #000000 !important;
+  font-weight: 400 !important;
+}
+
+::placeholder {
+  color: #9ca3af !important;
+  opacity: 1;
+}
+
+::-webkit-input-placeholder {
+  color: #9ca3af !important;
+}
+
+/* ── Smooth transitions ── */
+*:not(.fc, .fc *, .fc-popover, .fc-popover *) {
+  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
+  transition-duration: 150ms;
+  transition-timing-function: ease-in-out;
+}
+
+/* ── Input focus ── */
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  background: #ffffff !important;
+  color: #000000 !important;
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+/* ── FullCalendar Day View Reset ── */
+.fc .fc-daygrid-event-harness:has(.day-view-custom-event),
+.fc .day-view-custom-event,
+.fc .day-view-custom-event .fc-event-main,
+.fc .day-view-custom-event .fc-event-main-frame {
+  background-color: transparent !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* ── Blancura absoluta para la celda y lienzo principal de la Vista de Día ── */
+.fc-view.fc-dayGridDay-view,
+.fc-view.fc-dayGridDay-view .fc-day-today,
+.fc-view.fc-dayGridDay-view .fc-day,
+.fc-view.fc-dayGridDay-view .fc-scrollgrid {
+  background-color: var(--surface-container-lowest) !important;
+  background: var(--surface-container-lowest) !important;
+}
+
+/* ── Holidays Styling ── */
+.fc-daygrid-day.is-holiday {
+  background: color-mix(in srgb, var(--primary) 20%, transparent) !important;
+}
+
+.fc-daygrid-day.is-holiday .fc-daygrid-day-number {
+  color: var(--primary) !important;
+  font-weight: 700 !important;
+}
+
+[data-theme='dark'] .fc-daygrid-day.is-holiday {
+  background: color-mix(in srgb, var(--primary) 20%, transparent) !important;
+}
+
+[data-theme='dark'] .fc-daygrid-day.is-holiday .fc-daygrid-day-number {
+  color: #ffb4ab !important;
+  /* Un tono rosado/rojo claro para modo oscuro que contraste */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

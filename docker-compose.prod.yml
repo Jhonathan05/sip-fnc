@@ -1,0 +1,49 @@
+# sip-fnc/docker-compose.prod.yml — confinamiento obligatorio (Zero Trust)
+name: sip-fnc
+services:
+  app:
+    image: puntijhon/sip-fnc:0.1.0 # pin de versión; NUNCA latest
+    container_name: sip-fnc-app
+    restart: unless-stopped
+    cap_drop: [ALL] # Zero Trust: sin capacidades
+    security_opt: [no-new-privileges:true] # bloquea escalada SUID
+    environment:
+      - AUTH_PROVIDER=keycloak
+      - NEXT_PUBLIC_AUTH_PROVIDER=keycloak
+      - RATE_LIMIT_API_PER_MIN=${RATE_LIMIT_API_PER_MIN:-600}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3020}
+      # resto desde .env (nunca hardcodear secretos aquí)
+    env_file: .env
+    networks: [infra-net, app-net]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    container_name: sip-fnc-db
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-sip}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?requerido_en_.env}
+      - POSTGRES_DB=${POSTGRES_DB:-sip_fnc}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - sip-pgdata:/var/lib/postgresql/data
+    networks: [app-net]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER:-sip}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  sip-pgdata:
+
+networks:
+  infra-net:
+    external: true # creada una vez por PROMPT-INFRA-VIRGEN
+  app-net:
+    driver: bridge # red privada aislada de esta app

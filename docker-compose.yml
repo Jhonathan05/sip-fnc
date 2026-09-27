@@ -1,0 +1,23 @@
+# sip-fnc/docker-compose.yml — dev local (Postgres efímero; la app corre con npm run dev)
+name: sip-fnc-dev
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: sip-fnc-dev-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=sip
+      - POSTGRES_PASSWORD=sip-dev-sololocal
+      - POSTGRES_DB=sip_fnc
+    ports:
+      - '5433:5432'
+    volumes:
+      - sip-dev-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sip']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  sip-dev-pgdata:
