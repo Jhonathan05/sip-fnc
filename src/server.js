@@ -9,7 +9,7 @@ const kc = require('./kc');
 const views = require('./views');
 const { buildFncSession, isFncValid, fingerprintFor } = require('./session');
 const { getMockSession, isKeycloakMode } = require('./auth-provider');
-const { MODULES, canAccess } = require('./modules');
+const { MODULES, NAV, canAccess, flattenLeaves } = require('./modules');
 
 const APP_NAME = process.env.APP_NAME || 'app-fnc';
 const app = express();
@@ -138,28 +138,37 @@ app.get('/dashboard', needLogin, (req, res) => {
 <p>Usuario: <strong>${views.esc(fnc.email)}</strong> · Rol: <strong>${views.esc(fnc.role)}</strong> · Client roles: <strong>${views.esc(fnc.roles.join(','))}</strong></p></div>`));
 });
 
-const SIP_MODULES = [
-  { path: '/distribucion', title: 'Distribución Recursos', desc: 'Circunscripciones, municipios, tipos y distribuciones por vigencia. Informes: saldos y cuenta corriente.' },
-  { path: '/adjudicaciones', title: 'Adjudicaciones', desc: 'Maestros de contratistas e invitaciones. Sorteo de contrataciones auditable.' },
-  { path: '/asignaciones', title: 'Asignaciones', desc: 'Creación con origen de recursos y descarga de su distribución. Informes por estado y supervisor.' },
-  { path: '/ordenes-sap', title: 'Órdenes SAP', desc: 'Cargue de presupuesto y actualización de inversión mensual (orden de consumo duro).' },
-  { path: '/contratos', title: 'Contratos', desc: 'Contratos, convenios, otrosíes y pólizas. Informes de vigencia y vencimientos.' },
-];
+// (imports consolidados arriba: MODULES, NAV, canAccess, flattenLeaves)
 
-for (const mod of SIP_MODULES) {
+// Landings de módulo: portada con sus subcategorías (el negocio llega en Fase 2).
+for (const mod of NAV.filter((m) => (m.children || []).length > 0)) {
   app.get(mod.path, needLogin, (req, res) => {
     const fnc = req.session.fnc;
-    if (!canAccess(fnc.role, MODULES.find((m) => m.path === mod.path))) {
+    if (!canAccess(fnc.role, mod)) {
       return res.status(403).send(views.errorPage(fnc, 'forbidden'));
     }
+    const subs = (mod.children || []).map((s) =>
+      `<div class="card"><h1>${views.esc(s.title)}</h1><p>${views.esc(s.desc || '')}</p><p>${(s.children || []).length} opciones.</p></div>`).join('');
     res.send(page(fnc, { path: mod.path, title: mod.title },
-      `<div class="card"><h1>${views.esc(mod.title)}</h1><p>${views.esc(mod.desc)}</p><p>Negocio en Fase 2. Tu acceso actual: <span class="badge">${views.esc(fnc.role)}</span></p></div>`));
+      `<div class="card"><h1>${views.esc(mod.title)}</h1><p>Negocio en Fase 2. Tu acceso actual: <span class="badge">${views.esc(fnc.role)}</span></p></div>${subs}`));
+  });
+}
+
+// Hojas del árbol: /:modulo/:sub/:item con guard por hoja (planas "Fase 2" por ahora).
+for (const { leaf, sub, mod } of flattenLeaves()) {
+  app.get(leaf.path, needLogin, (req, res) => {
+    const fnc = req.session.fnc;
+    if (!canAccess(fnc.role, leaf)) {
+      return res.status(403).send(views.errorPage(fnc, 'forbidden'));
+    }
+    res.send(page(fnc, { path: leaf.path, title: leaf.title },
+      `<p><a href="${mod.path}">${views.esc(mod.title)}</a> / ${views.esc(sub.title)}</p><div class="card"><h1>${views.esc(leaf.title)}</h1><p>Negocio en Fase 2. Tu acceso actual: <span class="badge">${views.esc(fnc.role)}</span></p></div>`));
   });
 }
 
 app.get('/seguridad', needLogin, needRole('ADMIN'), (req, res) => {
   const fnc = req.session.fnc;
-  res.send(page(fnc, MODULES.find((m) => m.path === '/seguridad'), `<div class="card"><h1>Seguridad</h1><p>Solo <span class="badge">ADMIN</span>. Rate-limit vigente: <strong>${views.esc(process.env.RATE_LIMIT_API_PER_MIN || '60')}/min</strong> (override en caliente en Fase 2).</p></div>`));
+  res.send(page(fnc, { path: '/seguridad', title: 'Seguridad' }, `<div class="card"><h1>Seguridad</h1><p>Solo <span class="badge">ADMIN</span>. Rate-limit vigente: <strong>${views.esc(process.env.RATE_LIMIT_API_PER_MIN || '60')}/min</strong> (override en caliente en Fase 2).</p></div>`));
 });
 
 // Matriz viva de roles: qué ve cada rol (permitido / deshabilitado / oculto).

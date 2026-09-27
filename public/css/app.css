@@ -1,6 +1,6 @@
 body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: var(--bg-main); color: var(--text-dark); }
 .main-container { margin: 100px 15px 10px 294px; padding: 24px; }
-.sidebar-nav { display: flex; flex-direction: column; gap: 6px; }
+.sidebar-nav { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; overflow-y: auto; }
 .sidebar-section-label { font-size: .7rem; text-transform: uppercase; color: var(--text-muted); margin: 8px 0 4px; }
 .tab-btn { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 0; border-radius: 10px; background: none; color: var(--text-dark); font-size: .9rem; cursor: pointer; text-decoration: none; }
 .tab-btn.active, .tab-btn:hover { background: rgba(27,77,62,.08); color: var(--verde); font-weight: 600; }
@@ -13,3 +13,18 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background:
 .badge { display: inline-block; padding: 2px 10px; border-radius: 9999px; background: rgba(27,77,62,.1); color: var(--verde); font-size: .75rem; font-weight: 700; }
 .alert-err { background: #FEE2E2; color: #991B1B; border-radius: 10px; padding: 12px 16px; max-width: 560px; }
 .btn-primary { display: inline-block; margin-top: 16px; background: var(--verde); color: #fff; border-radius: 10px; padding: 10px 20px; text-decoration: none; font-weight: 600; }
+/* ── Nav árbol SIP (módulo → sub → hoja), plano ── */
+.nav-ico { flex-shrink: 0; }
+.tree-mod { display: flex; flex-direction: column; gap: 2px; }
+.tree-mod-head { font-weight: 600; }
+.tree-subs { display: flex; flex-direction: column; gap: 2px; margin-left: 13px; padding-left: 9px; border-left: 1px solid var(--border-light); }
+.tree-sub { border: 0; }
+.tree-sub-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; font-size: .85rem; cursor: pointer; list-style: none; color: var(--text-muted); }
+.tree-sub-head::-webkit-details-marker { display: none; }
+.tree-sub-head:hover { background: rgba(27,77,62,.06); color: var(--text-dark); }
+.tree-leaves { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 4px 13px; padding-left: 9px; border-left: 1px solid var(--border-light); }
+.tree-leaf { display: block; padding: 7px 12px; border-radius: 8px; font-size: .85rem; color: var(--text-dark); text-decoration: none; }
+.tree-leaf:hover { background: rgba(27,77,62,.06); }
+.tree-leaf.active { background: rgba(27,77,62,.1); color: var(--verde); font-weight: 700; }
+.tree-leaf.tree-disabled, .tab-btn.tab-disabled { opacity: .55; cursor: not-allowed; }
+.nav-config { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border-light); display: flex; flex-direction: column; gap: 6px; }
