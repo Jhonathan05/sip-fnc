@@ -71,10 +71,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // CSP con nonce por request
+  // CSP con nonce por request. En dev se permite 'unsafe-eval' (React Refresh/HMR);
+  // en prod, estricto. Sin esto el navegador bloquea los scripts y la página queda en blanco.
   const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
   const nonce = btoa(String.fromCharCode(...nonceBytes));
-  const csp = `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`;
+  const scriptSrc =
+    process.env.NODE_ENV === 'production' ? "'self' 'unsafe-inline'" : "'self' 'unsafe-inline' 'unsafe-eval'";
+  const csp = `default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`;
   const baseResponse = NextResponse.next({
     request: { headers: new Headers({ ...Object.fromEntries(request.headers), 'x-nonce': nonce }) },
   });
