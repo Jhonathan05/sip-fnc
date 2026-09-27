@@ -49,12 +49,12 @@ function navTree(active, role) {
       if (!leaves.length) return '';
       const inSub = leaves.some((l) => active === l.path);
       const items = leaves.map((l) => leafLink(l, active, role)).join('');
-      return `<details class="tree-sub" name="sip-nav" data-navkey="${esc(mod.path + '/' + sub.key)}"${inSub ? ' open' : ''}>
+      return `<details class="tree-sub" data-navkey="${esc(mod.path + '/' + sub.key)}"${inSub ? ' open' : ''}>
         <summary class="tree-sub-head">${icon(sub.icon)}${esc(sub.title)}</summary>
         <div class="tree-leaves">${items}</div>
       </details>`;
     }).join('');
-    html += `<details class="tree-mod" name="sip-nav" data-navkey="mod:${esc(mod.path)}"${inMod ? ' open' : ''}>
+    html += `<details class="tree-mod" data-navkey="mod:${esc(mod.path)}"${inMod ? ' open' : ''}>
       <summary class="tab-btn tree-mod-head${active === mod.path ? ' active' : ''}">${icon(mod.icon)}${esc(mod.title)}</summary>
       <div class="tree-subs">${subs}</div>
     </details>`;
