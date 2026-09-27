@@ -1,4 +1,4 @@
-# Acta F0 — sip-fnc (aprobada por el humano, 2026-09-27)
+# Acta F0 — sip-fnc (aprobada por el humano, 2026-09-27; cambio v2 abajo)
 
 Migración aplicativo .NET v1 (sin código) → web corporativa. Gestión e informes contables por periodos.
 
@@ -49,3 +49,14 @@ STACK=next
 - Rate-limit default 600/min (skill fnc-rate-limit, NAT corporativo) en vez de 60 del ejemplo genérico.
 - Prisma lazy con fallback en memoria: P4 mock funciona sin Postgres; prod lo exige.
 - Plantilla Next bajo demanda (init-app.ps1 solo cubre rendimiento): scaffold propio KC-ready.
+
+## Cambio v2 — PERFIL `rendimiento` (2026-09-27, aprobado por el humano)
+
+Motivo: React en dev cargaba muy lento; se prioriza velocidad y simplicidad. No se reescribe historia: v1 queda arriba.
+
+- Stack: Node 22 + Express 4 + Vanilla (`app-template-fnc` vía `init-app.ps1` oficial). UI plana; estilos se definen trabajando.
+- Scaffold Next retirado del repo (quedó en historia git por si se retoma).
+- Datos: la plantilla no trae persistencia; Postgres pasa a Fase 2 (al construir Distribución con negocio real).
+- Transversales v1 (SSE, pendientes, auditoría DB, inactividad 5min, tema claro/oscuro) pasan al backlog Fase 2+; el contrato FncSession y la matriz se mantienen.
+- Rate-limit: 60/min (default de la plantilla rendimiento; gate P8: 100 req → 429).
+- Intake v2: igual que v1 salvo `STACK=express`.

@@ -1,33 +1,29 @@
-# SIP-FNC — Sistema de Información de Proyectos (impactovisual, Modo B)
+# SIP-FNC — Sistema de Información de Proyectos (perfil rendimiento)
 
 Migración del aplicativo .NET v1 (sin código) a web corporativa. Gestión e informes contables por periodos — Comité del Tolima.
+
+Stack: Node 22 + Express 4 + Vanilla (plantilla `app-template-fnc` vía `init-app.ps1`). Sin React a propósito: carga instantánea.
 
 ## Dev offline (sin KC ni infra)
 
 ```powershell
 npm install
-npx prisma generate   # requiere red una vez; sin DATABASE_URL la app usa stores en memoria
-npm run dev           # http://localhost:3020
+npm run dev   # http://localhost:3020 (watch)
 ```
 
-Gates: `/login` → Entrar (desarrollo local) → `/dashboard` → `/roles` (matriz viva) → `/api/me` (contrato FncSession, `exp-iat=28800`).
-
-## Postgres local (opcional en dev)
-
-```powershell
-docker compose up -d db   # postgres:16 en localhost:5433
-npx prisma migrate dev
-```
+Gates: `/login` → Continuar → `/dashboard` → `/roles` (matriz viva) → `/api/me` (contrato FncSession, `exp-iat=28800`).
 
 ## Flip a Keycloak (staging)
 
-Registrar client `sip-fnc-client` en `fnc-realm`, copiar secret a `.env`, `AUTH_PROVIDER=keycloak` + `NEXT_PUBLIC_AUTH_PROVIDER=keycloak`. Cero cambios de código.
+Registrar client `sip-fnc-client` en `fnc-realm`, copiar secret a `.env`, `AUTH_PROVIDER=keycloak`. Cero cambios de negocio.
 
 ## Estructura
 
-- `src/app/` — rutas (login, dashboard, 5 módulos stub, tareas, roles, seguridad, error) + API
-- `src/lib/` — session (contrato inmutable), auth-provider (mock), keycloak (split-brain PKCE), rate-limit/guard, client-roles (matriz), audit, notify (SSE), db (Prisma lazy)
-- `src/components/` — ClientLayout (sidebar 280↔72 + campana SSE + modal inactividad), ThemeToggle
-- `prisma/` — User, AuditLog (retención indefinida), Notification, Task
-- `docs/analisis.md` — acta F0 aprobada
-- `docs/requerimientos/` — fuente legacy (.NET v1): manual + capturas de módulos
+- `src/server.js` — Express + guards + rutas auth/mock + módulos SIP
+- `src/kc.js` — cliente OIDC (solo se usa con `keycloak`)
+- `src/session.js` — `FncSession` + fingerprint + 8h
+- `src/auth-provider.js` — rama mock (`MOCK_ROLES`)
+- `src/modules.js` — catálogo módulos/roles (matriz F0.4)
+- `src/views.js` — layout vanilla + nav por rol + `/roles`
+- `docs/analisis.md` — acta F0 (v1 impactovisual → v2 rendimiento)
+- `docs/requerimientos/` — fuente legacy (.NET v1): manual + capturas

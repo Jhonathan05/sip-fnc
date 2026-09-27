@@ -1,21 +1,21 @@
 # Plantilla FNC en Docker (ejemplo sin secretos — copiar a docker-compose.yml y completar)
 # Up: docker compose -p <APP_NAME> up -d --build
-name: sip-fnc
+name: app-template-fnc
 
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: sip-fnc-app
+    container_name: app-template-fnc-app
     restart: "no"
     environment:
-      APP_NAME: sip-fnc
+      APP_NAME: app-template-fnc
       PORT: 3020
       APP_BASE: http://localhost:3020
       AUTH_PROVIDER: mock
       MOCK_ROLES: admin
-      CLIENT_ROLES: admin,coordinador,consultor,analista,auxiliar
+      CLIENT_ROLES: admin,consultor
       RATE_LIMIT_API_PER_MIN: 60
       # Solo keycloak (staging/prod, client registrado en fnc-realm):
       KEYCLOAK_URL: http://fnc-keycloak:8080/auth
