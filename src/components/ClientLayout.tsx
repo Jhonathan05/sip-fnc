@@ -5,8 +5,9 @@ import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from './ThemeToggle';
 import { useInactivityTimer } from '@/hooks/useInactivityTimer';
-import { MODULE_MATRIX, accessLevel } from '@/lib/client-roles';
 import type { FncSession } from '@/lib/session';
+
+// Shell virgen: solo enlaces a páginas reales. Los módulos se agregan con negocio en Fase 2.
 
 // Adaptado de fnc-layout/templates/react-impactoVisual/HeaderSidebarLayout.
 // Marca SIP-FNC + nav por rol (matriz F0.4) + campana SSE (realtime A) + modal inactividad.
@@ -27,38 +28,12 @@ function icon(path: React.ReactNode): React.ReactNode {
 
 const ICONS: Record<string, React.ReactNode> = {
   dashboard: icon(<><rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /><rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" /></>),
-  distribucion: icon(<><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></>),
-  adjudicaciones: icon(<><path d="M12 2 2 7l10 5 10-5-10-5Z" /><path d="m2 17 10 5 10-5" /><path d="m2 12 10 5 10-5" /></>),
-  asignaciones: icon(<><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" /></>),
-  sap: icon(<><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14a9 3 0 0 0 18 0V5" /><path d="M3 12a9 3 0 0 0 18 0" /></>),
-  contratos: icon(<><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /></>),
-  tareas: icon(<><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></>),
   seguridad: icon(<><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /><path d="m9 12 2 2 4-4" /></>),
-  roles: icon(<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>),
 };
 
 function navFor(roles: string[]): NavItem[] {
   const lower = roles.map((r) => r.toLowerCase());
-  const items: NavItem[] = [
-    { href: '/dashboard', label: 'Tablero', icon: ICONS.dashboard },
-    { href: '/tareas', label: 'Pendientes', icon: ICONS.tareas },
-  ];
-  const keys: Array<[string, string]> = [
-    ['distribucion', '/distribucion'],
-    ['adjudicaciones', '/adjudicaciones'],
-    ['asignaciones', '/asignaciones'],
-    ['sap', '/ordenes-sap'],
-    ['contratos', '/contratos'],
-  ];
-  MODULE_MATRIX.forEach((rule) => {
-    const key = keys.find(([, href]) => href === rule.route)?.[0];
-    if (!key) return;
-    const lvl = accessLevel(lower[0] ?? '', rule);
-    const anyAccess = lower.some((r) => accessLevel(r, rule) !== 'none');
-    void lvl;
-    if (anyAccess) items.push({ href: rule.route, label: rule.module, icon: ICONS[key] });
-  });
-  items.push({ href: '/roles', label: 'Matriz de roles', icon: ICONS.roles });
+  const items: NavItem[] = [{ href: '/dashboard', label: 'Tablero', icon: ICONS.dashboard }];
   if (lower.includes('admin')) items.push({ href: '/seguridad', label: 'Seguridad', icon: ICONS.seguridad });
   return items;
 }
@@ -67,7 +42,6 @@ export default function ClientLayout({ children, user }: { children: React.React
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifs, setNotifs] = useState<Array<{ id: string; title: string; body?: string; at: string }>>([]);
-  const [tasks, setTasks] = useState<Array<{ id: string; title: string }>>([]);
   const router = useRouter();
   const pathname = usePathname();
   const { showWarning, secondsLeft, stayActive, logout } = useInactivityTimer();
@@ -91,7 +65,6 @@ export default function ClientLayout({ children, user }: { children: React.React
 
   useEffect(() => {
     fetch('/api/notifications').then((r) => r.json()).then((d) => setNotifs(d.notifications ?? [])).catch(() => undefined);
-    fetch('/api/tasks').then((r) => r.json()).then((d) => setTasks((d.tasks ?? []).map((t: { id: string; title: string }) => t))).catch(() => undefined);
     const es = new EventSource('/api/events');
     es.addEventListener('notification', (e) => {
       try {
@@ -100,9 +73,6 @@ export default function ClientLayout({ children, user }: { children: React.React
       } catch {
         // evento malformado
       }
-    });
-    es.addEventListener('task', () => {
-      fetch('/api/tasks').then((r) => r.json()).then((d) => setTasks((d.tasks ?? []).map((t: { id: string; title: string }) => t))).catch(() => undefined);
     });
     es.onerror = () => es.close();
     return () => es.close();
@@ -184,9 +154,6 @@ export default function ClientLayout({ children, user }: { children: React.React
       <div className="flex-1 min-h-screen flex flex-col" style={{ marginLeft: undefined }}>
         <motion.div initial={false} animate={{ marginLeft: sidebarOpen ? 280 : 72 }} transition={{ duration: 0.3, ease: 'easeInOut' }} className="hidden lg:block">
           <header className="flex items-center justify-end gap-3 px-8 py-3">
-            <span className="text-xs" style={{ color: 'var(--on-surface-variant)' }}>
-              {tasks.length > 0 ? `${tasks.length} pendiente(s)` : 'Sin pendientes'}
-            </span>
             <div className="relative">
               <button onClick={() => setNotifOpen(!notifOpen)} className="w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer" style={{ background: 'var(--surface-container-low)', border: '1px solid var(--outline-variant)' }} aria-label="Notificaciones">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
