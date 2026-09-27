@@ -16,7 +16,11 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background:
 /* ── Nav árbol SIP (módulo → sub → hoja), plano ── */
 .nav-ico { flex-shrink: 0; }
 .tree-mod { display: flex; flex-direction: column; gap: 2px; }
-.tree-mod-head { font-weight: 600; }
+.tree-mod-row { display: flex; align-items: center; gap: 2px; }
+.tree-mod-head { font-weight: 600; flex: 1; }
+.tree-toggle { border: 0; background: none; cursor: pointer; color: var(--text-muted); font-size: .8rem; width: 24px; height: 32px; border-radius: 8px; padding: 0; flex-shrink: 0; transition: transform 120ms ease; }
+.tree-toggle:hover { background: rgba(27,77,62,.08); color: var(--text-dark); }
+.tree-mod.open .tree-toggle { transform: rotate(90deg); }
 .tree-subs { display: flex; flex-direction: column; gap: 2px; margin-left: 13px; padding-left: 9px; border-left: 1px solid var(--border-light); }
 .tree-sub { border: 0; }
 .tree-sub-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; font-size: .85rem; cursor: pointer; list-style: none; color: var(--text-muted); }

@@ -54,9 +54,12 @@ function navTree(active, role) {
         <div class="tree-leaves">${items}</div>
       </details>`;
     }).join('');
-    html += `<div class="tree-mod${inMod ? ' tree-open-mod' : ''}">
-      <a class="tab-btn tree-mod-head${active === mod.path ? ' active' : ''}" href="${mod.path}">${icon(mod.icon)}${esc(mod.title)}</a>
-      <div class="tree-subs">${subs}</div>
+    html += `<div class="tree-mod${inMod ? ' open' : ''}" data-navmod="${esc(mod.path)}">
+      <div class="tree-mod-row">
+        <button class="tree-toggle" data-navkey="mod:${esc(mod.path)}" aria-label="Desplegar ${esc(mod.title)}" aria-expanded="${inMod ? 'true' : 'false'}">▸</button>
+        <a class="tab-btn tree-mod-head${active === mod.path ? ' active' : ''}" href="${mod.path}">${icon(mod.icon)}${esc(mod.title)}</a>
+      </div>
+      <div class="tree-subs"${inMod ? '' : ' hidden'}>${subs}</div>
     </div>`;
   }
   return html;
@@ -69,7 +72,7 @@ function navConfig(active, role) {
   return `<div class="nav-config"><span class="sidebar-section-label">Configuración</span>${links}</div>`;
 }
 
-const NAV_MEMORY_JS = `<script>(function(){try{var k='sip-nav-open';var open=JSON.parse(localStorage.getItem(k)||'[]');document.querySelectorAll('details.tree-sub').forEach(function(d){var id=d.getAttribute('data-navkey');if(open.indexOf(id)>=0)d.open=true;d.addEventListener('toggle',function(){try{var cur=JSON.parse(localStorage.getItem(k)||'[]');if(d.open&&cur.indexOf(id)<0)cur.push(id);if(!d.open)cur=cur.filter(function(x){return x!==id});localStorage.setItem(k,JSON.stringify(cur));}catch(e){}});});}catch(e){}})();</script>`;
+const NAV_MEMORY_JS = `<script>(function(){try{var k='sip-nav-open';var open=JSON.parse(localStorage.getItem(k)||'[]');function save(id,on){try{var cur=JSON.parse(localStorage.getItem(k)||'[]');if(on&&cur.indexOf(id)<0)cur.push(id);if(!on)cur=cur.filter(function(x){return x!==id});localStorage.setItem(k,JSON.stringify(cur));}catch(e){}}document.querySelectorAll('details.tree-sub').forEach(function(d){var id=d.getAttribute('data-navkey');if(open.indexOf(id)>=0)d.open=true;d.addEventListener('toggle',function(){save(id,d.open)});});document.querySelectorAll('.tree-mod').forEach(function(m){var btn=m.querySelector('.tree-toggle');if(!btn)return;var id=btn.getAttribute('data-navkey');var subs=m.querySelector('.tree-subs');if(open.indexOf(id)>=0){m.classList.add('open');if(subs)subs.hidden=false;btn.setAttribute('aria-expanded','true');}btn.addEventListener('click',function(){var on=!m.classList.contains('open');m.classList.toggle('open',on);if(subs)subs.hidden=!on;btn.setAttribute('aria-expanded',on?'true':'false');save(id,on);});});}catch(e){}})();</script>`;
 
 function layout(appName, fnc, active, body) {
   const email = fnc?.email || '';
