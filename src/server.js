@@ -154,6 +154,19 @@ for (const mod of NAV.filter((m) => (m.children || []).length > 0)) {
   });
 }
 
+// Mi perfil: datos reales de la sesión (nombre, email, roles, vigencia).
+app.get('/perfil/perfil/mi-perfil', needLogin, (req, res) => {
+  const fnc = req.session.fnc;
+  const left = Math.max(0, (fnc.exp || 0) - Math.floor(Date.now() / 1000));
+  const hh = Math.floor(left / 3600);
+  const mm = Math.floor((left % 3600) / 60);
+  res.send(page(fnc, { path: '/perfil/perfil/mi-perfil', title: 'Mi perfil' },
+    `<p><a href="/perfil">Perfil</a> / Perfil</p><div class="card"><h1>${views.esc(fnc.displayName)}</h1>
+<p>Usuario: <strong>${views.esc(fnc.email)}</strong></p>
+<p>Rol: <span class="badge">${views.esc(fnc.role)}</span> · Client roles: <strong>${views.esc((fnc.roles || []).join(','))}</strong></p>
+<p>Sesión vigente por: <strong>${hh}h ${mm}min</strong> (TTL absoluto 8h).</p></div>`));
+});
+
 // Hojas del árbol: /:modulo/:sub/:item con guard por hoja (planas "Fase 2" por ahora).
 for (const { leaf, sub, mod } of flattenLeaves()) {
   app.get(leaf.path, needLogin, (req, res) => {
