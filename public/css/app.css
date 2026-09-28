@@ -463,7 +463,7 @@ code {
 }
 
 /* ── Nav colapsable: solo iconos + hover expande (overlay) ── */
-.nav-collapse-bar { border-top: 1px solid var(--border-light); margin: 6px -20px 0; padding: 10px 20px 0; display: flex; }
+.nav-collapse-bar { border-top: 1px solid var(--border-light); margin: 6px 0 0 -20px; padding: 10px 0 0 20px; display: flex; }
 .nav-collapse-btn { width: 36px; height: 34px; border-radius: 10px; border: 0; background: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; }
 .nav-collapse-btn:hover { background: var(--verde-soft); color: var(--verde-ink); }
 .nav-collapsed .nav-collapse-bar { justify-content: center; }
