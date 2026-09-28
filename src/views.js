@@ -160,7 +160,7 @@ function layout(appName, fnc, active, body) {
   const email = fnc?.email || '';
   const role = fnc?.role || '';
   const initial = email.trim().charAt(0).toUpperCase() || 'U';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${A11Y_HEAD_JS}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928"><link rel="stylesheet" href="/css/app.css?v=20260928"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${A11Y_HEAD_JS}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-azul"><link rel="stylesheet" href="/css/app.css?v=20260928-azul"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-mini.svg" alt="Comité de Cafeteros del Tolima" height="30"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="26"><span class="brand-divider" aria-hidden="true"></span><div><span class="header-brand-name"><strong>SIP</strong> Sistema de Información de Proyectos</span></div></div></div>
 <div class="header-title">${esc(pageTitle(active))}</div>
@@ -181,12 +181,12 @@ ${NAV_MEMORY_JS}${A11Y_JS}${MODAL_JS}</body></html>`;
 }
 
 function loginPage(appName, kcMode) {
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928"><link rel="stylesheet" href="/css/app.css?v=20260928"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-azul"><link rel="stylesheet" href="/css/app.css?v=20260928-azul"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="card"><div class="login-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-tolima.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-sip" src="/img/logo-sip.svg" alt="SIP" height="30"></div><h1>${esc(appName)}</h1>
 <p>Sistema de Información de Proyectos — gestión e informes contables por periodos.</p>
 ${kcMode
-    ? `<a class="btn-primary" href="/auth/app">Continuar con Comit\u00e9 Tolima</a>`
-    : `<form method="post" action="/auth/mock" style="margin:0"><button class="btn-primary" type="submit">Continuar con Comit\u00e9 Tolima</button></form><p><span class="badge">mock offline</span> sin Keycloak.</p>`}
+      ? `<a class="btn-primary" href="/auth/app">Continuar con Comit\u00e9 Tolima</a>`
+      : `<form method="post" action="/auth/mock" style="margin:0"><button class="btn-primary" type="submit">Continuar con Comit\u00e9 Tolima</button></form><p><span class="badge">mock offline</span> sin Keycloak.</p>`}
 </div></main></body></html>`;
 }
 
@@ -209,7 +209,7 @@ function rolesMatrix(fnc) {
 
 function errorPage(fnc, reason) {
   const msgs = { state: 'Sesión de autenticación inválida.', callback: 'No se pudo completar el acceso.', forbidden: 'Sin permiso para este módulo.' };
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928"><link rel="stylesheet" href="/css/app.css?v=20260928"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928-azul"><link rel="stylesheet" href="/css/app.css?v=20260928-azul"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="alert-err">${esc(msgs[reason] || msgs.callback)}</div>
 <a class="btn-primary" href="/">Reintentar</a></main></body></html>`;
 }
@@ -228,7 +228,7 @@ function fmtCOP(n) {
 function kpiStrip(saldos) {
   const cards = (saldos || []).map((s) => {
     const pct = Number(s.pct || 0);
-    const sem = pct >= 85 ? 'var(--err-ink)' : pct >= 50 ? 'var(--primary-2)' : 'var(--verde-ink)';
+    const sem = pct >= 85 ? 'var(--err-ink)' : pct >= 50 ? 'var(--primary-2)' : 'var(--azul-ink)';
     return `<div class="card kpi"><span class="sidebar-section-label">${esc(TIPO_LABEL[s.tipo] || s.tipo)} ${esc(String(s.vigencia))}</span>
 <strong class="tnum">${esc(fmtCOP(s.saldo))}</strong>
 <span style="color:${sem}" class="tnum">${esc(String(pct))}% ejecutado</span></div>`;
@@ -325,7 +325,7 @@ function formSlot(form) {
 function activityFeed(actividad) {
   const items = (actividad || []).map((a) =>
     `<li><strong>${esc(a.actor_email || '')}</strong> · ${esc(ACTION_LABEL[a.action] || a.action)} <span class="badge">${esc(a.modulo || '')}</span><br><span>${esc(a.detalle || '')}</span> <em class="tnum">${esc(new Date(a.at).toLocaleString('es-CO'))}</em></li>`).join('');
-  return `<h2>Bitácora reciente</h2><ul class="feed">${items || '<li>Sin movimientos.</li>'}</ul>`;
+  return `<h2>Actividad reciente</h2><ul class="feed">${items || '<li>Sin movimientos.</li>'}</ul>`;
 }
 
 function dashboardPage(fnc, data) {

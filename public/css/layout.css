@@ -36,11 +36,14 @@
   /* 24px */
   --primary: #6B4A2B;
   --primary-2: #7E5A36;
-  --verde: #1B4D3E;
-  --verde-bright: #22C55E;
-  --verde-ink: #1B4D3E;
+  /* Acento SIP: azul (legado .NET era azul; foco #369FD8) */
+  --azul: #2273A8;
+  /* sólidos: btn-primary, avatar (contraste con blanco) */
+  --azul-bright: #369FD8;
+  /* acento hero */
+  --azul-ink: #1B6FA0;
   /* texto/activos sobre claro */
-  --verde-soft: rgba(27, 77, 62, .08);
+  --azul-soft: rgba(54, 159, 216, .12);
   /* fondos hover/activo claro */
   --text-dark: #1E293B;
   --text-muted: #64748B;
@@ -56,14 +59,14 @@
 
 /* Tema oscuro completo (botón Claro/Oscuro del header) */
 [data-theme="dark"] {
-  --verde-ink: #7BD8A4;
-  --verde-soft: rgba(123, 216, 164, .14);
-  --text-dark: #E7EEE7;
-  --text-muted: #9AA79D;
-  --border-light: #2A332C;
-  --bg-main: #0F1310;
-  --bg-sidebar: #161B16;
-  --bg-card: #161B16;
+  --azul-ink: #7CC7EC;
+  --azul-soft: rgba(124, 199, 236, .16);
+  --text-dark: #E8EEF3;
+  --text-muted: #93A3B3;
+  --border-light: #26313A;
+  --bg-main: #0F1418;
+  --bg-sidebar: #151C22;
+  --bg-card: #151C22;
   --err-bg: #3A1D1D;
   --err-ink: #FCA5A5;
   --shadow-subtle: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
