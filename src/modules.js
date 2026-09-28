@@ -177,10 +177,6 @@ const CONFIG = [
 // Compat: lista plana de nivel módulo (matriz viva + guards viejos).
 const MODULES = NAV.map((m) => ({ path: m.path, title: m.title, roles: m.roles, nav: m.nav !== false }));
 
-function roleCatalog() {
-  return (process.env.CLIENT_ROLES || 'admin,consultor').split(',').map((r) => r.trim()).filter(Boolean);
-}
-
 function canAccess(role, mod) {
   return (mod.roles || []).includes(role);
 }
@@ -205,6 +201,6 @@ function findLeaf(path) {
   return null;
 }
 
-module.exports = { MODULES, NAV, CONFIG, BOTH, ADMIN_ONLY, roleCatalog, canAccess, flattenLeaves, findLeaf };
+module.exports = { MODULES, NAV, CONFIG, BOTH, ADMIN_ONLY, canAccess, flattenLeaves, findLeaf };
 
 

@@ -235,14 +235,6 @@ function kpiStrip(saldos) {
   return `<div class="kpi-strip">${cards || '<div class="card"><p>Sin distribuciones.</p></div>'}</div>`;
 }
 
-function quickAccess(fnc) {
-  const cards = NAV.filter((m) => (m.children || []).length && canAccess(fnc.role, m)).map((m) => {
-    const n = (m.children || []).length;
-    return `<a class="card qa" href="${m.path}"><strong>${esc(m.title)}</strong><span>${n} ${n === 1 ? 'sección' : 'secciones'}</span></a>`;
-  }).join('');
-  return `<h2>Accesos a formularios</h2><div class="qa-grid">${cards}</div>`;
-}
-
 const ACTION_LABEL = {
   'login.mock': 'Ingresó (desarrollo)',
   'login.keycloak': 'Ingresó con Comité Tolima',
@@ -336,9 +328,8 @@ function activityFeed(actividad) {
 }
 
 function dashboardPage(fnc, data) {
-  return `${kpiStrip(data.saldos)}
-<div class="dash-grid">
-<div>${quickAccess(fnc)}${formSlot(data.form)}</div>
+  return `<div class="dash-grid">
+<div>${kpiStrip(data.saldos)}${formSlot(data.form)}</div>
 <div class="dash-rail">${activityFeed(data.actividad)}${taskCards(fnc, data.tareas)}</div>
 </div>`;
 }

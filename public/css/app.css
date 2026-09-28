@@ -442,8 +442,7 @@ code {
     font-weight: 500;
 }
 
-.tree-leaf.tree-disabled,
-.tab-btn.tab-disabled {
+.tree-leaf.tree-disabled {
     opacity: .55;
     cursor: not-allowed;
 }
@@ -493,23 +492,22 @@ code {
 .nav-collapsed .nav-config { align-items: center; }
 .nav-collapsed .app-sidebar:hover .nav-config { align-items: stretch; }
 /* ── Dashboard operativo: KPIs + 2 columnas ── */
-.kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 10px 0 16px; }
+.kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 0 0 16px; }
+/* KPIs en columna izquierda: 2x2 compacto a nivel del riel */
+.dash-grid > div:first-child .kpi-strip { grid-template-columns: 1fr 1fr; }
 .card.kpi { display: flex; flex-direction: column; gap: 2px; max-width: none; padding: 16px 18px; }
 .card.kpi strong { font-size: 1.15rem; letter-spacing: var(--tracking-title); font-weight: 600; }
-.dash-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; align-items: start; }
+.dash-grid { display: grid; grid-template-columns: 1fr 330px; gap: 20px; align-items: start; }
 @media (max-width: 1100px) { .dash-grid { grid-template-columns: 1fr; } }
-.qa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
-.card.qa { text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 4px; max-width: none; }
-.card.qa:hover { border-color: var(--verde-ink); }
-.card.qa span { font-size: var(--fs-meta); color: var(--text-muted); }
 .task-grid { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.task-grid .card.task { max-width: 320px; }
 /* Semántica solo en texto/badges: ningún borde de color en el sistema */
 .badge-warn { background: var(--err-bg); color: var(--err-ink); }
 .text-warn { color: var(--err-ink); }
-.feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.feed li { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 10px; padding: 8px 10px; font-size: var(--fs-meta); line-height: 1.35; }
+.feed { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.feed li { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 10px; padding: 8px 10px; font-size: var(--fs-meta); line-height: 1.35; width: 160px; flex-shrink: 0; }
 /* Riel derecho denso con scroll propio */
-.dash-rail { display: flex; flex-direction: column; gap: 16px; max-height: calc(100vh - 220px); overflow-y: auto; padding-right: 2px; }
+.dash-rail { display: flex; flex-direction: column; gap: 16px; max-height: calc(100vh - 220px); overflow-y: auto; padding-right: 2px; width: 330px; max-width: 100%; }
 .feed em { color: var(--text-muted); font-style: normal; font-size: var(--fs-meta); }
 /* ── Modal Perfil (Configuración, sin navegar) ── */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 300; padding: 16px; }
