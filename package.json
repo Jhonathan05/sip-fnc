@@ -1,8 +1,8 @@
 {
   "name": "sip-fnc",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Plantilla FNC perfil rendimiento: Express + mock|keycloak + FncSession + demo de roles",
+  "description": "SIP-FNC: gestion e informes contables por periodos (Express + Vanilla + Postgres)",
   "main": "src/server.js",
   "type": "commonjs",
   "scripts": {
