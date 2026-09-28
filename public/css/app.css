@@ -444,11 +444,17 @@ code {
 
 .nav-config {
     margin-top: auto;
-    padding-top: 10px;
-    border-top: 1px solid var(--border-light);
+    padding-top: 2px;
     display: flex;
     flex-direction: column;
     gap: 6px;
+}
+
+.nav-config::before {
+    content: "";
+    width: 60%;
+    margin: 0 auto 10px;
+    border-top: 1px solid var(--border-light);
 }
 
 :focus-visible {
@@ -457,7 +463,7 @@ code {
 }
 
 /* ── Nav colapsable: solo iconos + hover expande (overlay) ── */
-.nav-collapse-bar { border-top: 1px solid var(--border-light); padding-top: 10px; margin-top: 6px; display: flex; }
+.nav-collapse-bar { border-top: 1px solid var(--border-light); margin: 6px -20px 0; padding: 10px 20px 0; display: flex; }
 .nav-collapse-btn { width: 36px; height: 34px; border-radius: 10px; border: 0; background: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; }
 .nav-collapse-btn:hover { background: var(--verde-soft); color: var(--verde-ink); }
 .nav-collapsed .nav-collapse-bar { justify-content: center; }
