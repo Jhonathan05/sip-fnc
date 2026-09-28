@@ -192,19 +192,47 @@ app.get('/api/tareas', needLogin, needDb, async (req, res) => {
   res.json(rows);
 });
 
-// POST /api/tareas/:id/completar — con guard (consultor solo lectura) + auditoría.
-app.post('/api/tareas/:id/completar', needLogin, needDb, async (req, res) => {
+// POST /api/tareas/:id/validar — botón único del modal: verifica el proceso
+// (automáticas) o confirma (manuales); si verifica OK, marca completada + audita.
+app.post('/api/tareas/:id/validar', needLogin, needDb, async (req, res) => {
   const fnc = req.session.fnc;
   const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
   const allowed = fnc.role === 'ADMIN' || roles.some((r) => ['admin', 'coordinador', 'analista', 'auxiliar'].includes(r));
-  if (!allowed) return res.status(403).send(views.errorPage(fnc, 'forbidden'));
-  const { rowCount } = await getPool().query(
-    `UPDATE tasks SET estado = 'hecha', hecha_por = $1, hecha_at = now() WHERE id = $2 AND estado = 'pendiente'`,
-    [fnc.email, Number(req.params.id)]);
-  if (!rowCount) return res.redirect('/dashboard?msg=ya_hecha');
-  await writeAudit(req, { action: 'tarea.completar', modulo: 'tareas', entidadId: String(req.params.id), detalle: 'Tarea marcada hecha' });
-  return res.redirect('/dashboard?msg=tarea_ok');
+  if (!allowed) return res.status(403).json({ ok: false, error: 'Sin permiso.' });
+  const pool = getPool();
+  const { rows } = await pool.query(`SELECT * FROM tasks WHERE id = $1`, [Number(req.params.id)]);
+  const t = rows[0];
+  if (!t) return res.status(404).json({ ok: false, error: 'No encontrada.' });
+  if (t.estado === 'hecha') return res.json({ ok: true, msg: 'Ya estaba completada.' });
+  if (t.automatica) {
+    const v = await verifyTask(pool, t);
+    if (!v.ok) return res.json({ ok: false, msg: v.msg });
+  }
+  await pool.query(`UPDATE tasks SET estado = 'hecha', hecha_por = $1, hecha_at = now() WHERE id = $2`, [fnc.email, t.id]);
+  await writeAudit(req, { action: 'tarea.validar', modulo: 'tareas', entidadId: String(t.id), detalle: `Validada: ${t.titulo}` });
+  return res.json({ ok: true, msg: 'Tarea completada.' });
 });
+
+// Mapa proceso → formulario/acción (botón "Ir al formulario" del modal).
+const PROCESO_FORM = {
+  'Órdenes SAP / Inversión mensual': '/dashboard?form=/ordenes-sap/procesos/inversion-mensual',
+  'Distribución / Apertura': '/dashboard?form=/distribucion/actualizaciones/distribuciones',
+  'Asignaciones / Aprobación': '/dashboard?form=/asignaciones/actualizaciones/asignaciones',
+  'Informes / Saldos': '/distribucion/informes/saldos',
+};
+
+// Verificadores de procesos automáticos (el proceso ya se ejecutó → se puede completar).
+async function verifyTask(pool, t) {
+  const p = String(t.proceso || '').toLowerCase();
+  if (p.includes('distribuci')) {
+    const y = new Date().getFullYear();
+    const r = await pool.query(`SELECT COUNT(*)::int AS n FROM distribuciones WHERE vigencia = $1`, [y]);
+    return r.rows[0].n > 0
+      ? { ok: true, msg: 'Distribuciones de la vigencia verificadas.' }
+      : { ok: false, msg: 'Aún no hay distribuciones de la vigencia cargadas.' };
+  }
+  return { ok: false, msg: 'Este proceso aún no tiene verificación automática: ejecútalo desde su formulario.' };
+}
 
 // GET /api/tareas/:id — detalle completo para el drawer (mismo filtro de rol que la lista).
 app.get('/api/tareas/:id', needLogin, needDb, async (req, res) => {
@@ -222,7 +250,9 @@ app.get('/api/tareas/:id', needLogin, needDb, async (req, res) => {
   try {
     const { rows } = await getPool().query(q, params);
     if (!rows.length) return res.status(404).json({ error: 'No encontrado.' });
-    res.json(rows[0]);
+    const t = rows[0];
+    t.formUrl = PROCESO_FORM[t.proceso] || null;
+    res.json(t);
   } catch (e) {
     console.error('[api/tareas:id]', e.message);
     res.status(500).json({ error: 'Error interno.' });

@@ -247,15 +247,10 @@ function fmtFechaCorta(v) {
 }
 
 function taskCards(fnc, tareas) {
-  const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
-  const canDo = fnc.role === 'ADMIN' || roles.some((r) => ['admin', 'coordinador', 'analista', 'auxiliar'].includes(r));
   const today = new Date().toISOString().slice(0, 10);
   const cards = (tareas || []).map((t, i) => {
     const vencida = t.fecha_limite && String(t.fecha_limite).slice(0, 10) < today;
-    return `<li class="task-item${vencida ? ' task-item-vencida' : ''}"><span class="task-num tnum drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${i + 1}</span><span class="task-body"><strong>${esc(t.titulo)}${vencida ? ' <span class="badge badge-warn">Vencida</span>' : ''}</strong>
-<span class="task-meta">${esc(t.responsable || t.area || '—')} · Límite: <span class="tnum${vencida ? ' text-warn' : ''}">${esc(fmtFechaCorta(t.fecha_limite))}</span> · <span class="badge">${esc(t.automatica ? 'automática' : 'manual')}</span> <span class="badge">${esc(t.proceso || '')}</span></span>
-${t.detalle ? `<span class="task-detail">${esc(t.detalle)}</span>` : ''}
-${canDo ? `<form method="post" action="/api/tareas/${t.id}/completar" style="margin:4px 0 0"><button class="stepper-button stepper-button-primary" type="submit">Marcar hecha</button></form>` : `<span class="badge">solo lectura</span>`}</span></li>`;
+    return `<li class="task-item"><span class="task-num tnum drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${i + 1}</span><span class="task-body"><strong class="drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${esc(t.titulo)}${vencida ? ' <span class="badge badge-warn">Vencida</span>' : ''}</strong></span></li>`;
   }).join('');
   return `<h3 class="rail-sub">Pendientes (${(tareas || []).length})</h3><ul class="task-list">${cards || '<li class="done-empty">Sin pendientes.</li>'}</ul>`;
 }
@@ -402,7 +397,27 @@ body.innerHTML=row('Acción',a.action)+row('Actor',a.actor_email)+row('Módulo',
 function renderTarea(t){
 title.textContent=t.estado==='hecha'?'Tarea completada':'Tarea pendiente';
 var lim=t.fecha_limite?String(t.fecha_limite).slice(0,10):'';
-body.innerHTML=row('Título',t.titulo)+row('Detalle',t.detalle)+row('Responsable',t.responsable)+row('Área',t.area)+row('Proceso',t.proceso)+row('Rol',t.rol)+row('Límite',lim)+row('Tipo',t.automatica?'automática':'manual')+row('Estado',t.estado)+row('Completada por',t.hecha_por)+row('Completada el',t.hecha_at?fmtDT(t.hecha_at):'');
+var est=t.estado==='hecha'?'<span class="badge badge-ok">hecha</span>':'<span class="badge badge-pending">pendiente</span>';
+var tipo=t.automatica?'<span class="badge badge-ok">automática</span>':'<span class="badge badge-neutral">manual</span>';
+body.innerHTML=row('Título',t.titulo)+row('Detalle',t.detalle)+row('Responsable',t.responsable)+row('Área',t.area)+row('Proceso',t.proceso)+row('Rol',t.rol)+row('Límite',lim)
++'<div class="drawer-row"><span>Tipo</span><strong>'+tipo+'</strong></div>'
++'<div class="drawer-row"><span>Estado</span><strong>'+est+'</strong></div>'
++row('Completada por',t.hecha_por)+row('Completada el',t.hecha_at?fmtDT(t.hecha_at):'')
++'<div class="drawer-actions" id="drawerActions"></div><p id="drawerMsg" class="drawer-msg"></p>';
+var box=document.getElementById('drawerActions');
+if(!box||t.estado==='hecha')return;
+var b=document.createElement('button');b.textContent='Validar tarea';b.className='btn-primary';b.style.marginTop='0';
+b.addEventListener('click',function(){
+if(!t.automatica&&!window.confirm('¿Confirmas completar "'+(t.titulo||'')+'"?'))return;
+b.disabled=true;
+fetch('/api/tareas/'+encodeURIComponent(t.id)+'/validar',{method:'POST'}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+if(x.d&&x.d.ok){window.location.reload();return;}
+var m=document.getElementById('drawerMsg');if(m)m.textContent=(x.d&&(x.d.msg||x.d.error))||'No se pudo validar.';
+b.disabled=false;
+}).catch(function(){var m=document.getElementById('drawerMsg');if(m)m.textContent='Error de red.';b.disabled=false;});
+});
+box.appendChild(b);
+if(t.formUrl){var a=document.createElement('a');a.textContent='Ir al formulario';a.className='btn-logout';a.style.textDecoration='none';a.style.display='inline-block';a.style.padding='10px 20px';a.href=t.formUrl;box.appendChild(a);}
 }
 function load(kind,id){
 body.innerHTML='<p>Cargando…</p>';open();
