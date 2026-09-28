@@ -96,20 +96,6 @@
   height: 100%;
 }
 
-/* Título centrado del módulo/vista actual */
-.header-title {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: var(--fs-card);
-  font-weight: 600;
-  letter-spacing: var(--tracking-title);
-  white-space: nowrap;
-  max-width: 40vw;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .header-brand {
   display: flex;
   align-items: center;
