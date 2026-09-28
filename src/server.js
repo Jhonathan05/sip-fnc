@@ -246,17 +246,20 @@ for (const mod of NAV.filter((m) => (m.children || []).length > 0)) {
   });
 }
 
-// Mi perfil: datos reales de la sesión (nombre, email, roles, vigencia).
-app.get('/perfil/perfil/mi-perfil', needLogin, (req, res) => {
+// Mi perfil vive en el modal de Configuración; URL vieja redirige al dashboard.
+app.get('/perfil/perfil/mi-perfil', needLogin, (req, res) => res.redirect('/dashboard'));
+
+// POST /api/perfil/solicitar-clave — opción C: solicitud auditada al admin
+// (payload listo para webhook Discord en staging; el reset KC se cablea con fnc-keycloak-users).
+app.post('/api/perfil/solicitar-clave', needLogin, needDb, async (req, res) => {
   const fnc = req.session.fnc;
-  const left = Math.max(0, (fnc.exp || 0) - Math.floor(Date.now() / 1000));
-  const hh = Math.floor(left / 3600);
-  const mm = Math.floor((left % 3600) / 60);
-  res.send(page(fnc, { path: '/perfil/perfil/mi-perfil', title: 'Mi perfil' },
-    `<p><a href="/perfil">Perfil</a> / Perfil</p><div class="card"><h1>${views.esc(fnc.displayName)}</h1>
-<p>Usuario: <strong>${views.esc(fnc.email)}</strong></p>
-<p>Rol: <span class="badge">${views.esc(fnc.role)}</span> · Client roles: <strong>${views.esc((fnc.roles || []).join(','))}</strong></p>
-<p>Sesión vigente por: <strong>${hh}h ${mm}min</strong> (TTL absoluto 8h).</p></div>`));
+  const { rows } = await getPool().query(
+    `SELECT COUNT(*)::int AS n FROM audit_log WHERE actor_sub = $1 AND action = 'clave.solicitar' AND created_at > now() - INTERVAL '1 day'`,
+    [fnc.sub]);
+  if (rows[0].n === 0) {
+    await writeAudit(req, { action: 'clave.solicitar', modulo: 'seguridad', detalle: `Solicitud de cambio de contraseña de ${fnc.email} (pendiente reset admin + UPDATE_PASSWORD)` });
+  }
+  return res.redirect('/dashboard?msg=clave_solicitada');
 });
 
 // Hojas del árbol: /:modulo/:sub/:item con guard por hoja (planas "Fase 2" por ahora).
@@ -271,9 +274,17 @@ for (const { leaf, sub, mod } of flattenLeaves()) {
   });
 }
 
-app.get('/seguridad', needLogin, needRole('ADMIN'), (req, res) => {
+app.get('/seguridad', needLogin, needRole('ADMIN'), async (req, res) => {
   const fnc = req.session.fnc;
-  res.send(page(fnc, { path: '/seguridad', title: 'Seguridad' }, `<div class="card"><h1>Seguridad</h1><p>Solo <span class="badge">ADMIN</span>. Rate-limit vigente: <strong>${views.esc(process.env.RATE_LIMIT_API_PER_MIN || '60')}/min</strong> (override en caliente en Fase 2).</p></div>`));
+  let solis = [];
+  try {
+    const r = await getPool().query(
+      `SELECT actor_email, detalle, created_at AS at FROM audit_log WHERE action = 'clave.solicitar' ORDER BY id DESC LIMIT 20`);
+    solis = r.rows;
+  } catch { /* sin DB: panel mínimo */ }
+  const lis = solis.map((s) => `<li><strong>${views.esc(s.actor_email)}</strong> · ${views.esc(new Date(s.at).toLocaleString('es-CO'))}<br><span>${views.esc(s.detalle || '')}</span></li>`).join('');
+  res.send(page(fnc, { path: '/seguridad', title: 'Seguridad' }, `<div class="card"><h1>Seguridad</h1><p>Solo <span class="badge">ADMIN</span>. Rate-limit vigente: <strong>${views.esc(process.env.RATE_LIMIT_API_PER_MIN || '60')}/min</strong> (override en caliente en Fase 2).</p></div>
+<div class="card"><h2>Solicitudes de cambio de contraseña (${solis.length})</h2><ul class="feed">${lis || '<li>Sin solicitudes.</li>'}</ul><p>Flujo: reset en consola Keycloak + acción requerida <code>UPDATE_PASSWORD</code> (skill fnc-keycloak-users, staging).</p></div>`));
 });
 
 // Matriz viva de roles: qué ve cada rol (permitido / deshabilitado / oculto).

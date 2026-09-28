@@ -165,25 +165,13 @@ const NAV = [
       },
     ],
   },
-  {
-    path: '/perfil', title: 'Perfil', icon: 'consultas', roles: BOTH, nav: true,
-    children: [
-      {
-        kind: 'info',
-        key: 'perfil', title: 'Perfil', icon: 'consultas',
-        desc: 'Datos de tu sesión y cuenta.',
-        children: [
-          { path: '/perfil/perfil/mi-perfil', title: 'Mi perfil', roles: BOTH },
-        ],
-      },
-    ],
-  },
 ];
 
 // Categoría global de configuración, anclada al fondo del nav.
 const CONFIG = [
   { path: '/seguridad', title: 'Seguridad', icon: 'seguridad', roles: ADMIN_ONLY, nav: true },
   { path: '/roles', title: 'Roles', icon: 'roles', roles: BOTH, nav: true },
+  { path: '#perfil', title: 'Perfil', icon: 'consultas', roles: BOTH, nav: true, modal: 'perfil' },
 ];
 
 // Compat: lista plana de nivel módulo (matriz viva + guards viejos).

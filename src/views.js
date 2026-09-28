@@ -66,9 +66,37 @@ function navTree(active, role) {
 function navConfig(active, role) {
   const items = CONFIG.filter((c) => canAccess(role, c));
   if (!items.length) return '';
-  const links = items.map((c) => `<a class="tab-btn${active === c.path ? ' active' : ''}" href="${c.path}" title="${esc(c.title)}">${icon(c.icon)}<span class="nav-label">${esc(c.title)}</span></a>`).join('');
+  const links = items.map((c) => {
+    if (c.modal) {
+      return `<button class="tab-btn" data-open-modal="${esc(c.modal)}" title="${esc(c.title)}">${icon(c.icon)}<span class="nav-label">${esc(c.title)}</span></button>`;
+    }
+    return `<a class="tab-btn${active === c.path ? ' active' : ''}" href="${c.path}" title="${esc(c.title)}">${icon(c.icon)}<span class="nav-label">${esc(c.title)}</span></a>`;
+  }).join('');
   return `<div class="nav-config"><span class="sidebar-section-label">Configuración</span>${links}</div>`;
 }
+
+function profileModal() {
+  return `<div class="modal-overlay" id="perfilModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-label="Mi perfil">
+    <h2>Mi perfil</h2>
+    <div id="perfilBody"><p>Cargando…</p></div>
+    <form method="post" action="/api/perfil/solicitar-clave" style="margin:12px 0 0">
+      <button class="btn-primary" type="submit" style="margin-top:0">Solicitar cambio de contraseña</button>
+    </form>
+    <p class="modal-note">Tu solicitud llega al administrador, quien restablece tu acceso y te pide definir una nueva clave en el siguiente ingreso. La consola de cuenta Keycloak no está expuesta.</p>
+    <button class="btn-logout" data-close-modal>Cerrar</button>
+  </div>
+</div>`;
+}
+
+const MODAL_JS = `<script>(function(){try{
+var m=document.getElementById('perfilModal');
+document.querySelectorAll('[data-open-modal="perfil"]').forEach(function(b){b.addEventListener('click',function(){if(!m)return;m.hidden=false;fetch('/api/me').then(function(r){return r.json();}).then(function(u){var left=u.exp&&u.iat?Math.max(0,u.exp-Math.floor(Date.now()/1000)):0;var hh=Math.floor(left/3600),mm=Math.floor((left%3600)/60);document.getElementById('perfilBody').innerHTML='<p>Usuario: <strong>'+String(u.displayName||'')+'</strong></p><p>Email: <strong>'+String(u.email||'')+'</strong></p><p>Rol: <span class=&quot;badge&quot;>'+String(u.role||'')+'</span> '+(u.roles||[]).join(', ')+'</p><p>Sesión vigente por: <strong>'+hh+'h '+mm+'min</strong></p>';}).catch(function(){});});});
+function close(){if(m)m.hidden=true;}
+document.querySelectorAll('[data-close-modal]').forEach(function(b){b.addEventListener('click',close);});
+if(m)m.addEventListener('click',function(e){if(e.target===m)close();});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+}catch(e){}})();</script>`;
 
 const NAV_MEMORY_JS = `<script>(function(){try{var k='sip-nav-open';var open=JSON.parse(localStorage.getItem(k)||'[]');function save(id,on){try{var cur=JSON.parse(localStorage.getItem(k)||'[]');if(on&&cur.indexOf(id)<0)cur.push(id);if(!on)cur=cur.filter(function(x){return x!==id});localStorage.setItem(k,JSON.stringify(cur));}catch(e){}}document.querySelectorAll('details.tree-sub, details.tree-mod').forEach(function(d){var id=d.getAttribute('data-navkey');if(open.indexOf(id)>=0)d.open=true;d.addEventListener('toggle',function(){save(id,d.open)});});
 var sidenav=document.querySelector('.sidebar-nav'),scrollT=null;
@@ -147,7 +175,8 @@ ${navConfig(active, role)}
 <div class="nav-collapse-bar"><button class="nav-collapse-btn" id="navCollapseBtn" aria-label="Contraer menú" title="Contraer / expandir menú"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9.5 3v18"/></svg></button></div>
 </aside>
 <main class="main-container">${body}</main>
-${NAV_MEMORY_JS}${A11Y_JS}</body></html>`;
+${profileModal()}
+${NAV_MEMORY_JS}${A11Y_JS}${MODAL_JS}</body></html>`;
 }
 
 function loginPage(appName, kcMode) {

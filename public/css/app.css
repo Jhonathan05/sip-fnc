@@ -511,6 +511,11 @@ code {
 /* Riel derecho denso con scroll propio */
 .dash-rail { display: flex; flex-direction: column; gap: 16px; max-height: calc(100vh - 220px); overflow-y: auto; padding-right: 2px; }
 .feed em { color: var(--text-muted); font-style: normal; font-size: var(--fs-meta); }
+/* ── Modal Perfil (Configuración, sin navegar) ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 300; padding: 16px; }
+.modal-overlay[hidden] { display: none; }
+.modal-card { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 16px; padding: 24px; max-width: 440px; width: 100%; box-shadow: var(--shadow-subtle); }
+.modal-note { font-size: var(--fs-meta); color: var(--text-muted); }
 /* ── Skeletons de formularios (Fase 1 visual, Fase 2 negocio) ── */
 .card.form-slot { max-width: none; }
 .skl-bar { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin: 12px 0; }
