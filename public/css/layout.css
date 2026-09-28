@@ -131,12 +131,6 @@
 .brand-divider { width: 1px; height: 22px; background: var(--border-light); }
 .login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 
-.header-brand-sub {
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-
 /* Sidebar App */
 .app-sidebar {
   position: fixed;
@@ -153,22 +147,4 @@
   padding-bottom: 10px;
   display: flex;
   flex-direction: column;
-}
-
-/* Asa Flotante */
-#btn-sidebar-toggle {
-  position: fixed;
-  top: calc(50% + 35px);
-  left: 277px;
-  transform: translate(-50%, -50%);
-  z-index: 102;
-  background: var(--bg-sidebar);
-  border: 1px solid var(--border-light);
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
 }

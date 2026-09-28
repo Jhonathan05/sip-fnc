@@ -442,8 +442,7 @@ code {
     font-weight: 500;
 }
 
-.tree-leaf.tree-disabled,
-.tab-btn.tab-disabled {
+.tree-leaf.tree-disabled {
     opacity: .55;
     cursor: not-allowed;
 }
