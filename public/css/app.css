@@ -492,7 +492,9 @@ code {
 .nav-collapsed .nav-config { align-items: center; }
 .nav-collapsed .app-sidebar:hover .nav-config { align-items: stretch; }
 /* ── Dashboard operativo: KPIs + 2 columnas ── */
-.kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 10px 0 16px; }
+.kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 0 0 16px; }
+/* KPIs en columna izquierda: 2x2 compacto a nivel del riel */
+.dash-grid > div:first-child .kpi-strip { grid-template-columns: 1fr 1fr; }
 .card.kpi { display: flex; flex-direction: column; gap: 2px; max-width: none; padding: 16px 18px; }
 .card.kpi strong { font-size: 1.15rem; letter-spacing: var(--tracking-title); font-weight: 600; }
 .dash-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; align-items: start; }

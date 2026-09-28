@@ -328,9 +328,8 @@ function activityFeed(actividad) {
 }
 
 function dashboardPage(fnc, data) {
-  return `${kpiStrip(data.saldos)}
-<div class="dash-grid">
-<div>${formSlot(data.form)}</div>
+  return `<div class="dash-grid">
+<div>${kpiStrip(data.saldos)}${formSlot(data.form)}</div>
 <div class="dash-rail">${activityFeed(data.actividad)}${taskCards(fnc, data.tareas)}</div>
 </div>`;
 }
