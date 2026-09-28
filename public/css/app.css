@@ -30,7 +30,7 @@ p {
 }
 
 a {
-    color: var(--verde-ink);
+    color: var(--azul-ink);
 }
 
 /* Cifras siempre tabulares (finanzas: decimales alineados) */
@@ -153,8 +153,8 @@ code {
 
 .tab-btn.active,
 .tab-btn:hover {
-    background: var(--verde-soft);
-    color: var(--verde-ink);
+    background: var(--azul-soft);
+    color: var(--azul-ink);
     font-weight: 500;
 }
 
@@ -168,7 +168,7 @@ code {
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    background: var(--verde);
+    background: var(--azul);
     color: #fff;
     display: flex;
     align-items: center;
@@ -219,8 +219,8 @@ code {
     display: inline-block;
     padding: 2px 10px;
     border-radius: 9999px;
-    background: var(--verde-soft);
-    color: var(--verde-ink);
+    background: var(--azul-soft);
+    color: var(--azul-ink);
     font-size: var(--fs-meta);
     font-weight: 500;
     letter-spacing: var(--tracking-body);
@@ -237,7 +237,7 @@ code {
 .btn-primary {
     display: inline-block;
     margin-top: 16px;
-    background: var(--verde);
+    background: var(--azul);
     color: #fff;
     border-radius: 10px;
     padding: 10px 20px;
@@ -264,7 +264,7 @@ code {
 }
 
 .a11y-btn:hover {
-    background: var(--verde-soft);
+    background: var(--azul-soft);
 }
 
 .a11y-pop {
@@ -316,8 +316,8 @@ code {
 }
 
 .a11y-seg button[aria-pressed="true"] {
-    background: var(--verde-soft);
-    color: var(--verde-ink);
+    background: var(--azul-soft);
+    color: var(--azul-ink);
     font-weight: 600;
 }
 
@@ -406,7 +406,7 @@ code {
 }
 
 .tree-sub-head:hover {
-    background: var(--verde-soft);
+    background: var(--azul-soft);
     color: var(--text-dark);
 }
 
@@ -433,12 +433,12 @@ code {
 }
 
 .tree-leaf:hover {
-    background: var(--verde-soft);
+    background: var(--azul-soft);
 }
 
 .tree-leaf.active {
-    background: var(--verde-soft);
-    color: var(--verde-ink);
+    background: var(--azul-soft);
+    color: var(--azul-ink);
     font-weight: 500;
 }
 
@@ -463,14 +463,14 @@ code {
 }
 
 :focus-visible {
-    outline: 2px solid var(--verde-ink);
+    outline: 2px solid var(--azul-ink);
     outline-offset: 2px;
 }
 
 /* ── Nav colapsable: solo iconos + hover expande (overlay) ── */
 .nav-collapse-bar { border-top: 1px solid var(--border-light); margin: 6px 0 0 -20px; padding: 10px 0 0 20px; display: flex; }
 .nav-collapse-btn { width: 36px; height: 34px; border-radius: 10px; border: 0; background: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; }
-.nav-collapse-btn:hover { background: var(--verde-soft); color: var(--verde-ink); }
+.nav-collapse-btn:hover { background: var(--azul-soft); color: var(--azul-ink); }
 .nav-collapse-btn svg { transition: transform 200ms ease; }
 /* Colapsado: icono espejado (barra a la derecha = expandir) */
 .nav-collapsed .nav-collapse-btn svg { transform: scaleX(-1); }
@@ -526,4 +526,4 @@ code {
 .skl-form legend { font-size: var(--fs-meta); color: var(--text-muted); padding: 0 6px; }
 .skl-table { margin: 12px 0; }
 .skl-progress { height: 8px; border-radius: 9999px; background: var(--bg-main); border: 1px solid var(--border-light); overflow: hidden; margin: 12px 0; }
-.skl-progress span { display: block; height: 100%; background: var(--verde-soft); }
+.skl-progress span { display: block; height: 100%; background: var(--azul-soft); }

@@ -222,10 +222,21 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
       const as = Number(r.asignado), ej = Number(r.ejecutado);
       return { ...r, saldo: as - ej, pct: as > 0 ? +(ej / as * 100).toFixed(1) : 0 };
     });
-    res.send(page(fnc, MODULES[0], views.dashboardPage(fnc, { saldos, tareas: t.rows, actividad: a.rows, form })));
+    // Selección del árbol: el formulario inline marca su hoja como activa
+    // (abre módulo/sub y resalta la hoja; sin form queda Dashboard).
+    const activePath = form ? form.leaf.path : MODULES[0].path;
+    res.send(page(fnc, { path: activePath }, views.dashboardPage(fnc, { saldos, tareas: t.rows, actividad: a.rows, form })));
   } catch (e) {
     console.error('[dashboard]', e.message);
-    res.send(page(fnc, MODULES[0], `<div class="alert-err">No se pudo cargar el tablero.</div>`));
+    // Si el error ocurre con ?form válido, conservar la selección del árbol.
+    let activePath = MODULES[0].path;
+    try {
+      if (req.query.form) {
+        const hit = findLeaf(String(req.query.form));
+        if (hit && canAccess(fnc.role, hit.leaf) && hit.sub.kind !== 'informe') activePath = hit.leaf.path;
+      }
+    } catch { /* mantener Dashboard */ }
+    res.send(page(fnc, { path: activePath }, `<div class="alert-err">No se pudo cargar el tablero.</div>`));
   }
 });
 
