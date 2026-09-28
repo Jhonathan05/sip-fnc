@@ -161,12 +161,19 @@ app.get('/api/actividad', needLogin, needDb, async (req, res) => {
 
 // GET /api/actividad/:id — detalle completo para el drawer.
 app.get('/api/actividad/:id', needLogin, needDb, async (req, res) => {
-  const { rows } = await getPool().query(
-    `SELECT id, created_at AS at, actor_sub, actor_email, action, modulo, entidad_id, detalle, ip
-     FROM audit_log WHERE id = $1`,
-    [Number(req.params.id)]);
-  if (!rows.length) return res.status(404).json({ error: 'No encontrado.' });
-  res.json(rows[0]);
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Id inválido.' });
+  try {
+    const { rows } = await getPool().query(
+      `SELECT id, created_at AS at, actor_sub, actor_email, action, modulo, entidad_id, detalle, ip
+       FROM audit_log WHERE id = $1`,
+      [id]);
+    if (!rows.length) return res.status(404).json({ error: 'No encontrado.' });
+    res.json(rows[0]);
+  } catch (e) {
+    console.error('[api/actividad:id]', e.message);
+    res.status(500).json({ error: 'Error interno.' });
+  }
 });
 
 // GET /api/tareas — pendientes visibles según rol (consultor: lectura).
@@ -201,18 +208,25 @@ app.post('/api/tareas/:id/completar', needLogin, needDb, async (req, res) => {
 
 // GET /api/tareas/:id — detalle completo para el drawer (mismo filtro de rol que la lista).
 app.get('/api/tareas/:id', needLogin, needDb, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Id inválido.' });
   const fnc = req.session.fnc;
   const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
   let q = `SELECT id, created_at AS at, rol, titulo, detalle, responsable, area, proceso, fecha_limite, automatica, estado, hecha_por, hecha_at
            FROM tasks WHERE id = $1`;
-  const params = [Number(req.params.id)];
+  const params = [id];
   if (fnc.role !== 'ADMIN' && !roles.includes('coordinador')) {
     q += ` AND (estado = 'hecha' OR rol = ANY($2))`;
     params.push(roles);
   }
-  const { rows } = await getPool().query(q, params);
-  if (!rows.length) return res.status(404).json({ error: 'No encontrado.' });
-  res.json(rows[0]);
+  try {
+    const { rows } = await getPool().query(q, params);
+    if (!rows.length) return res.status(404).json({ error: 'No encontrado.' });
+    res.json(rows[0]);
+  } catch (e) {
+    console.error('[api/tareas:id]', e.message);
+    res.status(500).json({ error: 'Error interno.' });
+  }
 });
 
 const page = (fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body);
@@ -234,7 +248,7 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
     const [s, a] = await Promise.all([
       pool.query('SELECT tipo, vigencia, asignado, ejecutado FROM distribuciones ORDER BY vigencia DESC, tipo'),
       // Mini panel: solo plataforma (auth/sistema queda fuera: login.*, logout).
-      pool.query(`SELECT created_at AS at, actor_email, action, modulo, detalle FROM audit_log WHERE action NOT IN ('login.mock','login.keycloak','logout') ORDER BY id DESC LIMIT 15`),
+      pool.query(`SELECT id, created_at AS at, actor_email, action, modulo, detalle FROM audit_log WHERE action NOT IN ('login.mock','login.keycloak','logout') ORDER BY id DESC LIMIT 15`),
     ]);
     const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
     let tq = `SELECT id, titulo, detalle, responsable, area, proceso, fecha_limite, automatica FROM tasks WHERE estado='pendiente'`;
