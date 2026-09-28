@@ -498,10 +498,6 @@ code {
 .card.kpi strong { font-size: 1.15rem; letter-spacing: var(--tracking-title); font-weight: 600; }
 .dash-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; align-items: start; }
 @media (max-width: 1100px) { .dash-grid { grid-template-columns: 1fr; } }
-.qa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
-.card.qa { text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 4px; max-width: none; }
-.card.qa:hover { border-color: var(--verde-ink); }
-.card.qa span { font-size: var(--fs-meta); color: var(--text-muted); }
 .task-grid { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
 /* Semántica solo en texto/badges: ningún borde de color en el sistema */
 .badge-warn { background: var(--err-bg); color: var(--err-ink); }
