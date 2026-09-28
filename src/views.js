@@ -195,9 +195,26 @@ function kpiStrip(saldos) {
 }
 
 function quickAccess(fnc) {
-  const cards = NAV.filter((m) => (m.children || []).length && canAccess(fnc.role, m)).map((m) =>
-    `<a class="card qa" href="${m.path}"><strong>${esc(m.title)}</strong><span>${(m.children || []).length} secciones</span></a>`).join('');
+  const cards = NAV.filter((m) => (m.children || []).length && canAccess(fnc.role, m)).map((m) => {
+    const n = (m.children || []).length;
+    return `<a class="card qa" href="${m.path}"><strong>${esc(m.title)}</strong><span>${n} ${n === 1 ? 'sección' : 'secciones'}</span></a>`;
+  }).join('');
   return `<h2>Accesos a formularios</h2><div class="qa-grid">${cards}</div>`;
+}
+
+const ACTION_LABEL = {
+  'login.mock': 'Ingresó (desarrollo)',
+  'login.keycloak': 'Ingresó con Comité Tolima',
+  logout: 'Cerró sesión',
+  'tarea.completar': 'Completó tarea',
+  'task.create': 'Creó tarea',
+};
+
+function fmtFechaCorta(v) {
+  if (!v) return '—';
+  const d = new Date(String(v).slice(0, 10) + 'T12:00:00');
+  if (Number.isNaN(d.getTime())) return String(v).slice(0, 10);
+  return d.toLocaleDateString('es-CO', { weekday: 'short', day: '2-digit', month: 'short' });
 }
 
 function taskCards(fnc, tareas) {
@@ -206,11 +223,11 @@ function taskCards(fnc, tareas) {
   const today = new Date().toISOString().slice(0, 10);
   const cards = (tareas || []).map((t) => {
     const vencida = t.fecha_limite && String(t.fecha_limite).slice(0, 10) < today;
-    return `<div class="card task${vencida ? ' task-over' : ''}">
+    return `<div class="card task">
 <strong>${esc(t.titulo)}</strong>
 <p>${esc(t.detalle || '')}</p>
-<p><span class="badge">${esc(t.automatica ? 'automática' : 'manual')}</span> <span class="badge">${esc(t.proceso || '')}</span></p>
-<p>Solicita: <strong>${esc(t.responsable || t.area || '—')}</strong> · Límite: <strong class="tnum">${esc(t.fecha_limite ? String(t.fecha_limite).slice(0, 10) : '—')}</strong></p>
+<p><span class="badge">${esc(t.automatica ? 'automática' : 'manual')}</span> <span class="badge">${esc(t.proceso || '')}</span>${vencida ? ' <span class="badge badge-warn">Vencida</span>' : ''}</p>
+<p>Solicita: <strong>${esc(t.responsable || t.area || '—')}</strong> · Límite: <strong class="tnum${vencida ? ' text-warn' : ''}">${esc(fmtFechaCorta(t.fecha_limite))}</strong></p>
 ${canDo ? `<form method="post" action="/api/tareas/${t.id}/completar" style="margin:0"><button class="btn-primary" type="submit">Marcar hecha</button></form>` : `<p><span class="badge">solo lectura</span></p>`}
 </div>`;
   }).join('');
@@ -219,7 +236,7 @@ ${canDo ? `<form method="post" action="/api/tareas/${t.id}/completar" style="mar
 
 function activityFeed(actividad) {
   const items = (actividad || []).map((a) =>
-    `<li><strong>${esc(a.actor_email || '')}</strong> · ${esc(a.action)} <span class="badge">${esc(a.modulo || '')}</span><br><span>${esc(a.detalle || '')}</span> <em class="tnum">${esc(new Date(a.at).toLocaleString('es-CO'))}</em></li>`).join('');
+    `<li><strong>${esc(a.actor_email || '')}</strong> · ${esc(ACTION_LABEL[a.action] || a.action)} <span class="badge">${esc(a.modulo || '')}</span><br><span>${esc(a.detalle || '')}</span> <em class="tnum">${esc(new Date(a.at).toLocaleString('es-CO'))}</em></li>`).join('');
   return `<h2>Bitácora reciente</h2><ul class="feed">${items || '<li>Sin movimientos.</li>'}</ul>`;
 }
 
