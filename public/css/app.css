@@ -469,9 +469,10 @@ code {
 .nav-collapse-btn svg { transition: transform 200ms ease; }
 /* Colapsado: icono espejado (barra a la derecha = expandir) */
 .nav-collapsed .nav-collapse-btn svg { transform: scaleX(-1); }
-.nav-collapsed .nav-collapse-bar { justify-content: center; margin: 6px 0 0 -11px; padding: 10px 0 0 11px; }
+.nav-collapsed .nav-collapse-bar { justify-content: center; margin: 6px -11px 0; padding: 10px 11px 0; }
 .nav-collapsed .app-sidebar:hover .nav-collapse-bar { justify-content: flex-start; margin: 6px 0 0 -20px; padding: 10px 0 0 20px; }
-.nav-collapsed .sidebar-nav { padding-right: 0; }
+.nav-collapsed .sidebar-nav { padding-right: 0; align-items: center; }
+.nav-collapsed .app-sidebar:hover .sidebar-nav { align-items: stretch; }
 .app-sidebar { transition: width 200ms ease, padding 200ms ease; }
 .nav-collapsed .app-sidebar { width: 62px; padding-left: 11px; padding-right: 11px; }
 .nav-collapsed .app-sidebar:hover { width: 264px; padding: 24px 20px 10px 20px; padding-right: 0; }
