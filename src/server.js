@@ -207,7 +207,8 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
     const pool = getPool();
     const [s, a] = await Promise.all([
       pool.query('SELECT tipo, vigencia, asignado, ejecutado FROM distribuciones ORDER BY vigencia DESC, tipo'),
-      pool.query(`SELECT created_at AS at, actor_email, action, modulo, detalle FROM audit_log ORDER BY id DESC LIMIT 15`),
+      // Mini panel: solo plataforma (auth/sistema queda fuera: login.*, logout).
+      pool.query(`SELECT created_at AS at, actor_email, action, modulo, detalle FROM audit_log WHERE action NOT IN ('login.mock','login.keycloak','logout') ORDER BY id DESC LIMIT 15`),
     ]);
     const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
     let tq = `SELECT id, titulo, detalle, responsable, area, proceso, fecha_limite, automatica FROM tasks WHERE estado='pendiente'`;
@@ -218,6 +219,15 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
     }
     tq += ' ORDER BY fecha_limite NULLS LAST, id';
     const t = await pool.query(tq, tp);
+    // Ejercicio completo: últimas hechas visibles con el mismo filtro de rol.
+    let dq = `SELECT id, titulo, rol, hecha_por, hecha_at FROM tasks WHERE estado='hecha'`;
+    const dp = [];
+    if (fnc.role !== 'ADMIN' && !roles.includes('coordinador')) {
+      dq += ` AND rol = ANY($1)`;
+      dp.push(roles);
+    }
+    dq += ' ORDER BY hecha_at DESC NULLS LAST, id DESC LIMIT 10';
+    const d = await pool.query(dq, dp);
     const saldos = s.rows.map((r) => {
       const as = Number(r.asignado), ej = Number(r.ejecutado);
       return { ...r, saldo: as - ej, pct: as > 0 ? +(ej / as * 100).toFixed(1) : 0 };
@@ -225,7 +235,7 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
     // Selección del árbol: el formulario inline marca su hoja como activa
     // (abre módulo/sub y resalta la hoja; sin form queda Dashboard).
     const activePath = form ? form.leaf.path : MODULES[0].path;
-    res.send(page(fnc, { path: activePath }, views.dashboardPage(fnc, { saldos, tareas: t.rows, actividad: a.rows, form })));
+    res.send(page(fnc, { path: activePath }, views.dashboardPage(fnc, { saldos, tareas: t.rows, hechas: d.rows, actividad: a.rows, form })));
   } catch (e) {
     console.error('[dashboard]', e.message);
     // Si el error ocurre con ?form válido, conservar la selección del árbol.

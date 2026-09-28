@@ -1,7 +1,7 @@
 // Vistas vanilla (fnc-layout/vanilla-rendimiento). Nav en árbol guiado por src/modules.js:
 // módulo → subcategoría (colapsable, memoria localStorage) → hoja.
 // permitido = link, sin acceso pero visible = deshabilitado, CONFIG anclada al fondo.
-const { MODULES, NAV, CONFIG, canAccess, flattenLeaves, findLeaf } = require('./modules');
+const { MODULES, NAV, CONFIG, canAccess, flattenLeaves } = require('./modules');
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -100,8 +100,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
 }catch(e){}})();</script>`;
 
 const NAV_MEMORY_JS = `<script>(function(){try{var k='sip-nav-open';var open=JSON.parse(localStorage.getItem(k)||'[]');function save(id,on){try{var cur=JSON.parse(localStorage.getItem(k)||'[]');if(on&&cur.indexOf(id)<0)cur.push(id);if(!on)cur=cur.filter(function(x){return x!==id});localStorage.setItem(k,JSON.stringify(cur));}catch(e){}}document.querySelectorAll('details.tree-sub, details.tree-mod').forEach(function(d){var id=d.getAttribute('data-navkey');if(open.indexOf(id)>=0)d.open=true;d.addEventListener('toggle',function(){save(id,d.open)});});
-var sidenav=document.querySelector('.sidebar-nav'),scrollT=null;
-if(sidenav){sidenav.addEventListener('scroll',function(){sidenav.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){sidenav.classList.remove('is-scrolling');},800);},{passive:true});}}catch(e){}})();</script>`;
+var scrollAreas=Array.prototype.slice.call(document.querySelectorAll('.sidebar-nav, .rail-scroll'));
+scrollAreas.forEach(function(el){var scrollT=null;el.addEventListener('scroll',function(){el.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){el.classList.remove('is-scrolling');},800);},{passive:true});});}}catch(e){}})();</script>`;
 
 // Reset al seleccionar Dashboard: el dashboard sin formulario inline se renderiza con
 // active '/dashboard'. Limpiar la memoria de ramas para que el árbol cargue colapsado.
@@ -151,24 +151,13 @@ var navBtn=document.getElementById('navCollapseBtn');
 if(navBtn){if(document.documentElement.classList.contains('nav-collapsed'))navBtn.setAttribute('aria-label','Expandir menú');navBtn.addEventListener('click',function(){var on=!document.documentElement.classList.contains('nav-collapsed');document.documentElement.classList.toggle('nav-collapsed',on);navBtn.setAttribute('aria-label',on?'Expandir menú':'Contraer menú');try{localStorage.setItem('sip-nav-collapsed',on?'1':'0');}catch(e){}});}
 sync();}catch(e){}})();</script>`;
 
-function pageTitle(active) {
-  if (!active || active === '/' || active === '/dashboard') return 'Dashboard';
-  const hit = findLeaf(active);
-  if (hit) return `${hit.mod.title} / ${hit.leaf.title}`;
-  const mod = NAV.find((m) => m.path === active);
-  if (mod) return mod.title;
-  const cfg = CONFIG.find((c) => c.path === active);
-  if (cfg) return cfg.title;
-  return 'SIP-FNC';
-}
 function layout(appName, fnc, active, body) {
   const email = fnc?.email || '';
   const role = fnc?.role || '';
   const initial = email.trim().charAt(0).toUpperCase() || 'U';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${A11Y_HEAD_JS}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-azul"><link rel="stylesheet" href="/css/app.css?v=20260928-azul"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${A11Y_HEAD_JS}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-mini.svg" alt="Comité de Cafeteros del Tolima" height="30"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="26"><span class="brand-divider" aria-hidden="true"></span><div><span class="header-brand-name"><strong>SIP</strong> Sistema de Información de Proyectos</span></div></div></div>
-<div class="header-title">${esc(pageTitle(active))}</div>
 <div class="header-user-profile">${a11yControls()}<div class="user-avatar">${esc(initial)}</div><div><span class="user-name">${esc(email)}</span><span class="user-email">${esc(role)}</span></div>
 <form method="post" action="/auth/logout" style="margin:0"><button class="btn-logout" type="submit">Salir</button></form></div>
 </div></header>
@@ -186,7 +175,7 @@ ${active === '/dashboard' ? NAV_RESET_JS : ''}${NAV_MEMORY_JS}${A11Y_JS}${MODAL_
 }
 
 function loginPage(appName, kcMode) {
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-azul"><link rel="stylesheet" href="/css/app.css?v=20260928-azul"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="card"><div class="login-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-tolima.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-sip" src="/img/logo-sip.svg" alt="SIP" height="30"></div><h1>${esc(appName)}</h1>
 <p>Sistema de Información de Proyectos — gestión e informes contables por periodos.</p>
 ${kcMode
@@ -214,7 +203,7 @@ function rolesMatrix(fnc) {
 
 function errorPage(fnc, reason) {
   const msgs = { state: 'Sesión de autenticación inválida.', callback: 'No se pudo completar el acceso.', forbidden: 'Sin permiso para este módulo.' };
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928-azul"><link rel="stylesheet" href="/css/app.css?v=20260928-azul"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="alert-err">${esc(msgs[reason] || msgs.callback)}</div>
 <a class="btn-primary" href="/">Reintentar</a></main></body></html>`;
 }
@@ -260,17 +249,22 @@ function taskCards(fnc, tareas) {
   const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
   const canDo = fnc.role === 'ADMIN' || roles.some((r) => ['admin', 'coordinador', 'analista', 'auxiliar'].includes(r));
   const today = new Date().toISOString().slice(0, 10);
-  const cards = (tareas || []).map((t) => {
+  const cards = (tareas || []).map((t, i) => {
     const vencida = t.fecha_limite && String(t.fecha_limite).slice(0, 10) < today;
-    return `<div class="card task">
-<strong>${esc(t.titulo)}</strong>
-<p>${esc(t.detalle || '')}</p>
-<p><span class="badge">${esc(t.automatica ? 'automática' : 'manual')}</span> <span class="badge">${esc(t.proceso || '')}</span>${vencida ? ' <span class="badge badge-warn">Vencida</span>' : ''}</p>
-<p>Solicita: <strong>${esc(t.responsable || t.area || '—')}</strong> · Límite: <strong class="tnum${vencida ? ' text-warn' : ''}">${esc(fmtFechaCorta(t.fecha_limite))}</strong></p>
-${canDo ? `<form method="post" action="/api/tareas/${t.id}/completar" style="margin:0"><button class="btn-primary" type="submit">Marcar hecha</button></form>` : `<p><span class="badge">solo lectura</span></p>`}
-</div>`;
+    return `<li class="task-item${vencida ? ' task-item-vencida' : ''}"><span class="task-num tnum" aria-hidden="true">${i + 1}</span><span class="task-body"><strong>${esc(t.titulo)}${vencida ? ' <span class="badge badge-warn">Vencida</span>' : ''}</strong>
+<span class="task-meta">${esc(t.responsable || t.area || '—')} · Límite: <span class="tnum${vencida ? ' text-warn' : ''}">${esc(fmtFechaCorta(t.fecha_limite))}</span> · <span class="badge">${esc(t.automatica ? 'automática' : 'manual')}</span> <span class="badge">${esc(t.proceso || '')}</span></span>
+${t.detalle ? `<span class="task-detail">${esc(t.detalle)}</span>` : ''}
+${canDo ? `<form method="post" action="/api/tareas/${t.id}/completar" style="margin:4px 0 0"><button class="stepper-button stepper-button-primary" type="submit">Marcar hecha</button></form>` : `<span class="badge">solo lectura</span>`}</span></li>`;
   }).join('');
-  return `<h2>Tareas pendientes (${(tareas || []).length})</h2><div class="task-grid">${cards || '<div class="card"><p>Sin pendientes.</p></div>'}</div>`;
+  return `<h3 class="rail-sub">Pendientes (${(tareas || []).length})</h3><ul class="task-list">${cards || '<li class="done-empty">Sin pendientes.</li>'}</ul>`;
+}
+
+// Ejercicio completo: últimas tareas hechas (compacto, con quién y cuándo).
+function doneList(hechas) {
+  const rows = hechas || [];
+  const items = rows.map((t) =>
+    `<li class="done-item"><span class="done-check" aria-hidden="true">${STEP_CHECK_SVG}</span><span class="done-body"><strong>${esc(t.titulo)}</strong><span class="done-meta">${esc(t.hecha_por || '')} · ${esc(fmtFechaHora(t.hecha_at))} · <span class="badge">${esc(t.rol || '')}</span></span></span></li>`).join('');
+  return `<h3 class="rail-sub">Completadas (${rows.length})</h3><ul class="done-list">${items || '<li class="done-empty">Sin completadas.</li>'}</ul>`;
 }
 
 function fieldInput(f, i) {
@@ -327,16 +321,65 @@ function formSlot(form) {
   return `<div class="card form-slot"><p><a href="${mod.path}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)} <span class="badge">skeleton</span></h2>${body}</div>`;
 }
 
+function fmtFechaHora(v) {
+  if (!v) return '—';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v).slice(0, 16);
+  return d.toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+const STEP_CHECK_SVG = `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425z"/></svg>`;
+const STEP_PREV_SVG = `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8"/></svg>`;
+const STEP_NEXT_SVG = `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8"/></svg>`;
+
+// Paginador del mini panel (3 por página, todo renderizado por el servidor).
+const ACTIVITY_PAGER_JS = `<script>(function(){try{
+var box=document.querySelector('[data-stepper]');if(!box)return;
+var steps=Array.prototype.slice.call(box.querySelectorAll('[data-step]'));
+var PER=3,pages=Math.ceil(steps.length/PER),cur=0;
+var prev=box.querySelector('[data-step-prev]'),next=box.querySelector('[data-step-next]'),count=box.querySelector('[data-step-count]');
+function render(){steps.forEach(function(s,i){s.style.display=(Math.floor(i/PER)===cur)?'':'none';});
+if(count)count.textContent=(cur+1)+' / '+pages;
+if(prev)prev.disabled=(cur===0);if(next)next.disabled=(cur>=pages-1);}
+if(pages<=1){var c=box.querySelector('.stepper-controls');if(c)c.style.display='none';return;}
+if(prev)prev.addEventListener('click',function(){if(cur>0){cur--;render();}});
+if(next)next.addEventListener('click',function(){if(cur<pages-1){cur++;render();}});
+render();}catch(e){}})();</script>`;
+
+// Mini panel Actividad reciente: bitácora stepper solo plataforma (el servidor ya
+// excluye login/logout). Item más reciente destacado; 3 por página con paginación.
 function activityFeed(actividad) {
-  const items = (actividad || []).map((a) =>
-    `<li><strong>${esc(a.actor_email || '')}</strong> · ${esc(ACTION_LABEL[a.action] || a.action)} <span class="badge">${esc(a.modulo || '')}</span><br><span>${esc(a.detalle || '')}</span> <em class="tnum">${esc(new Date(a.at).toLocaleString('es-CO'))}</em></li>`).join('');
-  return `<h2>Actividad reciente</h2><ul class="feed">${items || '<li>Sin movimientos.</li>'}</ul>`;
+  const rows = actividad || [];
+  if (!rows.length) return `<div class="stepper-box"><p class="stepper-empty">Sin movimientos.</p></div>`;
+  const PER = 3, pages = Math.ceil(rows.length / PER);
+  const steps = rows.map((a, i) => {
+    const state = i === 0 ? 'stepper-active' : 'stepper-completed';
+    const last = i === rows.length - 1 ? ' stepper-last' : '';
+    return `<div class="stepper-step ${state}${last}" data-step="${i}">
+      <div class="stepper-circle" aria-hidden="true">${STEP_CHECK_SVG}</div>
+      <div class="stepper-line" aria-hidden="true"></div>
+      <div class="stepper-content">
+        <div class="stepper-title">${esc(ACTION_LABEL[a.action] || a.action)}</div>
+        <div class="stepper-actor">${esc(a.actor_email || '')}</div>
+        <div><span class="stepper-status">${esc(a.modulo || '')}</span></div>
+        ${a.detalle ? `<div class="stepper-detail">${esc(a.detalle)}</div>` : ''}
+        <div class="stepper-time tnum">${esc(fmtFechaHora(a.at))}</div>
+      </div>
+    </div>`;
+  }).join('');
+  const controls = pages > 1 ? `<div class="stepper-controls">
+      <button class="stepper-button" data-step-prev type="button">${STEP_PREV_SVG}Anterior</button>
+      <span class="stepper-count tnum" data-step-count>1 / ${pages}</span>
+      <button class="stepper-button stepper-button-primary" data-step-next type="button">Siguiente${STEP_NEXT_SVG}</button>
+    </div>` : '';
+  return `<div class="stepper-box" data-stepper>${steps}${controls}</div>${ACTIVITY_PAGER_JS}`;
 }
 
 function dashboardPage(fnc, data) {
+  const nAct = (data.actividad || []).length;
   return `<div class="dash-grid">
 <div>${kpiStrip(data.saldos)}${formSlot(data.form)}</div>
-<div class="dash-rail">${activityFeed(data.actividad)}${taskCards(fnc, data.tareas)}</div>
+<div class="dash-rail"><div class="card rail-card"><div class="rail-card-head"><h2>Actividad reciente</h2><span class="rail-card-meta tnum">${nAct} movimientos</span></div><div class="rail-scroll">${activityFeed(data.actividad)}</div></div><div class="card rail-card"><div class="rail-card-head"><h2>Tareas</h2></div><div class="rail-scroll">${taskCards(fnc, data.tareas)}${doneList(data.hechas)}</div></div></div>
 </div>`;
 }
 
