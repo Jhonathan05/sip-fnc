@@ -17,11 +17,12 @@
   --leading-body: 1.43;
   --leading-nav: 1.35;
   --leading-title: 1.25;
-  /* Escala validada finanzas */
+  /* Escala validada finanzas (nav compacto 0.7 solo nav; personalizable por zona) */
   --fs-label: 0.6875rem;  /* 11px uppercase */
   --fs-meta: 0.75rem;     /* 12px */
-  --fs-table: 0.7rem;    /* 11.2px */
-  --fs-body: 0.7rem;     /* 11.2px */
+  --fs-table: 0.8125rem;  /* 13px */
+  --fs-body: 0.875rem;    /* 14px */
+  --fs-nav: 0.7rem;       /* 11.2px solo nav izquierdo */
   --fs-card: 1rem;        /* 16px */
   --fs-h2: 1.25rem;       /* 20px */
   --fs-h1: 1.5rem;        /* 24px */
@@ -29,18 +30,38 @@
   --primary-2: #7E5A36;
   --verde: #1B4D3E;
   --verde-bright: #22C55E;
+  --verde-ink: #1B4D3E;              /* texto/activos sobre claro */
+  --verde-soft: rgba(27,77,62,.08);  /* fondos hover/activo claro */
   --text-dark: #1E293B;
   --text-muted: #64748B;
   --border-light: #E2E8F0;
   --bg-main: #F8F9FA;
   --bg-sidebar: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --err-bg: #FEE2E2;
+  --err-ink: #991B1B;
   --radius-lg: 16px;
   --shadow-subtle: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
 }
 
+/* Tema oscuro completo (botón Claro/Oscuro del header) */
+[data-theme="dark"] {
+  --verde-ink: #7BD8A4;
+  --verde-soft: rgba(123,216,164,.14);
+  --text-dark: #E7EEE7;
+  --text-muted: #9AA79D;
+  --border-light: #2A332C;
+  --bg-main: #0F1310;
+  --bg-sidebar: #161B16;
+  --bg-card: #161B16;
+  --err-bg: #3A1D1D;
+  --err-ink: #FCA5A5;
+  --shadow-subtle: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+}
+
 /* Header Flotante FNC */
 .header-fnc {
-  background: #FFFFFF;
+  background: var(--bg-sidebar);
   color: var(--text-dark);
   height: 70px;
   padding: 0 1.5rem;
@@ -102,7 +123,7 @@
   left: 277px;
   transform: translate(-50%, -50%);
   z-index: 102;
-  background: #FFFFFF;
+  background: var(--bg-sidebar);
   border: 1px solid var(--border-light);
   border-radius: 50%;
   width: 32px;

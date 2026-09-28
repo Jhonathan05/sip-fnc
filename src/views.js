@@ -71,14 +71,55 @@ function navConfig(active, role) {
 
 const NAV_MEMORY_JS = `<script>(function(){try{var k='sip-nav-open';var open=JSON.parse(localStorage.getItem(k)||'[]');function save(id,on){try{var cur=JSON.parse(localStorage.getItem(k)||'[]');if(on&&cur.indexOf(id)<0)cur.push(id);if(!on)cur=cur.filter(function(x){return x!==id});localStorage.setItem(k,JSON.stringify(cur));}catch(e){}}document.querySelectorAll('details.tree-sub, details.tree-mod').forEach(function(d){var id=d.getAttribute('data-navkey');if(open.indexOf(id)>=0)d.open=true;d.addEventListener('toggle',function(){save(id,d.open)});});}catch(e){}})();</script>`;
 
+const A11Y_HEAD_JS = `<script>(function(){try{var t=localStorage.getItem('sip-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);var s=parseInt(localStorage.getItem('sip-font')||'100',10);if(s>=80&&s<=120&&s!==100)document.documentElement.style.fontSize=(s/100*16)+'px';}catch(e){}})();</script>`;
+
+const A11Y_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="4.5" r="2"/><path d="M4 8.5c2.7.7 5.3 1 8 1s5.3-.3 8-1"/><path d="M12 9.5V14"/><path d="M12 14l-3.5 7"/><path d="M12 14l3.5 7"/></svg>`;
+const SUN_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
+const MOON_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>`;
+
+function a11yControls() {
+  return `<div class="a11y-wrap">
+    <button class="a11y-btn" id="a11yBtn" aria-haspopup="true" aria-expanded="false" aria-label="Accesibilidad" title="Accesibilidad">${A11Y_ICON}</button>
+    <div class="a11y-pop" id="a11yPop" hidden>
+      <span class="a11y-sec-label">Tema</span>
+      <div class="a11y-seg" role="group" aria-label="Tema">
+        <button id="themeLight" aria-pressed="false">${SUN_ICON}Claro</button>
+        <button id="themeDark" aria-pressed="false">${MOON_ICON}Oscuro</button>
+      </div>
+      <div class="a11y-font">
+        <span class="a11y-sec-label" style="margin:0">Letra</span>
+        <button id="fontDown" aria-label="Disminuir tamaño de letra">A−</button>
+        <span class="a11y-fontval" id="fontVal">100%</span>
+        <button id="fontUp" aria-label="Aumentar tamaño de letra">A+</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+const A11Y_JS = `<script>(function(){try{
+var btn=document.getElementById('a11yBtn'),pop=document.getElementById('a11yPop');
+if(!btn||!pop)return;
+function sync(){var t=document.documentElement.getAttribute('data-theme')||'light';document.getElementById('themeLight').setAttribute('aria-pressed',t==='light'?'true':'false');document.getElementById('themeDark').setAttribute('aria-pressed',t==='dark'?'true':'false');var s=parseInt(localStorage.getItem('sip-font')||'100',10);document.getElementById('fontVal').textContent=s+'%';document.getElementById('fontDown').disabled=s<=80;document.getElementById('fontUp').disabled=s>=120;}
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('sip-theme',t);}catch(e){}sync();}
+function setFont(s){s=Math.min(120,Math.max(80,s));document.documentElement.style.fontSize=(s/100*16)+'px';try{localStorage.setItem('sip-font',String(s));}catch(e){}sync();}
+function close(){pop.hidden=true;btn.setAttribute('aria-expanded','false');}
+btn.addEventListener('click',function(){pop.hidden=!pop.hidden;btn.setAttribute('aria-expanded',pop.hidden?'false':'true');if(!pop.hidden)sync();});
+document.addEventListener('click',function(e){if(!pop.hidden&&!e.target.closest('.a11y-wrap'))close();});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+document.getElementById('themeLight').addEventListener('click',function(){setTheme('light');});
+document.getElementById('themeDark').addEventListener('click',function(){setTheme('dark');});
+document.getElementById('fontDown').addEventListener('click',function(){setFont(parseInt(localStorage.getItem('sip-font')||'100',10)-10);});
+document.getElementById('fontUp').addEventListener('click',function(){setFont(parseInt(localStorage.getItem('sip-font')||'100',10)+10);});
+sync();}catch(e){}})();</script>`;
+
 function layout(appName, fnc, active, body) {
   const email = fnc?.email || '';
   const role = fnc?.role || '';
   const initial = email.trim().charAt(0).toUpperCase() || 'U';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(active)} — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css"><link rel="stylesheet" href="/css/app.css"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${A11Y_HEAD_JS}<title>${esc(active)} — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css"><link rel="stylesheet" href="/css/app.css"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><div><span class="header-brand-name">${esc(appName)}</span></div></div></div>
-<div class="header-user-profile"><div class="user-avatar">${esc(initial)}</div><div><span class="user-name">${esc(email)}</span><span class="user-email">${esc(role)}</span></div>
+<div class="header-user-profile">${a11yControls()}<div class="user-avatar">${esc(initial)}</div><div><span class="user-name">${esc(email)}</span><span class="user-email">${esc(role)}</span></div>
 <form method="post" action="/auth/logout" style="margin:0"><button class="btn-logout" type="submit">Salir</button></form></div>
 </div></header>
 <aside class="app-sidebar" aria-label="Navegacion principal"><nav class="sidebar-nav">
@@ -87,7 +128,7 @@ ${navTree(active, role)}
 ${navConfig(active, role)}
 </nav></aside>
 <main class="main-container">${body}</main>
-${NAV_MEMORY_JS}</body></html>`;
+${NAV_MEMORY_JS}${A11Y_JS}</body></html>`;
 }
 
 function loginPage(appName, kcMode) {
