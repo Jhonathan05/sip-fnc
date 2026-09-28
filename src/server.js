@@ -222,8 +222,7 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
       const as = Number(r.asignado), ej = Number(r.ejecutado);
       return { ...r, saldo: as - ej, pct: as > 0 ? +(ej / as * 100).toFixed(1) : 0 };
     });
-    res.send(page(fnc, MODULES[0], `<div class="card"><h1>Dashboard</h1>
-<p>Usuario: <strong>${views.esc(fnc.email)}</strong> · Rol: <strong>${views.esc(fnc.role)}</strong></p></div>` + views.dashboardPage(fnc, { saldos, tareas: t.rows, actividad: a.rows, form })));
+    res.send(page(fnc, MODULES[0], views.dashboardPage(fnc, { saldos, tareas: t.rows, actividad: a.rows, form })));
   } catch (e) {
     console.error('[dashboard]', e.message);
     res.send(page(fnc, MODULES[0], `<div class="alert-err">No se pudo cargar el tablero.</div>`));
