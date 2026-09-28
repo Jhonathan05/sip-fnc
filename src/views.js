@@ -101,7 +101,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
 
 const NAV_MEMORY_JS = `<script>(function(){try{var k='sip-nav-open';var open=JSON.parse(localStorage.getItem(k)||'[]');function save(id,on){try{var cur=JSON.parse(localStorage.getItem(k)||'[]');if(on&&cur.indexOf(id)<0)cur.push(id);if(!on)cur=cur.filter(function(x){return x!==id});localStorage.setItem(k,JSON.stringify(cur));}catch(e){}}document.querySelectorAll('details.tree-sub, details.tree-mod').forEach(function(d){var id=d.getAttribute('data-navkey');if(open.indexOf(id)>=0)d.open=true;d.addEventListener('toggle',function(){save(id,d.open)});});
 var scrollAreas=Array.prototype.slice.call(document.querySelectorAll('.sidebar-nav, .rail-scroll'));
-scrollAreas.forEach(function(el){var scrollT=null;el.addEventListener('scroll',function(){el.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){el.classList.remove('is-scrolling');},800);},{passive:true});});}}catch(e){}})();</script>`;
+scrollAreas.forEach(function(el){var scrollT=null;el.addEventListener('scroll',function(){el.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){el.classList.remove('is-scrolling');},800);},{passive:true});});}catch(e){}})();</script>`;
 
 // Reset al seleccionar Dashboard: el dashboard sin formulario inline se renderiza con
 // active '/dashboard'. Limpiar la memoria de ramas para que el árbol cargue colapsado.
@@ -252,7 +252,7 @@ function taskCards(fnc, tareas) {
   const today = new Date().toISOString().slice(0, 10);
   const cards = (tareas || []).map((t, i) => {
     const vencida = t.fecha_limite && String(t.fecha_limite).slice(0, 10) < today;
-    return `<li class="task-item${vencida ? ' task-item-vencida' : ''}"><span class="task-num tnum drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle" aria-hidden="true">${i + 1}</span><span class="task-body"><strong>${esc(t.titulo)}${vencida ? ' <span class="badge badge-warn">Vencida</span>' : ''}</strong>
+    return `<li class="task-item${vencida ? ' task-item-vencida' : ''}"><span class="task-num tnum drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${i + 1}</span><span class="task-body"><strong>${esc(t.titulo)}${vencida ? ' <span class="badge badge-warn">Vencida</span>' : ''}</strong>
 <span class="task-meta">${esc(t.responsable || t.area || '—')} · Límite: <span class="tnum${vencida ? ' text-warn' : ''}">${esc(fmtFechaCorta(t.fecha_limite))}</span> · <span class="badge">${esc(t.automatica ? 'automática' : 'manual')}</span> <span class="badge">${esc(t.proceso || '')}</span></span>
 ${t.detalle ? `<span class="task-detail">${esc(t.detalle)}</span>` : ''}
 ${canDo ? `<form method="post" action="/api/tareas/${t.id}/completar" style="margin:4px 0 0"><button class="stepper-button stepper-button-primary" type="submit">Marcar hecha</button></form>` : `<span class="badge">solo lectura</span>`}</span></li>`;
@@ -264,7 +264,7 @@ ${canDo ? `<form method="post" action="/api/tareas/${t.id}/completar" style="mar
 function doneList(hechas) {
   const rows = hechas || [];
   const items = rows.map((t) =>
-    `<li class="done-item"><span class="done-check drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle" aria-hidden="true">${STEP_CHECK_SVG}</span><span class="done-body"><strong>${esc(t.titulo)}</strong><span class="done-meta">${esc(t.hecha_por || '')} · ${esc(fmtFechaHora(t.hecha_at))} · <span class="badge">${esc(t.rol || '')}</span></span></span></li>`).join('');
+    `<li class="done-item"><span class="done-check drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${STEP_CHECK_SVG}</span><span class="done-body"><strong>${esc(t.titulo)}</strong><span class="done-meta">${esc(t.hecha_por || '')} · ${esc(fmtFechaHora(t.hecha_at))} · <span class="badge">${esc(t.rol || '')}</span></span></span></li>`).join('');
   return `<h3 class="rail-sub">Completadas (${rows.length})</h3><ul class="done-list">${items || '<li class="done-empty">Sin completadas.</li>'}</ul>`;
 }
 
@@ -406,7 +406,8 @@ body.innerHTML=row('Título',t.titulo)+row('Detalle',t.detalle)+row('Responsable
 }
 function load(kind,id){
 body.innerHTML='<p>Cargando…</p>';open();
-fetch('/api/'+kind+'/'+encodeURIComponent(id)).then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();}).then(function(d){
+var plural=kind==='tarea'?'tareas':kind;
+fetch('/api/'+plural+'/'+encodeURIComponent(id)).then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();}).then(function(d){
 if(kind==='actividad')renderActividad(d);else renderTarea(d);
 }).catch(function(){body.innerHTML='<p>No se pudo cargar el detalle.</p>';});
 }
