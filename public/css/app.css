@@ -73,6 +73,12 @@ code {
 .main-container {
     margin: 100px 15px 10px 294px;
     padding: 24px;
+    transition: margin-left 200ms ease;
+}
+
+/* Colapsado: el contenido aprovecha el espacio (el hover expande en overlay) */
+.nav-collapsed .main-container {
+    margin-left: 100px;
 }
 
 .sidebar-nav {
