@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 36" role="img" aria-label="SIP">
+  <rect x="1" y="1" width="118" height="34" rx="9" fill="#8D1024"/>
+  <text x="60" y="24.5" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="17" font-weight="800" letter-spacing="1.5" fill="#FFFFFF">SIP</text>
+  <rect x="38" y="27.5" width="44" height="2.5" rx="1.25" fill="#22C55E"/>
+</svg>
