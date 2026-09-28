@@ -11,7 +11,14 @@ th { font-size: var(--fs-label); text-transform: uppercase; letter-spacing: var(
 td.num, th.num { text-align: right; }
 code { font-size: .85em; }
 .main-container { margin: 100px 15px 10px 294px; padding: 24px; }
-.sidebar-nav { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; overflow-y: auto; }
+.sidebar-nav { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; overflow-y: auto; padding-right: 2px; scrollbar-width: thin; scrollbar-color: transparent transparent; }
+/* Scroll estilo Cloudflare overlay: invisible en reposo, thumb 4px al borde al rodar/hover, sin flechas */
+.sidebar-nav::-webkit-scrollbar { width: 4px; }
+.sidebar-nav::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: transparent; border-radius: 9999px; }
+.sidebar-nav:hover::-webkit-scrollbar-thumb, .sidebar-nav.is-scrolling::-webkit-scrollbar-thumb { background: var(--border-light); }
+.sidebar-nav:hover, .sidebar-nav.is-scrolling { scrollbar-color: var(--border-light) transparent; }
 .sidebar-section-label { font-size: var(--fs-nav); text-transform: uppercase; letter-spacing: var(--tracking-label); color: var(--text-muted); margin: 8px 0 4px; font-weight: 500; }
 .tab-btn { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 0; border-radius: 10px; background: none; color: var(--text-dark); font-size: var(--fs-nav); line-height: var(--leading-nav); letter-spacing: var(--tracking-body); cursor: pointer; text-decoration: none; font-weight: 400; font-family: inherit; }
 .tab-btn.active, .tab-btn:hover { background: var(--verde-soft); color: var(--verde-ink); font-weight: 500; }
