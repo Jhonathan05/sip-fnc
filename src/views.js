@@ -127,12 +127,13 @@ function layout(appName, fnc, active, body) {
 <form method="post" action="/auth/logout" style="margin:0"><button class="btn-logout" type="submit">Salir</button></form></div>
 </div></header>
 <aside class="app-sidebar" aria-label="Navegacion principal">
-<button class="nav-collapse-btn" id="navCollapseBtn" aria-label="Contraer menú" title="Contraer / expandir menú"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9.5 3v18"/></svg></button>
 <nav class="sidebar-nav">
 <span class="sidebar-section-label">Módulos</span>
 ${navTree(active, role)}
 ${navConfig(active, role)}
-</nav></aside>
+</nav>
+<div class="nav-collapse-bar"><button class="nav-collapse-btn" id="navCollapseBtn" aria-label="Contraer menú" title="Contraer / expandir menú"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9.5 3v18"/></svg></button></div>
+</aside>
 <main class="main-container">${body}</main>
 ${NAV_MEMORY_JS}${A11Y_JS}</body></html>`;
 }

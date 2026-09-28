@@ -457,8 +457,11 @@ code {
 }
 
 /* ── Nav colapsable: solo iconos + hover expande (overlay) ── */
-.nav-collapse-btn { position: absolute; top: 14px; right: -14px; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border-light); background: var(--bg-card); color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 5; }
-.nav-collapse-btn:hover { color: var(--verde-ink); background: var(--verde-soft); }
+.nav-collapse-bar { border-top: 1px solid var(--border-light); padding-top: 10px; margin-top: 6px; display: flex; }
+.nav-collapse-btn { width: 100%; height: 34px; border-radius: 10px; border: 0; background: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: flex-start; padding: 0 12px; }
+.nav-collapse-btn:hover { background: var(--verde-soft); color: var(--verde-ink); }
+.nav-collapsed .nav-collapse-bar { justify-content: center; }
+.nav-collapsed .app-sidebar:hover .nav-collapse-bar { justify-content: flex-start; }
 .app-sidebar { transition: width 200ms ease; }
 .nav-collapsed .app-sidebar { width: 62px; padding-left: 11px; padding-right: 11px; }
 .nav-collapsed .app-sidebar:hover { width: 264px; padding: 24px 20px; }
