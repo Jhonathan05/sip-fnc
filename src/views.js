@@ -1,7 +1,7 @@
 // Vistas vanilla (fnc-layout/vanilla-rendimiento). Nav en árbol guiado por src/modules.js:
 // módulo → subcategoría (colapsable, memoria localStorage) → hoja.
 // permitido = link, sin acceso pero visible = deshabilitado, CONFIG anclada al fondo.
-const { MODULES, NAV, CONFIG, canAccess, flattenLeaves } = require('./modules');
+const { MODULES, NAV, CONFIG, canAccess, flattenLeaves, findLeaf } = require('./modules');
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -27,10 +27,11 @@ function icon(name) {
   return `<svg class="nav-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || P.tareas}</svg>`;
 }
 
-function leafLink(leaf, active, role) {
+function leafLink(leaf, active, role, sub) {
   const isActive = active === leaf.path;
+  const href = sub && sub.kind === 'informe' ? leaf.path : `/dashboard?form=${encodeURIComponent(leaf.path)}`;
   if (canAccess(role, leaf)) {
-    return `<a class="tree-leaf${isActive ? ' active' : ''}" href="${leaf.path}" title="${esc(leaf.title)}"><span class="nav-label">${esc(leaf.title)}</span></a>`;
+    return `<a class="tree-leaf${isActive ? ' active' : ''}" href="${href}" title="${esc(leaf.title)}"><span class="nav-label">${esc(leaf.title)}</span></a>`;
   }
   return `<span class="tree-leaf tree-disabled" title="Sin permiso"><span class="nav-label">🔒 ${esc(leaf.title)}</span></span>`;
 }
@@ -48,7 +49,7 @@ function navTree(active, role) {
       const leaves = sub.children || [];
       if (!leaves.length) return '';
       const inSub = leaves.some((l) => active === l.path);
-      const items = leaves.map((l) => leafLink(l, active, role)).join('');
+      const items = leaves.map((l) => leafLink(l, active, role, sub)).join('');
       return `<details class="tree-sub" data-navkey="${esc(mod.path + '/' + sub.key)}"${inSub ? ' open' : ''}>
         <summary class="tree-sub-head" title="${esc(sub.title)}">${icon(sub.icon)}<span class="nav-label">${esc(sub.title)}</span></summary>
         <div class="tree-leaves">${items}</div>
@@ -116,6 +117,16 @@ var navBtn=document.getElementById('navCollapseBtn');
 if(navBtn){if(document.documentElement.classList.contains('nav-collapsed'))navBtn.setAttribute('aria-label','Expandir menú');navBtn.addEventListener('click',function(){var on=!document.documentElement.classList.contains('nav-collapsed');document.documentElement.classList.toggle('nav-collapsed',on);navBtn.setAttribute('aria-label',on?'Expandir menú':'Contraer menú');try{localStorage.setItem('sip-nav-collapsed',on?'1':'0');}catch(e){}});}
 sync();}catch(e){}})();</script>`;
 
+function pageTitle(active) {
+  if (!active || active === '/' || active === '/dashboard') return 'Dashboard';
+  const hit = findLeaf(active);
+  if (hit) return `${hit.mod.title} / ${hit.leaf.title}`;
+  const mod = NAV.find((m) => m.path === active);
+  if (mod) return mod.title;
+  const cfg = CONFIG.find((c) => c.path === active);
+  if (cfg) return cfg.title;
+  return 'SIP-FNC';
+}
 function layout(appName, fnc, active, body) {
   const email = fnc?.email || '';
   const role = fnc?.role || '';
@@ -123,6 +134,7 @@ function layout(appName, fnc, active, body) {
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${A11Y_HEAD_JS}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928"><link rel="stylesheet" href="/css/app.css?v=20260928"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-mini.svg" alt="Comité de Cafeteros del Tolima" height="30"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="26"><span class="brand-divider" aria-hidden="true"></span><div><span class="header-brand-name"><strong>SIP</strong> Sistema de Información de Proyectos</span></div></div></div>
+<div class="header-title">${esc(pageTitle(active))}</div>
 <div class="header-user-profile">${a11yControls()}<div class="user-avatar">${esc(initial)}</div><div><span class="user-name">${esc(email)}</span><span class="user-email">${esc(role)}</span></div>
 <form method="post" action="/auth/logout" style="margin:0"><button class="btn-logout" type="submit">Salir</button></form></div>
 </div></header>
@@ -234,6 +246,60 @@ ${canDo ? `<form method="post" action="/api/tareas/${t.id}/completar" style="mar
   return `<h2>Tareas pendientes (${(tareas || []).length})</h2><div class="task-grid">${cards || '<div class="card"><p>Sin pendientes.</p></div>'}</div>`;
 }
 
+function fieldInput(f, i) {
+  const name = 'f' + i;
+  if (f.type === 'select') {
+    const opts = (f.options || []).map((o) => `<option>${esc(o)}</option>`).join('');
+    return `<label class="fld"><span>${esc(f.label)}</span><select name="${name}" disabled><option value="">—</option>${opts}</select></label>`;
+  }
+  return `<label class="fld"><span>${esc(f.label)}</span><input name="${name}" type="${esc(f.type || 'text')}" disabled></label>`;
+}
+
+function fieldsOrDefault(leaf) {
+  return leaf.fields && leaf.fields.length ? leaf.fields : [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }];
+}
+
+function skeletonMaestro(leaf) {
+  const fields = fieldsOrDefault(leaf);
+  const head = fields.map((f) => `<th>${esc(f.label)}</th>`).join('');
+  const body = fields.map((f) => fieldInput(f, fields.indexOf(f))).join('');
+  return `<div class="skl-bar"><input type="search" placeholder="Buscar…" disabled aria-label="Buscar"></div>
+<table class="skl-table"><thead><tr>${head}<th>Acciones</th></tr></thead><tbody><tr><td colspan="${fields.length + 1}">Sin registros (skeleton).</td></tr></tbody></table>
+<form class="skl-form" onsubmit="return false"><fieldset disabled><legend>Nuevo registro</legend><div class="fld-grid">${body}</div><button class="btn-primary" type="button" disabled>Guardar (Fase 2)</button></fieldset></form>`;
+}
+
+function skeletonInforme(leaf) {
+  return `<div class="skl-bar"><label class="fld"><span>Año</span><input type="number" disabled></label>
+<label class="fld"><span>Formato</span><select disabled><option>Pantalla</option><option>Excel</option></select></label>
+<button class="btn-primary" type="button" disabled>Generar (Fase 2)</button></div>
+<table class="skl-table"><thead><tr><th>${esc(leaf.title)}</th></tr></thead><tbody><tr><td>Sin resultados (skeleton).</td></tr></tbody></table>`;
+}
+
+function skeletonProceso(leaf, sub) {
+  return `<p>${esc(sub.desc || '')}</p>
+<div class="skl-bar"><button class="btn-primary" type="button" disabled>Ejecutar (Fase 2)</button></div>
+<div class="skl-progress"><span style="width:0%"></span></div>
+<p><span class="badge">skeleton</span> Sin ejecuciones registradas.</p>`;
+}
+
+function skeletonConsulta(leaf) {
+  return `<div class="skl-bar"><input type="search" placeholder="Buscar ${esc(leaf.title.toLowerCase())}…" disabled aria-label="Buscar"></div>
+<p><span class="badge">skeleton</span> Sin resultados.</p>`;
+}
+
+function formSlot(form) {
+  if (!form) {
+    return `<div class="card form-slot"><h2>Formularios</h2><p>Selecciona una opción del nav izquierdo: los formularios pequeños se abren aquí; los informes tienen vista propia.</p></div>`;
+  }
+  const { leaf, sub, mod } = form;
+  const kinds = { maestro: skeletonMaestro, informe: skeletonInforme, proceso: skeletonProceso, consulta: skeletonConsulta };
+  const render = kinds[sub.kind] || skeletonMaestro;
+  const body = sub.kind === 'info'
+    ? `<p><a class="btn-primary" href="${leaf.path}">Abrir ${esc(leaf.title)}</a></p>`
+    : render(leaf, sub);
+  return `<div class="card form-slot"><p><a href="${mod.path}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)} <span class="badge">skeleton</span></h2>${body}</div>`;
+}
+
 function activityFeed(actividad) {
   const items = (actividad || []).map((a) =>
     `<li><strong>${esc(a.actor_email || '')}</strong> · ${esc(ACTION_LABEL[a.action] || a.action)} <span class="badge">${esc(a.modulo || '')}</span><br><span>${esc(a.detalle || '')}</span> <em class="tnum">${esc(new Date(a.at).toLocaleString('es-CO'))}</em></li>`).join('');
@@ -243,8 +309,8 @@ function activityFeed(actividad) {
 function dashboardPage(fnc, data) {
   return `${kpiStrip(data.saldos)}
 <div class="dash-grid">
-<div>${quickAccess(fnc)}${taskCards(fnc, data.tareas)}</div>
-<div>${activityFeed(data.actividad)}</div>
+<div>${quickAccess(fnc)}${formSlot(data.form)}</div>
+<div class="dash-rail">${activityFeed(data.actividad)}${taskCards(fnc, data.tareas)}</div>
 </div>`;
 }
 

@@ -493,9 +493,9 @@ code {
 .nav-collapsed .nav-config { align-items: center; }
 .nav-collapsed .app-sidebar:hover .nav-config { align-items: stretch; }
 /* ── Dashboard operativo: KPIs + 2 columnas ── */
-.kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 12px 0 20px; }
-.card.kpi { display: flex; flex-direction: column; gap: 4px; max-width: none; }
-.card.kpi strong { font-size: var(--fs-h2); letter-spacing: var(--tracking-title); }
+.kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 10px 0 16px; }
+.card.kpi { display: flex; flex-direction: column; gap: 2px; max-width: none; padding: 16px 18px; }
+.card.kpi strong { font-size: 1.15rem; letter-spacing: var(--tracking-title); font-weight: 600; }
 .dash-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; align-items: start; }
 @media (max-width: 1100px) { .dash-grid { grid-template-columns: 1fr; } }
 .qa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
@@ -506,6 +506,21 @@ code {
 /* Semántica solo en texto/badges: ningún borde de color en el sistema */
 .badge-warn { background: var(--err-bg); color: var(--err-ink); }
 .text-warn { color: var(--err-ink); }
-.feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.feed li { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 10px; padding: 10px 12px; font-size: var(--fs-table); }
+.feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.feed li { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 10px; padding: 8px 10px; font-size: var(--fs-meta); line-height: 1.35; }
+/* Riel derecho denso con scroll propio */
+.dash-rail { display: flex; flex-direction: column; gap: 16px; max-height: calc(100vh - 220px); overflow-y: auto; padding-right: 2px; }
 .feed em { color: var(--text-muted); font-style: normal; font-size: var(--fs-meta); }
+/* ── Skeletons de formularios (Fase 1 visual, Fase 2 negocio) ── */
+.card.form-slot { max-width: none; }
+.skl-bar { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin: 12px 0; }
+.skl-bar input[type="search"] { flex: 1; min-width: 180px; }
+.fld { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-table); }
+.fld span { font-size: var(--fs-label); text-transform: uppercase; letter-spacing: var(--tracking-label); color: var(--text-muted); }
+.fld input, .fld select { font: inherit; padding: 8px 10px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-main); color: var(--text-dark); max-width: 260px; }
+.fld-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.skl-form fieldset { border: 1px solid var(--border-light); border-radius: 10px; padding: 14px; }
+.skl-form legend { font-size: var(--fs-meta); color: var(--text-muted); padding: 0 6px; }
+.skl-table { margin: 12px 0; }
+.skl-progress { height: 8px; border-radius: 9999px; background: var(--bg-main); border: 1px solid var(--border-light); overflow: hidden; margin: 12px 0; }
+.skl-progress span { display: block; height: 100%; background: var(--verde-soft); }

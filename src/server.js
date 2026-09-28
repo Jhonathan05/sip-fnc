@@ -9,7 +9,7 @@ const kc = require('./kc');
 const views = require('./views');
 const { buildFncSession, isFncValid, fingerprintFor } = require('./session');
 const { getMockSession, isKeycloakMode } = require('./auth-provider');
-const { MODULES, NAV, canAccess, flattenLeaves } = require('./modules');
+const { MODULES, NAV, canAccess, flattenLeaves, findLeaf } = require('./modules');
 const { getPool, dbReady } = require('./db');
 const { writeAudit } = require('./audit');
 
@@ -194,6 +194,16 @@ const page = (fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body);
 app.get('/dashboard', needLogin, needDb, async (req, res) => {
   const fnc = req.session.fnc;
   try {
+    // Formulario inline: ?form=/ruta/hoja (informes → vista independiente).
+    let form = null;
+    if (req.query.form) {
+      const hit = findLeaf(String(req.query.form));
+      if (!hit || !canAccess(fnc.role, hit.leaf)) {
+        return res.status(403).send(views.errorPage(fnc, 'forbidden'));
+      }
+      if (hit.sub.kind === 'informe') return res.redirect(hit.leaf.path);
+      form = hit;
+    }
     const pool = getPool();
     const [s, a] = await Promise.all([
       pool.query('SELECT tipo, vigencia, asignado, ejecutado FROM distribuciones ORDER BY vigencia DESC, tipo'),
@@ -213,7 +223,7 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
       return { ...r, saldo: as - ej, pct: as > 0 ? +(ej / as * 100).toFixed(1) : 0 };
     });
     res.send(page(fnc, MODULES[0], `<div class="card"><h1>Dashboard</h1>
-<p>Usuario: <strong>${views.esc(fnc.email)}</strong> · Rol: <strong>${views.esc(fnc.role)}</strong></p></div>` + views.dashboardPage(fnc, { saldos, tareas: t.rows, actividad: a.rows })));
+<p>Usuario: <strong>${views.esc(fnc.email)}</strong> · Rol: <strong>${views.esc(fnc.role)}</strong></p></div>` + views.dashboardPage(fnc, { saldos, tareas: t.rows, actividad: a.rows, form })));
   } catch (e) {
     console.error('[dashboard]', e.message);
     res.send(page(fnc, MODULES[0], `<div class="alert-err">No se pudo cargar el tablero.</div>`));

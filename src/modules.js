@@ -11,17 +11,19 @@ const NAV = [
     path: '/distribucion', title: 'Distribución Recursos', icon: 'distribucion', roles: BOTH, nav: true,
     children: [
       {
+        kind: 'maestro',
         key: 'actualizaciones', title: 'Actualizaciones', icon: 'tareas',
-        desc: 'Maestros y distribuciones por vigencia.',
+                desc: 'Maestros y distribuciones por vigencia.',
         children: [
-          { path: '/distribucion/actualizaciones/circunscripciones', title: 'Circunscripciones', roles: BOTH },
-          { path: '/distribucion/actualizaciones/municipios', title: 'Municipios', roles: BOTH },
-          { path: '/distribucion/actualizaciones/tipos-distribuciones', title: 'Tipos de Distribuciones', roles: BOTH },
-          { path: '/distribucion/actualizaciones/distribuciones', title: 'Distribuciones', roles: BOTH },
-          { path: '/distribucion/actualizaciones/distribucion-municipio', title: 'Distribución por Municipio', roles: BOTH },
+          { path: '/distribucion/actualizaciones/circunscripciones', title: 'Circunscripciones', roles: BOTH, fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }] },
+          { path: '/distribucion/actualizaciones/municipios', title: 'Municipios', roles: BOTH, fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }, { label: 'Circunscripción', type: 'select', options: ['Norte', 'Sur', 'Oriente', 'Occidente', 'Centro'] }] },
+          { path: '/distribucion/actualizaciones/tipos-distribuciones', title: 'Tipos de Distribuciones', roles: BOTH, fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }] },
+          { path: '/distribucion/actualizaciones/distribuciones', title: 'Distribuciones', roles: BOTH, fields: [{ label: 'Tipo', type: 'select', options: ['Municipio vigencia actual', 'Municipio anteriores', 'Circunscripción actual', 'Circunscripción anteriores'] }, { label: 'Año', type: 'number' }, { label: 'Presupuesto', type: 'number' }] },
+          { path: '/distribucion/actualizaciones/distribucion-municipio', title: 'Distribución por Municipio', roles: BOTH, fields: [{ label: 'Número', type: 'number' }, { label: 'Tipo', type: 'number' }, { label: 'Año', type: 'number' }, { label: 'Ppto', type: 'number' }, { label: 'Municipio', type: 'text' }, { label: 'Valor', type: 'number' }] },
         ],
       },
       {
+        kind: 'informe',
         key: 'informes', title: 'Informes', icon: 'informes',
         desc: 'Saldos y movimientos por distribución.',
         children: [
@@ -37,8 +39,9 @@ const NAV = [
     path: '/adjudicaciones', title: 'Adjudicaciones', icon: 'adjudicaciones', roles: BOTH, nav: true,
     children: [
       {
+        kind: 'maestro',
         key: 'actualizaciones', title: 'Actualizaciones', icon: 'tareas',
-        desc: 'Maestros de contratistas e invitaciones.',
+                desc: 'Maestros de contratistas e invitaciones.',
         children: [
           { path: '/adjudicaciones/actualizaciones/contratistas', title: 'Maestro de Contratistas', roles: BOTH },
           { path: '/adjudicaciones/actualizaciones/invitaciones', title: 'Maestro de Invitaciones o Órdenes', roles: BOTH },
@@ -49,6 +52,7 @@ const NAV = [
         ],
       },
       {
+        kind: 'consulta',
         key: 'consultas', title: 'Consultas', icon: 'consultas',
         desc: 'Consultas rápidas de contratistas.',
         children: [
@@ -56,6 +60,7 @@ const NAV = [
         ],
       },
       {
+        kind: 'informe',
         key: 'informes', title: 'Informes', icon: 'informes',
         desc: 'Estadísticas por contratista.',
         children: [
@@ -63,6 +68,7 @@ const NAV = [
         ],
       },
       {
+        kind: 'proceso',
         key: 'procesos-especiales', title: 'Procesos Especiales', icon: 'procesos',
         desc: 'Procesos auditables de selección.',
         children: [
@@ -75,6 +81,7 @@ const NAV = [
     path: '/asignaciones', title: 'Asignaciones', icon: 'asignaciones', roles: BOTH, nav: true,
     children: [
       {
+        kind: 'maestro',
         key: 'actualizaciones', title: 'Actualizaciones', icon: 'tareas',
         desc: 'Creación de asignaciones y estados.',
         children: [
@@ -83,6 +90,7 @@ const NAV = [
         ],
       },
       {
+        kind: 'informe',
         key: 'informes', title: 'Informes', icon: 'informes',
         desc: 'Ejecución y estado de asignaciones.',
         children: [
@@ -99,13 +107,15 @@ const NAV = [
     path: '/ordenes-sap', title: 'Órdenes SAP', icon: 'sap', roles: BOTH, nav: true,
     children: [
       {
+        kind: 'proceso',
         key: 'actualizaciones', title: 'Actualizaciones', icon: 'tareas',
-        desc: 'Cargue de presupuesto SAP.',
+                desc: 'Cargue de presupuesto SAP.',
         children: [
           { path: '/ordenes-sap/actualizaciones/cargue', title: 'Cargue de Presupuesto', roles: BOTH },
         ],
       },
       {
+        kind: 'proceso',
         key: 'procesos', title: 'Procesos', icon: 'procesos',
         desc: 'Actualización mensual de ejecución.',
         children: [
@@ -118,6 +128,7 @@ const NAV = [
     path: '/contratos', title: 'Contratos', icon: 'contratos', roles: BOTH, nav: true,
     children: [
       {
+        kind: 'maestro',
         key: 'actualizaciones', title: 'Actualizaciones', icon: 'tareas',
         desc: 'Contratos, otrosíes y maestros.',
         children: [
@@ -139,8 +150,9 @@ const NAV = [
         ],
       },
       {
+        kind: 'informe',
         key: 'informes', title: 'Informes', icon: 'informes',
-        desc: 'Vigencias, vencimientos y maestro.',
+                desc: 'Vigencias, vencimientos y maestro.',
         children: [
           { path: '/contratos/informes/por-vigencia', title: 'Relación por Vigencia', roles: BOTH },
           { path: '/contratos/informes/relacion-convenios', title: 'Relación de Convenios', roles: BOTH },
@@ -157,6 +169,7 @@ const NAV = [
     path: '/perfil', title: 'Perfil', icon: 'consultas', roles: BOTH, nav: true,
     children: [
       {
+        kind: 'info',
         key: 'perfil', title: 'Perfil', icon: 'consultas',
         desc: 'Datos de tu sesión y cuenta.',
         children: [
@@ -205,3 +218,5 @@ function findLeaf(path) {
 }
 
 module.exports = { MODULES, NAV, CONFIG, BOTH, ADMIN_ONLY, roleCatalog, canAccess, flattenLeaves, findLeaf };
+
+
