@@ -103,6 +103,11 @@ const NAV_MEMORY_JS = `<script>(function(){try{var k='sip-nav-open';var open=JSO
 var sidenav=document.querySelector('.sidebar-nav'),scrollT=null;
 if(sidenav){sidenav.addEventListener('scroll',function(){sidenav.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){sidenav.classList.remove('is-scrolling');},800);},{passive:true});}}catch(e){}})();</script>`;
 
+// Reset al seleccionar Dashboard: el dashboard sin formulario inline se renderiza con
+// active '/dashboard'. Limpiar la memoria de ramas para que el árbol cargue colapsado.
+// Se emite ANTES de NAV_MEMORY_JS para que no reabra nada guardado.
+const NAV_RESET_JS = `<script>(function(){try{localStorage.removeItem('sip-nav-open');}catch(e){}})();</script>`;
+
 const A11Y_HEAD_JS = `<script>(function(){try{var t=localStorage.getItem('sip-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);var s=parseInt(localStorage.getItem('sip-font')||'100',10);if(s>=80&&s<=120&&s!==100)document.documentElement.style.fontSize=(s/100*16)+'px';if(localStorage.getItem('sip-nav-collapsed')==='1')document.documentElement.classList.add('nav-collapsed');}catch(e){}})();</script>`;
 
 const A11Y_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="4.5" r="2"/><path d="M4 8.5c2.7.7 5.3 1 8 1s5.3-.3 8-1"/><path d="M12 9.5V14"/><path d="M12 14l-3.5 7"/><path d="M12 14l3.5 7"/></svg>`;
@@ -177,7 +182,7 @@ ${navConfig(active, role)}
 </aside>
 <main class="main-container">${body}</main>
 ${profileModal()}
-${NAV_MEMORY_JS}${A11Y_JS}${MODAL_JS}</body></html>`;
+${active === '/dashboard' ? NAV_RESET_JS : ''}${NAV_MEMORY_JS}${A11Y_JS}${MODAL_JS}</body></html>`;
 }
 
 function loginPage(appName, kcMode) {
