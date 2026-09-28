@@ -171,7 +171,8 @@ ${navConfig(active, role)}
 </aside>
 <main class="main-container">${body}</main>
 ${profileModal()}
-${active === '/dashboard' ? NAV_RESET_JS : ''}${NAV_MEMORY_JS}${A11Y_JS}${MODAL_JS}</body></html>`;
+${detailDrawer()}
+${active === '/dashboard' ? NAV_RESET_JS : ''}${NAV_MEMORY_JS}${A11Y_JS}${MODAL_JS}${DRAWER_JS}</body></html>`;
 }
 
 function loginPage(appName, kcMode) {
@@ -251,7 +252,7 @@ function taskCards(fnc, tareas) {
   const today = new Date().toISOString().slice(0, 10);
   const cards = (tareas || []).map((t, i) => {
     const vencida = t.fecha_limite && String(t.fecha_limite).slice(0, 10) < today;
-    return `<li class="task-item${vencida ? ' task-item-vencida' : ''}"><span class="task-num tnum" aria-hidden="true">${i + 1}</span><span class="task-body"><strong>${esc(t.titulo)}${vencida ? ' <span class="badge badge-warn">Vencida</span>' : ''}</strong>
+    return `<li class="task-item${vencida ? ' task-item-vencida' : ''}"><span class="task-num tnum drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle" aria-hidden="true">${i + 1}</span><span class="task-body"><strong>${esc(t.titulo)}${vencida ? ' <span class="badge badge-warn">Vencida</span>' : ''}</strong>
 <span class="task-meta">${esc(t.responsable || t.area || '—')} · Límite: <span class="tnum${vencida ? ' text-warn' : ''}">${esc(fmtFechaCorta(t.fecha_limite))}</span> · <span class="badge">${esc(t.automatica ? 'automática' : 'manual')}</span> <span class="badge">${esc(t.proceso || '')}</span></span>
 ${t.detalle ? `<span class="task-detail">${esc(t.detalle)}</span>` : ''}
 ${canDo ? `<form method="post" action="/api/tareas/${t.id}/completar" style="margin:4px 0 0"><button class="stepper-button stepper-button-primary" type="submit">Marcar hecha</button></form>` : `<span class="badge">solo lectura</span>`}</span></li>`;
@@ -263,7 +264,7 @@ ${canDo ? `<form method="post" action="/api/tareas/${t.id}/completar" style="mar
 function doneList(hechas) {
   const rows = hechas || [];
   const items = rows.map((t) =>
-    `<li class="done-item"><span class="done-check" aria-hidden="true">${STEP_CHECK_SVG}</span><span class="done-body"><strong>${esc(t.titulo)}</strong><span class="done-meta">${esc(t.hecha_por || '')} · ${esc(fmtFechaHora(t.hecha_at))} · <span class="badge">${esc(t.rol || '')}</span></span></span></li>`).join('');
+    `<li class="done-item"><span class="done-check drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle" aria-hidden="true">${STEP_CHECK_SVG}</span><span class="done-body"><strong>${esc(t.titulo)}</strong><span class="done-meta">${esc(t.hecha_por || '')} · ${esc(fmtFechaHora(t.hecha_at))} · <span class="badge">${esc(t.rol || '')}</span></span></span></li>`).join('');
   return `<h3 class="rail-sub">Completadas (${rows.length})</h3><ul class="done-list">${items || '<li class="done-empty">Sin completadas.</li>'}</ul>`;
 }
 
@@ -356,7 +357,7 @@ function activityFeed(actividad) {
     const state = i === 0 ? 'stepper-active' : 'stepper-completed';
     const last = i === rows.length - 1 ? ' stepper-last' : '';
     return `<div class="stepper-step ${state}${last}" data-step="${i}">
-      <div class="stepper-circle" aria-hidden="true">${STEP_CHECK_SVG}</div>
+      <div class="stepper-circle drawer-trigger" data-drawer="actividad" data-id="${a.id}" role="button" tabindex="0" title="Ver detalle">${STEP_CHECK_SVG}</div>
       <div class="stepper-line" aria-hidden="true"></div>
       <div class="stepper-content">
         <div class="stepper-title">${esc(ACTION_LABEL[a.action] || a.action)}</div>
@@ -375,6 +376,48 @@ function activityFeed(actividad) {
   return `<div class="stepper-box" data-stepper>${steps}${controls}</div>${ACTIVITY_PAGER_JS}`;
 }
 
+// Drawer lateral derecho (detalle Actividad/Tarea): full-height, blur fuera.
+function detailDrawer() {
+  return `<div class="drawer-backdrop" id="drawerBackdrop" hidden>
+  <aside class="drawer" role="dialog" aria-modal="true" aria-label="Detalle" id="drawerPanel">
+    <div class="drawer-head"><h2 id="drawerTitle">Detalle</h2><button class="drawer-close" id="drawerClose" aria-label="Cerrar">✕</button></div>
+    <div class="drawer-body" id="drawerBody"><p>Cargando…</p></div>
+  </aside>
+</div>`;
+}
+
+const DRAWER_JS = `<script>(function(){try{
+var back=document.getElementById('drawerBackdrop'),panel=document.getElementById('drawerPanel'),
+title=document.getElementById('drawerTitle'),body=document.getElementById('drawerBody');
+if(!back||!panel)return;
+function q(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function row(k,v){if(v===null||v===undefined||v==='')return '';return '<div class="drawer-row"><span>'+q(k)+'</span><strong>'+q(v)+'</strong></div>';}
+function fmtDT(v){try{return new Date(v).toLocaleString('es-CO');}catch(e){return String(v||'');}}
+function open(){back.hidden=false;requestAnimationFrame(function(){back.classList.add('open');});if(panel)panel.focus&&panel.focus();}
+function close(){back.classList.remove('open');setTimeout(function(){back.hidden=true;},200);}
+function renderActividad(a){
+title.textContent='Actividad';
+body.innerHTML=row('Acción',a.action)+row('Actor',a.actor_email)+row('Módulo',a.modulo)+row('Entidad',a.entidad_id)+row('Detalle',a.detalle)+row('IP',a.ip)+row('Fecha',fmtDT(a.at));
+}
+function renderTarea(t){
+title.textContent=t.estado==='hecha'?'Tarea completada':'Tarea pendiente';
+var lim=t.fecha_limite?String(t.fecha_limite).slice(0,10):'';
+body.innerHTML=row('Título',t.titulo)+row('Detalle',t.detalle)+row('Responsable',t.responsable)+row('Área',t.area)+row('Proceso',t.proceso)+row('Rol',t.rol)+row('Límite',lim)+row('Tipo',t.automatica?'automática':'manual')+row('Estado',t.estado)+row('Completada por',t.hecha_por)+row('Completada el',t.hecha_at?fmtDT(t.hecha_at):'');
+}
+function load(kind,id){
+body.innerHTML='<p>Cargando…</p>';open();
+fetch('/api/'+kind+'/'+encodeURIComponent(id)).then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();}).then(function(d){
+if(kind==='actividad')renderActividad(d);else renderTarea(d);
+}).catch(function(){body.innerHTML='<p>No se pudo cargar el detalle.</p>';});
+}
+document.addEventListener('click',function(e){var t=e.target.closest?e.target.closest('.drawer-trigger'):null;if(!t)return;e.preventDefault();load(t.getAttribute('data-drawer'),t.getAttribute('data-id'));});
+document.addEventListener('keydown',function(e){
+if(e.key==='Escape'&&!back.hidden)close();
+if((e.key==='Enter'||e.key===' ')&&document.activeElement&&document.activeElement.classList&&document.activeElement.classList.contains('drawer-trigger')){e.preventDefault();var t=document.activeElement;load(t.getAttribute('data-drawer'),t.getAttribute('data-id'));}
+});
+document.getElementById('drawerClose').addEventListener('click',close);
+back.addEventListener('click',function(e){if(e.target===back)close();});
+}catch(e){}})();</script>`;
 function dashboardPage(fnc, data) {
   const nAct = (data.actividad || []).length;
   return `<div class="dash-grid">

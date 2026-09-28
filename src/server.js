@@ -154,9 +154,19 @@ app.get('/api/saldos', needLogin, needDb, async (req, res) => {
 // GET /api/actividad — últimos 15 movimientos (bitácora, resumen abstracto).
 app.get('/api/actividad', needLogin, needDb, async (req, res) => {
   const { rows } = await getPool().query(
-    `SELECT created_at AS at, actor_email, action, modulo, entidad_id, detalle
+    `SELECT id, created_at AS at, actor_email, action, modulo, entidad_id, detalle
      FROM audit_log ORDER BY id DESC LIMIT 15`);
   res.json(rows);
+});
+
+// GET /api/actividad/:id — detalle completo para el drawer.
+app.get('/api/actividad/:id', needLogin, needDb, async (req, res) => {
+  const { rows } = await getPool().query(
+    `SELECT id, created_at AS at, actor_sub, actor_email, action, modulo, entidad_id, detalle, ip
+     FROM audit_log WHERE id = $1`,
+    [Number(req.params.id)]);
+  if (!rows.length) return res.status(404).json({ error: 'No encontrado.' });
+  res.json(rows[0]);
 });
 
 // GET /api/tareas — pendientes visibles según rol (consultor: lectura).
@@ -187,6 +197,22 @@ app.post('/api/tareas/:id/completar', needLogin, needDb, async (req, res) => {
   if (!rowCount) return res.redirect('/dashboard?msg=ya_hecha');
   await writeAudit(req, { action: 'tarea.completar', modulo: 'tareas', entidadId: String(req.params.id), detalle: 'Tarea marcada hecha' });
   return res.redirect('/dashboard?msg=tarea_ok');
+});
+
+// GET /api/tareas/:id — detalle completo para el drawer (mismo filtro de rol que la lista).
+app.get('/api/tareas/:id', needLogin, needDb, async (req, res) => {
+  const fnc = req.session.fnc;
+  const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
+  let q = `SELECT id, created_at AS at, rol, titulo, detalle, responsable, area, proceso, fecha_limite, automatica, estado, hecha_por, hecha_at
+           FROM tasks WHERE id = $1`;
+  const params = [Number(req.params.id)];
+  if (fnc.role !== 'ADMIN' && !roles.includes('coordinador')) {
+    q += ` AND (estado = 'hecha' OR rol = ANY($2))`;
+    params.push(roles);
+  }
+  const { rows } = await getPool().query(q, params);
+  if (!rows.length) return res.status(404).json({ error: 'No encontrado.' });
+  res.json(rows[0]);
 });
 
 const page = (fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body);
