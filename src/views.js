@@ -30,9 +30,9 @@ function icon(name) {
 function leafLink(leaf, active, role) {
   const isActive = active === leaf.path;
   if (canAccess(role, leaf)) {
-    return `<a class="tree-leaf${isActive ? ' active' : ''}" href="${leaf.path}">${esc(leaf.title)}</a>`;
+    return `<a class="tree-leaf${isActive ? ' active' : ''}" href="${leaf.path}" title="${esc(leaf.title)}"><span class="nav-label">${esc(leaf.title)}</span></a>`;
   }
-  return `<span class="tree-leaf tree-disabled" title="Sin permiso">🔒 ${esc(leaf.title)}</span>`;
+  return `<span class="tree-leaf tree-disabled" title="Sin permiso"><span class="nav-label">🔒 ${esc(leaf.title)}</span></span>`;
 }
 
 function navTree(active, role) {
@@ -41,7 +41,7 @@ function navTree(active, role) {
     if (!canAccess(role, mod)) continue;
     const inMod = active === mod.path || active.startsWith(mod.path + '/');
     if (!(mod.children || []).length) {
-      html += `<a class="tab-btn${active === mod.path ? ' active' : ''}" href="${mod.path}">${icon(mod.icon)}${esc(mod.title)}</a>`;
+      html += `<a class="tab-btn${active === mod.path ? ' active' : ''}" href="${mod.path}" title="${esc(mod.title)}">${icon(mod.icon)}<span class="nav-label">${esc(mod.title)}</span></a>`;
       continue;
     }
     const subs = (mod.children || []).map((sub) => {
@@ -50,12 +50,12 @@ function navTree(active, role) {
       const inSub = leaves.some((l) => active === l.path);
       const items = leaves.map((l) => leafLink(l, active, role)).join('');
       return `<details class="tree-sub" data-navkey="${esc(mod.path + '/' + sub.key)}"${inSub ? ' open' : ''}>
-        <summary class="tree-sub-head">${icon(sub.icon)}${esc(sub.title)}</summary>
+        <summary class="tree-sub-head" title="${esc(sub.title)}">${icon(sub.icon)}<span class="nav-label">${esc(sub.title)}</span></summary>
         <div class="tree-leaves">${items}</div>
       </details>`;
     }).join('');
     html += `<details class="tree-mod" data-navkey="mod:${esc(mod.path)}"${inMod ? ' open' : ''}>
-      <summary class="tab-btn tree-mod-head${active === mod.path ? ' active' : ''}">${icon(mod.icon)}${esc(mod.title)}</summary>
+      <summary class="tab-btn tree-mod-head${active === mod.path ? ' active' : ''}" title="${esc(mod.title)}">${icon(mod.icon)}<span class="nav-label">${esc(mod.title)}</span></summary>
       <div class="tree-subs">${subs}</div>
     </details>`;
   }
@@ -65,7 +65,7 @@ function navTree(active, role) {
 function navConfig(active, role) {
   const items = CONFIG.filter((c) => canAccess(role, c));
   if (!items.length) return '';
-  const links = items.map((c) => `<a class="tab-btn${active === c.path ? ' active' : ''}" href="${c.path}">${icon(c.icon)}${esc(c.title)}</a>`).join('');
+  const links = items.map((c) => `<a class="tab-btn${active === c.path ? ' active' : ''}" href="${c.path}" title="${esc(c.title)}">${icon(c.icon)}<span class="nav-label">${esc(c.title)}</span></a>`).join('');
   return `<div class="nav-config"><span class="sidebar-section-label">Configuración</span>${links}</div>`;
 }
 
@@ -73,7 +73,7 @@ const NAV_MEMORY_JS = `<script>(function(){try{var k='sip-nav-open';var open=JSO
 var sidenav=document.querySelector('.sidebar-nav'),scrollT=null;
 if(sidenav){sidenav.addEventListener('scroll',function(){sidenav.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){sidenav.classList.remove('is-scrolling');},800);},{passive:true});}}catch(e){}})();</script>`;
 
-const A11Y_HEAD_JS = `<script>(function(){try{var t=localStorage.getItem('sip-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);var s=parseInt(localStorage.getItem('sip-font')||'100',10);if(s>=80&&s<=120&&s!==100)document.documentElement.style.fontSize=(s/100*16)+'px';}catch(e){}})();</script>`;
+const A11Y_HEAD_JS = `<script>(function(){try{var t=localStorage.getItem('sip-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);var s=parseInt(localStorage.getItem('sip-font')||'100',10);if(s>=80&&s<=120&&s!==100)document.documentElement.style.fontSize=(s/100*16)+'px';if(localStorage.getItem('sip-nav-collapsed')==='1')document.documentElement.classList.add('nav-collapsed');}catch(e){}})();</script>`;
 
 const A11Y_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="4.5" r="2"/><path d="M4 8.5c2.7.7 5.3 1 8 1s5.3-.3 8-1"/><path d="M12 9.5V14"/><path d="M12 14l-3.5 7"/><path d="M12 14l3.5 7"/></svg>`;
 const SUN_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
@@ -112,6 +112,8 @@ document.getElementById('themeLight').addEventListener('click',function(){setThe
 document.getElementById('themeDark').addEventListener('click',function(){setTheme('dark');});
 document.getElementById('fontDown').addEventListener('click',function(){setFont(parseInt(localStorage.getItem('sip-font')||'100',10)-10);});
 document.getElementById('fontUp').addEventListener('click',function(){setFont(parseInt(localStorage.getItem('sip-font')||'100',10)+10);});
+var navBtn=document.getElementById('navCollapseBtn');
+if(navBtn){if(document.documentElement.classList.contains('nav-collapsed'))navBtn.setAttribute('aria-label','Expandir menú');navBtn.addEventListener('click',function(){var on=!document.documentElement.classList.contains('nav-collapsed');document.documentElement.classList.toggle('nav-collapsed',on);navBtn.setAttribute('aria-label',on?'Expandir menú':'Contraer menú');try{localStorage.setItem('sip-nav-collapsed',on?'1':'0');}catch(e){}});}
 sync();}catch(e){}})();</script>`;
 
 function layout(appName, fnc, active, body) {
@@ -124,7 +126,9 @@ function layout(appName, fnc, active, body) {
 <div class="header-user-profile">${a11yControls()}<div class="user-avatar">${esc(initial)}</div><div><span class="user-name">${esc(email)}</span><span class="user-email">${esc(role)}</span></div>
 <form method="post" action="/auth/logout" style="margin:0"><button class="btn-logout" type="submit">Salir</button></form></div>
 </div></header>
-<aside class="app-sidebar" aria-label="Navegacion principal"><nav class="sidebar-nav">
+<aside class="app-sidebar" aria-label="Navegacion principal">
+<button class="nav-collapse-btn" id="navCollapseBtn" aria-label="Contraer menú" title="Contraer / expandir menú"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9.5 3v18"/></svg></button>
+<nav class="sidebar-nav">
 <span class="sidebar-section-label">Módulos</span>
 ${navTree(active, role)}
 ${navConfig(active, role)}
