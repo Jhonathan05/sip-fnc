@@ -172,4 +172,63 @@ function errorPage(fnc, reason) {
 <a class="btn-primary" href="/">Reintentar</a></main></body></html>`;
 }
 
-module.exports = { layout, loginPage, rolesMatrix, errorPage, esc };
+const TIPO_LABEL = {
+  municipio_actual: 'Municipio · Vigencia actual',
+  municipio_anteriores: 'Municipio · Anteriores',
+  circunscripcion_actual: 'Circunscripción · Vigencia actual',
+  circunscripcion_anteriores: 'Circunscripción · Anteriores',
+};
+
+function fmtCOP(n) {
+  return '$' + Number(n || 0).toLocaleString('es-CO', { maximumFractionDigits: 0 });
+}
+
+function kpiStrip(saldos) {
+  const cards = (saldos || []).map((s) => {
+    const pct = Number(s.pct || 0);
+    const sem = pct >= 85 ? 'var(--err-ink)' : pct >= 50 ? 'var(--primary-2)' : 'var(--verde-ink)';
+    return `<div class="card kpi"><span class="sidebar-section-label">${esc(TIPO_LABEL[s.tipo] || s.tipo)} ${esc(String(s.vigencia))}</span>
+<strong class="tnum">${esc(fmtCOP(s.saldo))}</strong>
+<span style="color:${sem}" class="tnum">${esc(String(pct))}% ejecutado</span></div>`;
+  }).join('');
+  return `<div class="kpi-strip">${cards || '<div class="card"><p>Sin distribuciones.</p></div>'}</div>`;
+}
+
+function quickAccess(fnc) {
+  const cards = NAV.filter((m) => (m.children || []).length && canAccess(fnc.role, m)).map((m) =>
+    `<a class="card qa" href="${m.path}"><strong>${esc(m.title)}</strong><span>${(m.children || []).length} secciones</span></a>`).join('');
+  return `<h2>Accesos a formularios</h2><div class="qa-grid">${cards}</div>`;
+}
+
+function taskCards(fnc, tareas) {
+  const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
+  const canDo = fnc.role === 'ADMIN' || roles.some((r) => ['admin', 'coordinador', 'analista', 'auxiliar'].includes(r));
+  const today = new Date().toISOString().slice(0, 10);
+  const cards = (tareas || []).map((t) => {
+    const vencida = t.fecha_limite && String(t.fecha_limite).slice(0, 10) < today;
+    return `<div class="card task${vencida ? ' task-over' : ''}">
+<strong>${esc(t.titulo)}</strong>
+<p>${esc(t.detalle || '')}</p>
+<p><span class="badge">${esc(t.automatica ? 'automática' : 'manual')}</span> <span class="badge">${esc(t.proceso || '')}</span></p>
+<p>Solicita: <strong>${esc(t.responsable || t.area || '—')}</strong> · Límite: <strong class="tnum">${esc(t.fecha_limite ? String(t.fecha_limite).slice(0, 10) : '—')}</strong></p>
+${canDo ? `<form method="post" action="/api/tareas/${t.id}/completar" style="margin:0"><button class="btn-primary" type="submit">Marcar hecha</button></form>` : `<p><span class="badge">solo lectura</span></p>`}
+</div>`;
+  }).join('');
+  return `<h2>Tareas pendientes (${(tareas || []).length})</h2><div class="task-grid">${cards || '<div class="card"><p>Sin pendientes.</p></div>'}</div>`;
+}
+
+function activityFeed(actividad) {
+  const items = (actividad || []).map((a) =>
+    `<li><strong>${esc(a.actor_email || '')}</strong> · ${esc(a.action)} <span class="badge">${esc(a.modulo || '')}</span><br><span>${esc(a.detalle || '')}</span> <em class="tnum">${esc(new Date(a.at).toLocaleString('es-CO'))}</em></li>`).join('');
+  return `<h2>Bitácora reciente</h2><ul class="feed">${items || '<li>Sin movimientos.</li>'}</ul>`;
+}
+
+function dashboardPage(fnc, data) {
+  return `${kpiStrip(data.saldos)}
+<div class="dash-grid">
+<div>${quickAccess(fnc)}${taskCards(fnc, data.tareas)}</div>
+<div>${activityFeed(data.actividad)}</div>
+</div>`;
+}
+
+module.exports = { layout, loginPage, rolesMatrix, errorPage, esc, dashboardPage };

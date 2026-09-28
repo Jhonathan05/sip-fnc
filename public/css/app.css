@@ -492,3 +492,18 @@ code {
 .nav-collapsed .app-sidebar:hover .tree-sub-head { padding: 7px 12px; }
 .nav-collapsed .nav-config { align-items: center; }
 .nav-collapsed .app-sidebar:hover .nav-config { align-items: stretch; }
+/* ── Dashboard operativo: KPIs + 2 columnas ── */
+.kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 12px 0 20px; }
+.card.kpi { display: flex; flex-direction: column; gap: 4px; max-width: none; }
+.card.kpi strong { font-size: var(--fs-h2); letter-spacing: var(--tracking-title); }
+.dash-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 1100px) { .dash-grid { grid-template-columns: 1fr; } }
+.qa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.card.qa { text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 4px; max-width: none; }
+.card.qa:hover { border-color: var(--verde-ink); }
+.card.qa span { font-size: var(--fs-meta); color: var(--text-muted); }
+.task-grid { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.card.task-over { border-color: var(--err-ink); }
+.feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.feed li { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 10px; padding: 10px 12px; font-size: var(--fs-table); }
+.feed em { color: var(--text-muted); font-style: normal; font-size: var(--fs-meta); }

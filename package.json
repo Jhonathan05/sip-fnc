@@ -16,6 +16,7 @@
     "express-rate-limit": "^7.5.1",
     "express-session": "^1.18.0",
     "helmet": "^7.1.0",
-    "openid-client": "^5.7.1"
+    "openid-client": "^5.7.1",
+    "pg": "8.23.0"
   }
 }

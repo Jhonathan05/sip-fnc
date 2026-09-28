@@ -10,6 +10,8 @@ const views = require('./views');
 const { buildFncSession, isFncValid, fingerprintFor } = require('./session');
 const { getMockSession, isKeycloakMode } = require('./auth-provider');
 const { MODULES, NAV, canAccess, flattenLeaves } = require('./modules');
+const { getPool, dbReady } = require('./db');
+const { writeAudit } = require('./audit');
 
 const APP_NAME = process.env.APP_NAME || 'app-fnc';
 const app = express();
@@ -75,6 +77,7 @@ app.get('/login', (req, res) => {
 app.post('/auth/mock', (req, res) => {
   if (isKeycloakMode()) return res.redirect('/auth/app');
   setFnc(req, getMockSession(req));
+  writeAudit(req, { action: 'login.mock', modulo: 'auth' });
   return res.redirect('/dashboard');
 });
 
@@ -115,6 +118,7 @@ app.get('/auth/callback/app', async (req, res) => {
 
 app.post('/auth/logout', (req, res) => {
   const idToken = req.session.idToken;
+  writeAudit(req, { action: 'logout', modulo: 'auth' });
   req.session.destroy(() => {
     if (idToken && isKeycloakMode()) {
       const pubBase = (process.env.KEYCLOAK_PUBLIC_URL || kc.KC_URL).replace(/\/$/, '');
@@ -129,13 +133,91 @@ app.get('/api/me', needLogin, (req, res) => {
   res.json(req.session.fnc);
 });
 
+const needDb = async (req, res, next) => {
+  if (await dbReady()) return next();
+  return res.status(503).json({ error: 'Base de datos no disponible.' });
+};
+
+const fmtMoney = (n) => Number(n || 0);
+
+// GET /api/saldos — 4 distribuciones con saldo y % ejecutado (franja KPI).
+app.get('/api/saldos', needLogin, needDb, async (req, res) => {
+  const { rows } = await getPool().query(
+    'SELECT tipo, vigencia, asignado, ejecutado FROM distribuciones ORDER BY vigencia DESC, tipo');
+  res.json(rows.map((r) => {
+    const asignado = fmtMoney(r.asignado);
+    const ejecutado = fmtMoney(r.ejecutado);
+    return { ...r, asignado, ejecutado, saldo: asignado - ejecutado, pct: asignado > 0 ? +(ejecutado / asignado * 100).toFixed(1) : 0 };
+  }));
+});
+
+// GET /api/actividad — últimos 15 movimientos (bitácora, resumen abstracto).
+app.get('/api/actividad', needLogin, needDb, async (req, res) => {
+  const { rows } = await getPool().query(
+    `SELECT created_at AS at, actor_email, action, modulo, entidad_id, detalle
+     FROM audit_log ORDER BY id DESC LIMIT 15`);
+  res.json(rows);
+});
+
+// GET /api/tareas — pendientes visibles según rol (consultor: lectura).
+app.get('/api/tareas', needLogin, needDb, async (req, res) => {
+  const fnc = req.session.fnc;
+  const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
+  let q = `SELECT id, created_at AS at, rol, titulo, detalle, responsable, area, proceso, fecha_limite, automatica, estado
+           FROM tasks WHERE estado = 'pendiente'`;
+  const params = [];
+  if (fnc.role !== 'ADMIN' && !roles.includes('coordinador')) {
+    q += ` AND rol = ANY($1)`;
+    params.push(roles);
+  }
+  q += ' ORDER BY fecha_limite NULLS LAST, id';
+  const { rows } = await getPool().query(q, params);
+  res.json(rows);
+});
+
+// POST /api/tareas/:id/completar — con guard (consultor solo lectura) + auditoría.
+app.post('/api/tareas/:id/completar', needLogin, needDb, async (req, res) => {
+  const fnc = req.session.fnc;
+  const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
+  const allowed = fnc.role === 'ADMIN' || roles.some((r) => ['admin', 'coordinador', 'analista', 'auxiliar'].includes(r));
+  if (!allowed) return res.status(403).send(views.errorPage(fnc, 'forbidden'));
+  const { rowCount } = await getPool().query(
+    `UPDATE tasks SET estado = 'hecha', hecha_por = $1, hecha_at = now() WHERE id = $2 AND estado = 'pendiente'`,
+    [fnc.email, Number(req.params.id)]);
+  if (!rowCount) return res.redirect('/dashboard?msg=ya_hecha');
+  await writeAudit(req, { action: 'tarea.completar', modulo: 'tareas', entidadId: String(req.params.id), detalle: 'Tarea marcada hecha' });
+  return res.redirect('/dashboard?msg=tarea_ok');
+});
+
 const page = (fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body);
 
-app.get('/dashboard', needLogin, (req, res) => {
+app.get('/dashboard', needLogin, needDb, async (req, res) => {
   const fnc = req.session.fnc;
-  res.send(page(fnc, MODULES[0], `<div class="card"><h1>Dashboard</h1>
-<p>Visible para <span class="badge">FUNCIONARIO</span> y <span class="badge">ADMIN</span>.</p>
-<p>Usuario: <strong>${views.esc(fnc.email)}</strong> · Rol: <strong>${views.esc(fnc.role)}</strong> · Client roles: <strong>${views.esc(fnc.roles.join(','))}</strong></p></div>`));
+  try {
+    const pool = getPool();
+    const [s, a] = await Promise.all([
+      pool.query('SELECT tipo, vigencia, asignado, ejecutado FROM distribuciones ORDER BY vigencia DESC, tipo'),
+      pool.query(`SELECT created_at AS at, actor_email, action, modulo, detalle FROM audit_log ORDER BY id DESC LIMIT 15`),
+    ]);
+    const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
+    let tq = `SELECT id, titulo, detalle, responsable, area, proceso, fecha_limite, automatica FROM tasks WHERE estado='pendiente'`;
+    const tp = [];
+    if (fnc.role !== 'ADMIN' && !roles.includes('coordinador')) {
+      tq += ` AND rol = ANY($1)`;
+      tp.push(roles);
+    }
+    tq += ' ORDER BY fecha_limite NULLS LAST, id';
+    const t = await pool.query(tq, tp);
+    const saldos = s.rows.map((r) => {
+      const as = Number(r.asignado), ej = Number(r.ejecutado);
+      return { ...r, pct: as > 0 ? +(ej / as * 100).toFixed(1) : 0 };
+    });
+    res.send(page(fnc, MODULES[0], `<div class="card"><h1>Dashboard</h1>
+<p>Usuario: <strong>${views.esc(fnc.email)}</strong> · Rol: <strong>${views.esc(fnc.role)}</strong></p></div>` + views.dashboardPage(fnc, { saldos, tareas: t.rows, actividad: a.rows })));
+  } catch (e) {
+    console.error('[dashboard]', e.message);
+    res.send(page(fnc, MODULES[0], `<div class="alert-err">No se pudo cargar el tablero.</div>`));
+  }
 });
 
 // (imports consolidados arriba: MODULES, NAV, canAccess, flattenLeaves)
