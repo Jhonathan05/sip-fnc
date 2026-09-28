@@ -471,9 +471,9 @@ code {
 .nav-collapsed .nav-collapse-btn svg { transform: scaleX(-1); }
 .nav-collapsed .nav-collapse-bar { justify-content: center; }
 .nav-collapsed .app-sidebar:hover .nav-collapse-bar { justify-content: flex-start; }
-.app-sidebar { transition: width 200ms ease; }
+.app-sidebar { transition: width 200ms ease, padding 200ms ease; }
 .nav-collapsed .app-sidebar { width: 62px; padding-left: 11px; padding-right: 11px; }
-.nav-collapsed .app-sidebar:hover { width: 264px; padding: 24px 20px; }
+.nav-collapsed .app-sidebar:hover { width: 264px; padding: 24px 20px 10px 20px; padding-right: 0; }
 .nav-collapsed .sidebar-nav .nav-label, .nav-collapsed .sidebar-section-label { display: none; }
 .nav-collapsed .app-sidebar:hover .sidebar-nav .nav-label, .nav-collapsed .app-sidebar:hover .sidebar-section-label { display: revert; }
 .nav-collapsed .tree-subs, .nav-collapsed .tree-leaves { display: none; }
