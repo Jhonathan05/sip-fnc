@@ -466,6 +466,9 @@ code {
 .nav-collapse-bar { border-top: 1px solid var(--border-light); margin: 6px 0 0 -20px; padding: 10px 0 0 20px; display: flex; }
 .nav-collapse-btn { width: 36px; height: 34px; border-radius: 10px; border: 0; background: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; }
 .nav-collapse-btn:hover { background: var(--verde-soft); color: var(--verde-ink); }
+.nav-collapse-btn svg { transition: transform 200ms ease; }
+/* Colapsado: icono espejado (barra a la derecha = expandir) */
+.nav-collapsed .nav-collapse-btn svg { transform: scaleX(-1); }
 .nav-collapsed .nav-collapse-bar { justify-content: center; }
 .nav-collapsed .app-sidebar:hover .nav-collapse-bar { justify-content: flex-start; }
 .app-sidebar { transition: width 200ms ease; }
