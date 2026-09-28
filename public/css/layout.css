@@ -100,8 +100,9 @@
 }
 
 .header-brand-name {
-  font-weight: 800;
-  font-size: 1rem;
+  font-weight: 400;
+  font-size: 0.9rem;
+  letter-spacing: var(--tracking-body);
 }
 
 /* Lockup header: logo Comité + divisor + monograma SIP */
