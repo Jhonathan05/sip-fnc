@@ -7,13 +7,18 @@ function mockRoles() {
 }
 
 function getMockSession(req) {
-  return buildFncSession({
-    sub: 'mock-00000000-0000-0000-0000-000000000001',
-    email: 'dev@test.local',
-    displayName: 'Dev Local',
+  const s = buildFncSession({
+    sub: 'mock-00000000-0000-0000-000000000001',
+    email: 'maria_del_carmen.reyes@cafedecolombia.com',
+    displayName: 'María del Carmen Reyes',
     roles: mockRoles(),
     req,
   });
+  // Extensión mock-only (fuera del contrato FncSession): foto de la usuaria ejemplo.
+  s.photo = '/img/user/MariaDelCarmen.webp';
+  s.givenName = 'María';
+  s.familyName = 'Reyes';
+  return s;
 }
 
 function isKeycloakMode() {

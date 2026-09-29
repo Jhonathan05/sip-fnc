@@ -178,6 +178,15 @@ code {
     flex-shrink: 0;
 }
 
+.user-photo {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid var(--border-light);
+}
+
 .user-name {
     font-weight: 500;
     font-size: var(--fs-body);
@@ -906,6 +915,15 @@ code {
 .modal-note {
     font-size: var(--fs-meta);
     color: var(--text-muted);
+}
+
+.pref-block {
+    margin: 12px 0 0;
+}
+
+.pref-block input[type="file"] {
+    font-size: var(--fs-table);
+    max-width: 100%;
 }
 
 /* ── Skeletons de formularios (Fase 1 visual, Fase 2 negocio) ── */

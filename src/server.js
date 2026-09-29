@@ -11,13 +11,39 @@ const { buildFncSession, isFncValid, fingerprintFor } = require('./session');
 const { getMockSession, isKeycloakMode } = require('./auth-provider');
 const { MODULES, NAV, canAccess, flattenLeaves, findLeaf } = require('./modules');
 const { PROCESO_FORM } = require('./task-meta');
+const { hydrate } = require('./prefs');
+const { ensureToken, verifyCsrf } = require('./csrf');
 const { getPool, dbReady } = require('./db');
 const { writeAudit } = require('./audit');
 
+const crypto = require('crypto');
 const APP_NAME = process.env.APP_NAME || 'app-fnc';
 const app = express();
 app.set('trust proxy', 1); // IP real tras nginx (cf-connecting-ip / x-forwarded-for)
-app.use(helmet({ contentSecurityPolicy: false }));
+// Nonce CSP por request (las vistas lo inyectan en cada <script> inline).
+app.use((req, res, next) => {
+  res.locals.nonce = crypto.randomBytes(16).toString('base64');
+  req.nonce = res.locals.nonce;
+  next();
+});
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: [(_req, res) => `'nonce-${res.locals.nonce}'`],
+      // style-src 'unsafe-inline': los style="..." de vistas van a clases poco a
+      // poco; bloquearlos hoy rompería el layout. Scripts siguen con nonce.
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      fontSrc: ["'self'"],
+      imgSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    },
+  },
+}));
 app.use(compression());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json({ limit: '100kb' }));
@@ -32,15 +58,33 @@ app.use(session({
 // Modo B: mock = dev offline sin KC | keycloak = staging/prod. Cero cambios de negocio al flipear.
 // Rutas sin guard de sesion: /login, /auth/app, /auth/mock, /auth/callback/app, /error.
 
-// P7 — rate-limit /api/* obligatorio (override en caliente via env + compose environment:)
+// P7 — rate-limit /api/* obligatorio. max como función: override volátil en
+// caliente (revierte al env al reiniciar). Handler con Retry-After (skill).
+const ENV_MAX = parseInt(process.env.RATE_LIMIT_API_PER_MIN || '60', 10);
+let hotMax = null;
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_API_PER_MIN || '60', 10),
+  max: () => (hotMax == null ? ENV_MAX : hotMax),
   standardHeaders: true,
   legacyHeaders: false,
-  handler: (req, res) => res.status(429).json({ error: 'Too Many Requests' }),
+  // Exento: es la llave para subir el límite (sin esto un bloqueo sería irreversible sin restart).
+  skip: (req) => req.path === '/admin/rate-limit',
+  handler: (req, res) => {
+    const reset = req.rateLimit && req.rateLimit.resetTime ? req.rateLimit.resetTime.getTime() : Date.now() + 60000;
+    res.set('Retry-After', String(Math.max(1, Math.ceil((reset - Date.now()) / 1000))));
+    res.status(429).json({ error: 'Too Many Requests' });
+  },
 });
 app.use('/api/', apiLimiter);
+
+function rateLimitMax() {
+  return hotMax == null ? ENV_MAX : hotMax;
+}
+
+// CSRF synchronizer en todos los POST (tras parsers y sesión).
+app.use(verifyCsrf);
+
+const INACTIVITY_MS = 5 * 60 * 1000; // 5 min (acta F0)
 
 const needLogin = (req, res, next) => {
   const fnc = req.session?.fnc;
@@ -49,6 +93,16 @@ const needLogin = (req, res, next) => {
       req.session.destroy(() => res.redirect('/error?reason=state'));
       return;
     }
+    // Inactividad: sin actividad 5 min → destruir + login con motivo.
+    const last = req.session.lastActivity || 0;
+    if (last && Date.now() - last > INACTIVITY_MS) {
+      req.session.destroy(() => {
+        if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Sesión cerrada por inactividad.', code: 'INACTIVE' });
+        return res.redirect('/login?reason=inactivity');
+      });
+      return;
+    }
+    req.session.lastActivity = Date.now();
     return next();
   }
   return res.redirect('/login');
@@ -60,6 +114,7 @@ const needRole = (role) => (req, res, next) => {
 
 function setFnc(req, fnc, idToken) {
   req.session.fnc = fnc;
+  req.session.lastActivity = Date.now();
   req.session.email = fnc.email;
   req.session.role = fnc.role;
   req.session.roles = fnc.roles;
@@ -73,12 +128,13 @@ app.get('/', (req, res) => {
 
 app.get('/login', (req, res) => {
   if (isFncValid(req.session?.fnc)) return res.redirect('/dashboard');
-  res.send(views.loginPage(APP_NAME, isKeycloakMode()));
+  res.send(views.loginPage(APP_NAME, isKeycloakMode(), ensureToken(req), req.query.reason));
 });
 
-app.post('/auth/mock', (req, res) => {
+app.post('/auth/mock', async (req, res) => {
   if (isKeycloakMode()) return res.redirect('/auth/app');
   setFnc(req, getMockSession(req));
+  await hydrate(req.session.fnc);
   writeAudit(req, { action: 'login.mock', modulo: 'auth' });
   return res.redirect('/dashboard');
 });
@@ -110,6 +166,9 @@ app.get('/auth/callback/app', async (req, res) => {
     setFnc(req, buildFncSession({
       sub: claims.sub, email, displayName: claims.name || email, roles, req,
     }), tokenSet.id_token);
+    req.session.fnc.givenName = String(claims.given_name || '').trim();
+    req.session.fnc.familyName = String(claims.family_name || '').trim();
+    await hydrate(req.session.fnc);
     delete req.session.kc;
     return res.redirect('/dashboard');
   } catch (e) {
@@ -135,6 +194,12 @@ app.get('/api/me', needLogin, (req, res) => {
   res.json(req.session.fnc);
 });
 
+// POST /api/auth/activity — renueva actividad (el modal la llama al seguir activo).
+app.post('/api/auth/activity', needLogin, (req, res) => {
+  req.session.lastActivity = Date.now();
+  res.json({ ok: true });
+});
+
 const needDb = async (req, res, next) => {
   if (await dbReady()) return next();
   return res.status(503).json({ error: 'Base de datos no disponible.' });
@@ -153,11 +218,20 @@ app.get('/api/saldos', needLogin, needDb, async (req, res) => {
   }));
 });
 
-// GET /api/actividad — últimos 15 movimientos (bitácora, resumen abstracto).
+// GET /api/actividad — plataforma financiera (sin auth ni seguridad).
 app.get('/api/actividad', needLogin, needDb, async (req, res) => {
   const { rows } = await getPool().query(
     `SELECT id, created_at AS at, actor_email, action, modulo, entidad_id, detalle
-     FROM audit_log ORDER BY id DESC LIMIT 15`);
+     FROM audit_log WHERE modulo NOT IN ('auth','seguridad') ORDER BY id DESC LIMIT 15`);
+  res.json(rows);
+});
+
+// GET /api/actividad/mia — todo lo propio, incluida mi seguridad.
+app.get('/api/actividad/mia', needLogin, needDb, async (req, res) => {
+  const { rows } = await getPool().query(
+    `SELECT id, created_at AS at, actor_email, action, modulo, entidad_id, detalle
+     FROM audit_log WHERE actor_sub = $1 ORDER BY id DESC LIMIT 15`,
+    [req.session.fnc.sub]);
   res.json(rows);
 });
 
@@ -291,7 +365,7 @@ app.get('/api/tareas/:id', needLogin, needDb, async (req, res) => {
   }
 });
 
-const page = (fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body);
+const page = (req, fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body, ensureToken(req), req.nonce);
 
 app.get('/dashboard', needLogin, needDb, async (req, res) => {
   const fnc = req.session.fnc;
@@ -310,7 +384,7 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
     const [s, a] = await Promise.all([
       pool.query('SELECT tipo, vigencia, asignado, ejecutado FROM distribuciones ORDER BY vigencia DESC, tipo'),
       // Mini panel: solo plataforma (auth/sistema queda fuera: login.*, logout).
-      pool.query(`SELECT id, created_at AS at, actor_email, action, modulo, detalle FROM audit_log WHERE action NOT IN ('login.mock','login.keycloak','logout') ORDER BY id DESC LIMIT 15`),
+      pool.query(`SELECT id, created_at AS at, actor_email, action, modulo, detalle FROM audit_log WHERE modulo NOT IN ('auth','seguridad') ORDER BY id DESC LIMIT 15`),
     ]);
     const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
     let tq = `SELECT id, titulo, detalle, responsable, area, proceso, fecha_limite, automatica FROM tasks WHERE estado='pendiente'`;
@@ -337,7 +411,7 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
     // Selección del árbol: el formulario inline marca su hoja como activa
     // (abre módulo/sub y resalta la hoja; sin form queda Dashboard).
     const activePath = form ? form.leaf.path : MODULES[0].path;
-    res.send(page(fnc, { path: activePath }, views.dashboardPage(fnc, { saldos, tareas: t.rows, hechas: d.rows, actividad: a.rows, form })));
+    res.send(page(req, fnc, { path: activePath }, views.dashboardPage(fnc, { saldos, tareas: t.rows, hechas: d.rows, actividad: a.rows, form, nonce: req.nonce })));
   } catch (e) {
     console.error('[dashboard]', e.message);
     // Si el error ocurre con ?form válido, conservar la selección del árbol.
@@ -348,7 +422,7 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
         if (hit && canAccess(fnc.role, hit.leaf) && hit.sub.kind !== 'informe') activePath = hit.leaf.path;
       }
     } catch { /* mantener Dashboard */ }
-    res.send(page(fnc, { path: activePath }, `<div class="alert-err">No se pudo cargar el tablero.</div>`));
+    res.send(page(req, fnc, { path: activePath }, `<div class="alert-err">No se pudo cargar el tablero.</div>`));
   }
 });
 
@@ -363,7 +437,7 @@ for (const mod of NAV.filter((m) => (m.children || []).length > 0)) {
     }
     const subs = (mod.children || []).map((s) =>
       `<div class="card"><h1>${views.esc(s.title)}</h1><p>${views.esc(s.desc || '')}</p><p>${(s.children || []).length} opciones.</p></div>`).join('');
-    res.send(page(fnc, { path: mod.path, title: mod.title },
+    res.send(page(req, fnc, { path: mod.path, title: mod.title },
       `<div class="card"><h1>${views.esc(mod.title)}</h1><p>Negocio en Fase 2. Tu acceso actual: <span class="badge">${views.esc(fnc.role)}</span></p></div>${subs}`));
   });
 }
@@ -384,6 +458,62 @@ app.post('/api/perfil/solicitar-clave', needLogin, needDb, async (req, res) => {
   return res.redirect('/dashboard?msg=clave_solicitada');
 });
 
+// POST /api/perfil/preferencia — {display_mode: full|first} (autoservicio).
+app.post('/api/perfil/preferencia', needLogin, needDb, async (req, res) => {
+  const mode = req.body && req.body.display_mode === 'first' ? 'first' : 'full';
+  const { savePrefs } = require('./prefs');
+  const ok = await savePrefs(req.session.fnc.sub, { display_mode: mode });
+  if (!ok) return res.status(500).json({ ok: false, error: 'No se pudo guardar.' });
+  req.session.fnc.displayMode = mode;
+  await writeAudit(req, { action: 'perfil.preferencia', modulo: 'seguridad', detalle: `Nombre mostrado: ${mode}` });
+  return res.json({ ok: true, display_mode: mode });
+});
+
+// POST /api/perfil/foto — subida propia (multipart, token por header).
+// Límites: jpeg/png/webp, 5 MB, magic-bytes reales; salida webp 256px q80 (~20 KB).
+const multer = require('multer');
+const sharp = require('sharp');
+const fs = require('fs');
+const uploadFoto = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    if (['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) return cb(null, true);
+    return cb(new Error('Tipo no permitido (solo jpeg, png, webp).'));
+  },
+});
+app.post('/api/perfil/foto', needLogin, needDb, (req, res) => {
+  uploadFoto.single('foto')(req, res, async (err) => {
+    if (err) {
+      const msg = String(err.message || '');
+      const code = msg.includes('File too large') || msg.includes('5') ? 413 : 400;
+      return res.status(code).json({ ok: false, error: msg.includes('Tipo') ? msg : 'Archivo inválido o mayor a 5 MB.' });
+    }
+    if (!req.file) return res.status(400).json({ ok: false, error: 'Sin archivo.' });
+    try {
+      const safe = String(req.session.fnc.sub).replace(/[^a-zA-Z0-9-]/g, '_').slice(0, 64) || 'user';
+      const dir = require('path').join(__dirname, '..', 'public', 'img', 'user');
+      fs.mkdirSync(dir, { recursive: true });
+      const out = require('path').join(dir, `${safe}.webp`);
+      await sharp(req.file.buffer).resize(256, 256, { fit: 'cover' }).webp({ quality: 80 }).toFile(out);
+      const stat = fs.statSync(out);
+      const { savePrefs } = require('./prefs');
+      const photo = `/img/user/${safe}.webp`;
+      const saved = await savePrefs(req.session.fnc.sub, { display_mode: req.session.fnc.displayMode === 'first' ? 'first' : 'full', photo });
+      if (!saved) {
+        try { fs.unlinkSync(out); } catch { /* sin archivo que borrar */ }
+        return res.status(500).json({ ok: false, error: 'No se pudo guardar la preferencia.' });
+      }
+      req.session.fnc.photo = photo;
+      await writeAudit(req, { action: 'perfil.foto', modulo: 'seguridad', detalle: `Foto actualizada (${Math.round(stat.size / 1024)} KB)` });
+      return res.json({ ok: true, photo, kb: Math.round(stat.size / 1024) });
+    } catch (e) {
+      console.error('[perfil/foto]', e.message);
+      return res.status(400).json({ ok: false, error: 'Imagen inválida o corrupta.' });
+    }
+  });
+});
+
 // Hojas del árbol: /:modulo/:sub/:item con guard por hoja (planas "Fase 2" por ahora).
 for (const { leaf, sub, mod } of flattenLeaves()) {
   app.get(leaf.path, needLogin, (req, res) => {
@@ -391,22 +521,45 @@ for (const { leaf, sub, mod } of flattenLeaves()) {
     if (!canAccess(fnc.role, leaf)) {
       return res.status(403).send(views.errorPage(fnc, 'forbidden'));
     }
-    res.send(page(fnc, { path: leaf.path, title: leaf.title },
+    res.send(page(req, fnc, { path: leaf.path, title: leaf.title },
       `<p><a href="${mod.path}">${views.esc(mod.title)}</a> / ${views.esc(sub.title)}</p><div class="card"><h1>${views.esc(leaf.title)}</h1><p>Negocio en Fase 2. Tu acceso actual: <span class="badge">${views.esc(fnc.role)}</span></p></div>`));
   });
 }
 
+// GET/POST /api/admin/rate-limit — ver y cambiar en caliente (solo ADMIN, auditado).
+app.get('/api/admin/rate-limit', needLogin, needRole('ADMIN'), (req, res) => {
+  res.json({ perMin: rateLimitMax(), env: ENV_MAX, override: hotMax != null });
+});
+app.post('/api/admin/rate-limit', needLogin, needRole('ADMIN'), async (req, res) => {
+  const perMin = Number((req.body && req.body.perMin) ?? req.query.perMin);
+  if (!Number.isInteger(perMin) || perMin < 1 || perMin > 100000) {
+    return res.status(400).json({ error: 'perMin entero entre 1 y 100000.' });
+  }
+  hotMax = perMin === ENV_MAX ? null : perMin;
+  await writeAudit(req, { action: 'ratelimit.override', modulo: 'seguridad', detalle: `Límite a ${perMin}/min` });
+  if ((req.headers.accept || '').includes('application/json')) return res.json({ ok: true, perMin });
+  return res.redirect('/seguridad?msg=ratelimit_ok');
+});
+
 app.get('/seguridad', needLogin, needRole('ADMIN'), async (req, res) => {
   const fnc = req.session.fnc;
   let solis = [];
+  let audit = [];
   try {
     const r = await getPool().query(
       `SELECT actor_email, detalle, created_at AS at FROM audit_log WHERE action = 'clave.solicitar' ORDER BY id DESC LIMIT 20`);
     solis = r.rows;
+    const a = await getPool().query(
+      `SELECT actor_email, action, modulo, detalle, created_at AS at FROM audit_log ORDER BY id DESC LIMIT 50`);
+    audit = a.rows;
   } catch { /* sin DB: panel mínimo */ }
   const lis = solis.map((s) => `<li><strong>${views.esc(s.actor_email)}</strong> · ${views.esc(new Date(s.at).toLocaleString('es-CO'))}<br><span>${views.esc(s.detalle || '')}</span></li>`).join('');
-  res.send(page(fnc, { path: '/seguridad', title: 'Seguridad' }, `<div class="card"><h1>Seguridad</h1><p>Solo <span class="badge">ADMIN</span>. Rate-limit vigente: <strong>${views.esc(process.env.RATE_LIMIT_API_PER_MIN || '60')}/min</strong> (override en caliente en Fase 2).</p></div>
-<div class="card"><h2>Solicitudes de cambio de contraseña (${solis.length})</h2><ul class="feed">${lis || '<li>Sin solicitudes.</li>'}</ul><p>Flujo: reset en consola Keycloak + acción requerida <code>UPDATE_PASSWORD</code> (skill fnc-keycloak-users, staging).</p></div>`));
+  const auditRows = audit.map((a) => `<tr><td class="tnum">${views.esc(new Date(a.at).toLocaleString('es-CO'))}</td><td>${views.esc(a.actor_email)}</td><td><code>${views.esc(a.action)}</code></td><td><span class="badge">${views.esc(a.modulo || '')}</span></td><td>${views.esc(a.detalle || '')}</td></tr>`).join('');
+  res.send(page(req, fnc, { path: '/seguridad', title: 'Seguridad' }, `<div class="card"><h1>Seguridad</h1><p>Solo <span class="badge">ADMIN</span>. Rate-limit vigente: <strong class="tnum">${rateLimitMax()}/min</strong>${hotMax != null ? ' <span class="badge">override</span>' : ''} (env: ${ENV_MAX}/min).</p>
+<form method="post" action="/api/admin/rate-limit" style="margin:12px 0 0"><input type="hidden" name="_csrf" value="${ensureToken(req)}"><label class="fld"><span>Nuevo límite por minuto y por IP</span><input name="perMin" type="number" min="1" max="100000" value="${rateLimitMax()}"></label><button class="btn-primary" type="submit">Aplicar en caliente</button></form>
+<p>Volátil: revierte al env al reiniciar. Queda en bitácora.</p></div>
+<div class="card"><h2>Solicitudes de cambio de contraseña (${solis.length})</h2><ul class="feed">${lis || '<li>Sin solicitudes.</li>'}</ul><p>Flujo: reset en consola Keycloak + acción requerida <code>UPDATE_PASSWORD</code> (skill fnc-keycloak-users, staging).</p></div>
+<div class="card"><h2>Auditoría completa (solo admin, incluye seguridad)</h2><table><thead><tr><th>Fecha</th><th>Actor</th><th>Acción</th><th>Módulo</th><th>Detalle</th></tr></thead><tbody>${auditRows || '<tr><td colspan="5">Sin movimientos.</td></tr>'}</tbody></table></div>`));
 });
 
 // Matriz viva de roles: qué ve cada rol (permitido / deshabilitado / oculto).
@@ -423,3 +576,5 @@ if (require.main === module) {
   app.listen(PORT, () => console.log(`[${APP_NAME}] http://localhost:${PORT} provider=${process.env.AUTH_PROVIDER || 'mock'}`));
 }
 module.exports = app;
+
+

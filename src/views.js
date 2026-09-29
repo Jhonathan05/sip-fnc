@@ -3,9 +3,16 @@
 // permitido = link, sin acceso pero visible = deshabilitado, CONFIG anclada al fondo.
 const { MODULES, NAV, CONFIG, canAccess, flattenLeaves } = require('./modules');
 const { PROCESO_FORM, clientCatalog, canCreate } = require('./task-meta');
+const { shownName } = require('./prefs');
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Inyecta el nonce CSP en cada <script> inline (helmet lo exige por request).
+function withNonce(html, nonce) {
+  if (!nonce) return html;
+  return String(html).split('<script>').join(`<script nonce="${nonce}">`);
 }
 
 // Set Lucide (ISC, sin atribución requerida) inline — cero dependencias.
@@ -77,12 +84,57 @@ function navConfig(active, role) {
   return `<div class="nav-config"><span class="sidebar-section-label">Configuración</span>${links}</div>`;
 }
 
-function profileModal() {
+// Modal de inactividad: aviso 60s antes del cierre (5 min), con CSRF para renovar.
+function inactivityModal() {
+  return `<div class="modal-overlay" id="inactModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-label="Sesión por expirar">
+    <h2>Sesión por expirar</h2>
+    <p>Por inactividad se cerrará en <strong class="tnum" id="inactSecs">60</strong>s.</p>
+    <div class="drawer-actions"><button class="btn-primary" id="inactStay" type="button" style="margin-top:0">Seguir activo</button><button class="btn-logout" id="inactExit" type="button">Salir</button></div>
+  </div>
+</div>`;
+}
+
+const INACTIVITY_JS = `<script>(function(){try{
+var WARN_AT=4*60*1000, LIMIT=5*60*1000, deadline=Date.now()+LIMIT, timer=null, shown=false;
+var modal=document.getElementById('inactModal'), secs=document.getElementById('inactSecs');
+function csrfH(){try{var m=document.querySelector('meta[name="csrf-token"]');return m?m.getAttribute('content')||'':'';}catch(e){return '';}}
+function reset(){deadline=Date.now()+LIMIT;if(shown&&modal){modal.hidden=true;shown=false;}}
+function logout(){fetch('/auth/logout',{method:'POST',headers:{'x-csrf-token':csrfH()}}).finally(function(){window.location.href='/login?reason=inactivity';});}
+function tick(){
+var left=deadline-Date.now();
+if(left<=0){clearInterval(timer);logout();return;}
+if(left<=60000&&!shown&&modal){shown=true;modal.hidden=false;}
+if(shown&&secs)secs.textContent=Math.ceil(left/1000);
+}
+['mousemove','keydown','pointerdown','touchstart','scroll'].forEach(function(e){window.addEventListener(e,reset,{passive:true});});
+timer=setInterval(tick,1000);
+var stay=document.getElementById('inactStay');
+if(stay)stay.addEventListener('click',function(){fetch('/api/auth/activity',{method:'POST',headers:{'x-csrf-token':csrfH()}}).finally(function(){reset();});});
+var exit=document.getElementById('inactExit');
+if(exit)exit.addEventListener('click',logout);
+}catch(e){}})();</script>`;
+
+function profileModal(csrf) {
+  const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
   return `<div class="modal-overlay" id="perfilModal" hidden>
   <div class="modal-card" role="dialog" aria-modal="true" aria-label="Mi perfil">
     <h2>Mi perfil</h2>
     <div id="perfilBody"><p>Cargando…</p></div>
-    <form method="post" action="/api/perfil/solicitar-clave" style="margin:12px 0 0">
+    <div class="pref-block"><span class="a11y-sec-label">Mi actividad (incluye mi seguridad)</span>
+      <ul class="feed" id="perfilFeed"><li>Cargando…</li></ul>
+    </div>
+    <div class="pref-block"><span class="a11y-sec-label">Nombre mostrado</span>
+      <div class="a11y-seg" role="group" aria-label="Nombre mostrado">
+        <button id="prefFull" type="button" aria-pressed="true">Completo</button>
+        <button id="prefFirst" type="button" aria-pressed="false">Solo nombre</button>
+      </div>
+    </div>
+    <div class="pref-block"><span class="a11y-sec-label">Foto (jpeg, png, webp · máx 5 MB → se guarda en 256px)</span>
+      <div class="a11y-font"><input id="prefFoto" type="file" accept=".jpg,.jpeg,.png,.webp"><button id="prefFotoBtn" type="button">Subir</button></div>
+    </div>
+    <p id="prefMsg" class="drawer-msg"></p>
+    <form method="post" action="/api/perfil/solicitar-clave" style="margin:12px 0 0">${csrfField}
       <button class="btn-primary" type="submit" style="margin-top:0">Solicitar cambio de contraseña</button>
     </form>
     <p class="modal-note">Tu solicitud llega al administrador, quien restablece tu acceso y te pide definir una nueva clave en el siguiente ingreso. La consola de cuenta Keycloak no está expuesta.</p>
@@ -93,7 +145,25 @@ function profileModal() {
 
 const MODAL_JS = `<script>(function(){try{
 var m=document.getElementById('perfilModal');
-document.querySelectorAll('[data-open-modal="perfil"]').forEach(function(b){b.addEventListener('click',function(){if(!m)return;m.hidden=false;fetch('/api/me').then(function(r){return r.json();}).then(function(u){var left=u.exp&&u.iat?Math.max(0,u.exp-Math.floor(Date.now()/1000)):0;var hh=Math.floor(left/3600),mm=Math.floor((left%3600)/60);document.getElementById('perfilBody').innerHTML='<p>Usuario: <strong>'+String(u.displayName||'')+'</strong></p><p>Email: <strong>'+String(u.email||'')+'</strong></p><p>Rol: <span class=&quot;badge&quot;>'+String(u.role||'')+'</span> '+(u.roles||[]).join(', ')+'</p><p>Sesión vigente por: <strong>'+hh+'h '+mm+'min</strong></p>';}).catch(function(){});});});
+function csrfH(){try{var m=document.querySelector('meta[name="csrf-token"]');return m?m.getAttribute('content')||'':'';}catch(e){return '';}}
+function syncPref(mode){var f=document.getElementById('prefFull'),s=document.getElementById('prefFirst');if(f)f.setAttribute('aria-pressed',mode==='first'?'false':'true');if(s)s.setAttribute('aria-pressed',mode==='first'?'true':'false');}
+function prefMsg(t){var m=document.getElementById('prefMsg');if(m)m.textContent=t||'';}
+document.querySelectorAll('[data-open-modal="perfil"]').forEach(function(b){b.addEventListener('click',function(){if(!m)return;m.hidden=false;prefMsg('');fetch('/api/me').then(function(r){return r.json();}).then(function(u){var left=u.exp&&u.iat?Math.max(0,u.exp-Math.floor(Date.now()/1000)):0;var hh=Math.floor(left/3600),mm=Math.floor((left%3600)/60);document.getElementById('perfilBody').innerHTML='<p>Usuario: <strong>'+String(u.displayName||'')+'</strong></p><p>Email: <strong>'+String(u.email||'')+'</strong></p><p>Rol: <span class=&quot;badge&quot;>'+String(u.role||'')+'</span> '+(u.roles||[]).join(', ')+'</p><p>Sesión vigente por: <strong>'+hh+'h '+mm+'min</strong></p>';syncPref(u.displayMode||'full');
+fetch('/api/actividad/mia').then(function(r){return r.json();}).then(function(rows){var f=document.getElementById('perfilFeed');if(!f)return;if(!rows||!rows.length){f.innerHTML='<li>Sin movimientos.</li>';return;}f.innerHTML=rows.slice(0,8).map(function(a){var d=new Date(a.at);var when=isNaN(d)?'':d.toLocaleString('es-CO');return '<li><strong>'+String(a.action||'')+'</strong> <span class=&quot;badge&quot;>'+String(a.modulo||'')+'</span><br><span>'+String(a.detalle||'')+'</span> <em class=&quot;tnum&quot;>'+when+'</em></li>';}).join('');}).catch(function(){});}).catch(function(){});});});
+function savePref(mode){prefMsg('Guardando…');fetch('/api/perfil/preferencia',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':csrfH()},body:JSON.stringify({display_mode:mode})}).then(function(r){return r.json();}).then(function(d){if(d&&d.ok){syncPref(d.display_mode);prefMsg('Preferencia guardada. Recarga para verla en el header.');}else{prefMsg((d&&d.error)||'No se pudo guardar.');}}).catch(function(){prefMsg('Error de red.');});}
+var pf=document.getElementById('prefFull'),ps=document.getElementById('prefFirst');
+if(pf)pf.addEventListener('click',function(){savePref('full');});
+if(ps)ps.addEventListener('click',function(){savePref('first');});
+var fb=document.getElementById('prefFotoBtn');
+if(fb)fb.addEventListener('click',function(){
+var fi=document.getElementById('prefFoto');
+if(!fi||!fi.files||!fi.files[0]){prefMsg('Elige un archivo (jpeg, png o webp, máx 5 MB).');return;}
+var fd=new FormData();fd.append('foto',fi.files[0]);
+prefMsg('Subiendo y comprimiendo…');
+fetch('/api/perfil/foto',{method:'POST',headers:{'x-csrf-token':csrfH()},body:fd}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+if(x.d&&x.d.ok){prefMsg('Foto actualizada ('+x.d.kb+' KB). Recarga para verla.');}else{prefMsg((x.d&&(x.d.error||x.d.msg))||('Error '+x.s+'.'));}
+}).catch(function(){prefMsg('Error de red.');});
+});
 function close(){if(m)m.hidden=true;}
 document.querySelectorAll('[data-close-modal]').forEach(function(b){b.addEventListener('click',close);});
 if(m)m.addEventListener('click',function(e){if(e.target===m)close();});
@@ -134,7 +204,8 @@ var msg=document.getElementById('tcMsg');
 function val(id){var el=document.getElementById(id);return el?el.value.trim():'';}
 var payload={titulo:val('tcTitulo'),rol:val('tcRol'),responsable:val('tcResp'),area:val('tcArea'),proceso:val('tcProc'),fecha_limite:val('tcFecha'),detalle:val('tcDetalle'),automatica:val('tcAuto')==='si'};
 g.disabled=true;if(msg)msg.textContent='Guardando…';
-fetch('/api/tareas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+var tk='';try{var mm=document.querySelector('meta[name="csrf-token"]');tk=mm?mm.getAttribute('content')||'':'';}catch(e){}
+fetch('/api/tareas',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':tk},body:JSON.stringify(payload)}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
 if(x.d&&x.d.ok){window.location.reload();return;}
 if(msg)msg.textContent=(x.d&&(x.d.error||x.d.msg))||'No se pudo crear.';
 g.disabled=false;
@@ -144,7 +215,8 @@ g.disabled=false;
 
 const NAV_MEMORY_JS = `<script>(function(){try{var k='sip-nav-open';var open=JSON.parse(localStorage.getItem(k)||'[]');function save(id,on){try{var cur=JSON.parse(localStorage.getItem(k)||'[]');if(on&&cur.indexOf(id)<0)cur.push(id);if(!on)cur=cur.filter(function(x){return x!==id});localStorage.setItem(k,JSON.stringify(cur));}catch(e){}}document.querySelectorAll('details.tree-sub, details.tree-mod').forEach(function(d){var id=d.getAttribute('data-navkey');if(open.indexOf(id)>=0)d.open=true;d.addEventListener('toggle',function(){save(id,d.open)});});
 var scrollAreas=Array.prototype.slice.call(document.querySelectorAll('.sidebar-nav, .rail-scroll'));
-scrollAreas.forEach(function(el){var scrollT=null;el.addEventListener('scroll',function(){el.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){el.classList.remove('is-scrolling');},800);},{passive:true});});}catch(e){}})();</script>`;
+scrollAreas.forEach(function(el){var scrollT=null;el.addEventListener('scroll',function(){el.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){el.classList.remove('is-scrolling');},800);},{passive:true});});
+document.addEventListener('error',function(e){var t=e.target;if(t&&t.classList&&t.classList.contains('user-photo')){var d=document.createElement('div');d.className='user-avatar';d.textContent=(t.getAttribute('alt')||'U').trim().charAt(0).toUpperCase()||'U';t.replaceWith(d);}},true);}catch(e){}})();</script>`;
 
 // Reset al seleccionar Dashboard: el dashboard sin formulario inline se renderiza con
 // active '/dashboard'. Limpiar la memoria de ramas para que el árbol cargue colapsado.
@@ -194,15 +266,17 @@ var navBtn=document.getElementById('navCollapseBtn');
 if(navBtn){if(document.documentElement.classList.contains('nav-collapsed'))navBtn.setAttribute('aria-label','Expandir menú');navBtn.addEventListener('click',function(){var on=!document.documentElement.classList.contains('nav-collapsed');document.documentElement.classList.toggle('nav-collapsed',on);navBtn.setAttribute('aria-label',on?'Expandir menú':'Contraer menú');try{localStorage.setItem('sip-nav-collapsed',on?'1':'0');}catch(e){}});}
 sync();}catch(e){}})();</script>`;
 
-function layout(appName, fnc, active, body) {
+function layout(appName, fnc, active, body, csrf, nonce) {
   const email = fnc?.email || '';
   const role = fnc?.role || '';
   const initial = email.trim().charAt(0).toUpperCase() || 'U';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${A11Y_HEAD_JS}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
+  const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
+  const csrfMetaTag = csrf ? `<meta name="csrf-token" content="${csrf}">` : '';
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-mini.svg" alt="Comité de Cafeteros del Tolima" height="30"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="26"><span class="brand-divider" aria-hidden="true"></span><div><span class="header-brand-name"><strong>SIP</strong> Sistema de Información de Proyectos</span></div></div></div>
-<div class="header-user-profile">${a11yControls()}<div class="user-avatar">${esc(initial)}</div><div><span class="user-name">${esc(email)}</span><span class="user-email">${esc(role)}</span></div>
-<form method="post" action="/auth/logout" style="margin:0"><button class="btn-logout" type="submit">Salir</button></form></div>
+<div class="header-user-profile">${a11yControls()}${fnc?.photo ? `<img class="user-photo" src="${fnc.photo}" alt="${esc(shownName(fnc) || 'Usuario')}">` : `<div class="user-avatar">${esc(initial)}</div>`}<div><span class="user-name" title="${esc((fnc.displayName || '') + (fnc.email ? ' · ' + fnc.email : ''))}">${esc(shownName(fnc))}</span></div>
+<form method="post" action="/auth/logout" style="margin:0">${csrfField}<button class="btn-logout" type="submit">Salir</button></form></div>
 </div></header>
 <aside class="app-sidebar" aria-label="Navegacion principal">
 <nav class="sidebar-nav">
@@ -213,19 +287,24 @@ ${navConfig(active, role)}
 <div class="nav-collapse-bar"><button class="nav-collapse-btn" id="navCollapseBtn" aria-label="Contraer menú" title="Contraer / expandir menú"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9.5 3v18"/></svg></button></div>
 </aside>
 <main class="main-container">${body}</main>
-${profileModal()}
+${profileModal(csrf)}
+${inactivityModal()}
 ${taskCreateModal()}
 ${detailDrawer()}
-${active === '/dashboard' ? NAV_RESET_JS : ''}${NAV_MEMORY_JS}${A11Y_JS}${MODAL_JS}${DRAWER_JS}${TASK_CREATE_JS}</body></html>`;
+${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}</body></html>`;
 }
 
-function loginPage(appName, kcMode) {
+function loginPage(appName, kcMode, csrf, reason) {
+  const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
+  const notice = reason === 'inactivity'
+    ? `<div class="alert-err">Sesión cerrada por inactividad. Ingresa de nuevo.</div>` : '';
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="card"><div class="login-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-tolima.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-sip" src="/img/logo-sip.svg" alt="SIP" height="30"></div><h1>${esc(appName)}</h1>
 <p>Sistema de Información de Proyectos — gestión e informes contables por periodos.</p>
+${notice}
 ${kcMode
       ? `<a class="btn-primary" href="/auth/app">Continuar con Comit\u00e9 Tolima</a>`
-      : `<form method="post" action="/auth/mock" style="margin:0"><button class="btn-primary" type="submit">Continuar con Comit\u00e9 Tolima</button></form><p><span class="badge">mock offline</span> sin Keycloak.</p>`}
+      : `<form method="post" action="/auth/mock" style="margin:0">${csrfField}<button class="btn-primary" type="submit">Continuar con Comit\u00e9 Tolima</button></form><p><span class="badge">mock offline</span> sin Keycloak.</p>`}
 </div></main></body></html>`;
 }
 
@@ -327,7 +406,7 @@ function skeletonMaestro(leaf) {
   const body = fields.map((f) => fieldInput(f, fields.indexOf(f))).join('');
   return `<div class="skl-bar"><input type="search" placeholder="Buscar…" disabled aria-label="Buscar"></div>
 <table class="skl-table"><thead><tr>${head}<th>Acciones</th></tr></thead><tbody><tr><td colspan="${fields.length + 1}">Sin registros (skeleton).</td></tr></tbody></table>
-<form class="skl-form" onsubmit="return false"><fieldset disabled><legend>Nuevo registro</legend><div class="fld-grid">${body}</div><button class="btn-primary" type="button" disabled>Guardar (Fase 2)</button></fieldset></form>`;
+<form class="skl-form"><fieldset disabled><legend>Nuevo registro</legend><div class="fld-grid">${body}</div><button class="btn-primary" type="button" disabled>Guardar (Fase 2)</button></fieldset></form>`;
 }
 
 function skeletonInforme(leaf) {
@@ -389,7 +468,7 @@ render();}catch(e){}})();</script>`;
 
 // Mini panel Actividad reciente: bitácora stepper solo plataforma (el servidor ya
 // excluye login/logout). Item más reciente destacado; 3 por página con paginación.
-function activityFeed(actividad) {
+function activityFeed(actividad, nonce) {
   const rows = actividad || [];
   if (!rows.length) return `<div class="stepper-box"><p class="stepper-empty">Sin movimientos.</p></div>`;
   const PER = 3, pages = Math.ceil(rows.length / PER);
@@ -413,7 +492,7 @@ function activityFeed(actividad) {
       <span class="stepper-count tnum" data-step-count>1 / ${pages}</span>
       <button class="stepper-button stepper-button-primary" data-step-next type="button">Siguiente${STEP_NEXT_SVG}</button>
     </div>` : '';
-  return `<div class="stepper-box" data-stepper>${steps}${controls}</div>${ACTIVITY_PAGER_JS}`;
+  return `<div class="stepper-box" data-stepper>${steps}${controls}</div>${withNonce(ACTIVITY_PAGER_JS, nonce)}`;
 }
 
 // Drawer lateral derecho (detalle Actividad/Tarea): full-height, blur fuera.
@@ -455,7 +534,13 @@ var b=document.createElement('button');b.textContent='Validar tarea';b.className
 b.addEventListener('click',function(){
 if(!t.automatica&&!window.confirm('¿Confirmas completar "'+(t.titulo||'')+'"?'))return;
 b.disabled=true;
-fetch('/api/tareas/'+encodeURIComponent(t.id)+'/validar',{method:'POST'}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+function csrfHeader() {
+  try {
+    var m = document.querySelector('meta[name="csrf-token"]');
+    return m ? m.getAttribute('content') || '' : '';
+  } catch (e) { return ''; }
+}
+fetch('/api/tareas/'+encodeURIComponent(t.id)+'/validar',{method:'POST',headers:{'x-csrf-token':csrfHeader()}}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
 if(x.d&&x.d.ok){window.location.reload();return;}
 var m=document.getElementById('drawerMsg');if(m)m.textContent=(x.d&&(x.d.msg||x.d.error))||'No se pudo validar.';
 b.disabled=false;
@@ -483,8 +568,9 @@ function dashboardPage(fnc, data) {
   const nAct = (data.actividad || []).length;
   return `<div class="dash-grid">
 <div>${kpiStrip(data.saldos)}${formSlot(data.form)}</div>
-<div class="dash-rail"><div class="card rail-card"><div class="rail-card-head"><h2>Actividad reciente</h2><span class="rail-card-meta tnum">${nAct} movimientos</span></div><div class="rail-scroll">${activityFeed(data.actividad)}</div></div><div class="card rail-card"><div class="rail-card-head"><h2>Tareas</h2></div><div class="rail-scroll">${taskCards(fnc, data.tareas)}${doneList(data.hechas)}</div></div></div>
+<div class="dash-rail"><div class="card rail-card"><div class="rail-card-head"><h2>Actividad reciente</h2><span class="rail-card-meta tnum">${nAct} movimientos</span></div><div class="rail-scroll">${activityFeed(data.actividad, data.nonce)}</div></div><div class="card rail-card"><div class="rail-card-head"><h2>Tareas</h2></div><div class="rail-scroll">${taskCards(fnc, data.tareas)}${doneList(data.hechas)}</div></div></div>
 </div>`;
 }
 
 module.exports = { layout, loginPage, rolesMatrix, errorPage, esc, dashboardPage };
+
