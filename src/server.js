@@ -488,7 +488,11 @@ app.post('/api/perfil/foto', needLogin, needDb, (req, res) => {
       const stat = fs.statSync(out);
       const { savePrefs } = require('./prefs');
       const photo = `/img/user/${safe}.webp`;
-      await savePrefs(req.session.fnc.sub, { display_mode: req.session.fnc.displayMode === 'first' ? 'first' : 'full', photo });
+      const saved = await savePrefs(req.session.fnc.sub, { display_mode: req.session.fnc.displayMode === 'first' ? 'first' : 'full', photo });
+      if (!saved) {
+        try { fs.unlinkSync(out); } catch { /* sin archivo que borrar */ }
+        return res.status(500).json({ ok: false, error: 'No se pudo guardar la preferencia.' });
+      }
       req.session.fnc.photo = photo;
       await writeAudit(req, { action: 'perfil.foto', modulo: 'seguridad', detalle: `Foto actualizada (${Math.round(stat.size / 1024)} KB)` });
       return res.json({ ok: true, photo, kb: Math.round(stat.size / 1024) });
