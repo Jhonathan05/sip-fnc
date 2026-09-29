@@ -178,6 +178,15 @@ code {
     flex-shrink: 0;
 }
 
+.user-photo {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid var(--border-light);
+}
+
 .user-name {
     font-weight: 500;
     font-size: var(--fs-body);
