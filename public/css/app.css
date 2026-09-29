@@ -538,6 +538,11 @@ code {
 .rail-card .stepper-title { font-size: var(--fs-meta); }
 .rail-card .done-item, .rail-card .task-item { padding: 6px 8px; font-size: var(--fs-meta); }
 .feed em { color: var(--text-muted); font-style: normal; font-size: var(--fs-meta); }
+/* Botón circular + (nueva tarea, superior derecha de la tarjeta) */
+.tareas-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tareas-head .rail-sub { margin: 0; }
+.btn-circle { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border-light); background: var(--bg-card); color: var(--text-dark); cursor: pointer; font-size: 1rem; line-height: 1; display: flex; align-items: center; justify-content: center; font-family: inherit; flex-shrink: 0; }
+.btn-circle:hover { background: var(--verde-soft); color: var(--verde-ink); }
 /* ── Modal Perfil (Configuración, sin navegar) ── */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 300; padding: 16px; }
 .modal-overlay[hidden] { display: none; }

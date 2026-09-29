@@ -296,8 +296,8 @@ function taskCards(fnc, tareas) {
     const vencida = t.fecha_limite && String(t.fecha_limite).slice(0, 10) < today;
     return `<li class="task-item"><span class="task-num tnum drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${i + 1}</span><span class="task-body"><strong class="drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${esc(t.titulo)}${vencida ? ' <span class="badge badge-warn">Vencida</span>' : ''}</strong></span></li>`;
   }).join('');
-  const btn = canCreate(fnc) ? `<button class="btn-primary" data-open-modal="tarea-crear" type="button" style="margin:0 0 10px">＋ Nueva tarea</button>` : '';
-  return `<h3 class="rail-sub">Pendientes (${(tareas || []).length})</h3>${btn}<ul class="task-list">${cards || '<li class="done-empty">Sin pendientes.</li>'}</ul>`;
+  const btn = canCreate(fnc) ? `<button class="btn-circle" data-open-modal="tarea-crear" type="button" aria-label="Nueva tarea" title="Nueva tarea">＋</button>` : '';
+  return `<div class="tareas-head"><h3 class="rail-sub">Pendientes (${(tareas || []).length})</h3>${btn}</div><ul class="task-list">${cards || '<li class="done-empty">Sin pendientes.</li>'}</ul>`;
 }
 
 // Ejercicio completo: últimas tareas hechas (compacto, con quién y cuándo).
