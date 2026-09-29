@@ -55,15 +55,28 @@ app.use(session({
 // Modo B: mock = dev offline sin KC | keycloak = staging/prod. Cero cambios de negocio al flipear.
 // Rutas sin guard de sesion: /login, /auth/app, /auth/mock, /auth/callback/app, /error.
 
-// P7 — rate-limit /api/* obligatorio (override en caliente via env + compose environment:)
+// P7 — rate-limit /api/* obligatorio. max como función: override volátil en
+// caliente (revierte al env al reiniciar). Handler con Retry-After (skill).
+const ENV_MAX = parseInt(process.env.RATE_LIMIT_API_PER_MIN || '60', 10);
+let hotMax = null;
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_API_PER_MIN || '60', 10),
+  max: () => (hotMax == null ? ENV_MAX : hotMax),
   standardHeaders: true,
   legacyHeaders: false,
-  handler: (req, res) => res.status(429).json({ error: 'Too Many Requests' }),
+  // Exento: es la llave para subir el límite (sin esto un bloqueo sería irreversible sin restart).
+  skip: (req) => req.path === '/admin/rate-limit',
+  handler: (req, res) => {
+    const reset = req.rateLimit && req.rateLimit.resetTime ? req.rateLimit.resetTime.getTime() : Date.now() + 60000;
+    res.set('Retry-After', String(Math.max(1, Math.ceil((reset - Date.now()) / 1000))));
+    res.status(429).json({ error: 'Too Many Requests' });
+  },
 });
 app.use('/api/', apiLimiter);
+
+function rateLimitMax() {
+  return hotMax == null ? ENV_MAX : hotMax;
+}
 
 // CSRF synchronizer en todos los POST (tras parsers y sesión).
 app.use(verifyCsrf);
@@ -441,6 +454,21 @@ for (const { leaf, sub, mod } of flattenLeaves()) {
   });
 }
 
+// GET/POST /api/admin/rate-limit — ver y cambiar en caliente (solo ADMIN, auditado).
+app.get('/api/admin/rate-limit', needLogin, needRole('ADMIN'), (req, res) => {
+  res.json({ perMin: rateLimitMax(), env: ENV_MAX, override: hotMax != null });
+});
+app.post('/api/admin/rate-limit', needLogin, needRole('ADMIN'), async (req, res) => {
+  const perMin = Number((req.body && req.body.perMin) ?? req.query.perMin);
+  if (!Number.isInteger(perMin) || perMin < 1 || perMin > 100000) {
+    return res.status(400).json({ error: 'perMin entero entre 1 y 100000.' });
+  }
+  hotMax = perMin === ENV_MAX ? null : perMin;
+  await writeAudit(req, { action: 'ratelimit.override', modulo: 'seguridad', detalle: `Límite a ${perMin}/min` });
+  if ((req.headers.accept || '').includes('application/json')) return res.json({ ok: true, perMin });
+  return res.redirect('/seguridad?msg=ratelimit_ok');
+});
+
 app.get('/seguridad', needLogin, needRole('ADMIN'), async (req, res) => {
   const fnc = req.session.fnc;
   let solis = [];
@@ -450,7 +478,9 @@ app.get('/seguridad', needLogin, needRole('ADMIN'), async (req, res) => {
     solis = r.rows;
   } catch { /* sin DB: panel mínimo */ }
   const lis = solis.map((s) => `<li><strong>${views.esc(s.actor_email)}</strong> · ${views.esc(new Date(s.at).toLocaleString('es-CO'))}<br><span>${views.esc(s.detalle || '')}</span></li>`).join('');
-  res.send(page(req, fnc, { path: '/seguridad', title: 'Seguridad' }, `<div class="card"><h1>Seguridad</h1><p>Solo <span class="badge">ADMIN</span>. Rate-limit vigente: <strong>${views.esc(process.env.RATE_LIMIT_API_PER_MIN || '60')}/min</strong> (override en caliente en Fase 2).</p></div>
+  res.send(page(req, fnc, { path: '/seguridad', title: 'Seguridad' }, `<div class="card"><h1>Seguridad</h1><p>Solo <span class="badge">ADMIN</span>. Rate-limit vigente: <strong class="tnum">${rateLimitMax()}/min</strong>${hotMax != null ? ' <span class="badge">override</span>' : ''} (env: ${ENV_MAX}/min).</p>
+<form method="post" action="/api/admin/rate-limit" style="margin:12px 0 0"><input type="hidden" name="_csrf" value="${ensureToken(req)}"><label class="fld"><span>Nuevo límite por minuto y por IP</span><input name="perMin" type="number" min="1" max="100000" value="${rateLimitMax()}"></label><button class="btn-primary" type="submit">Aplicar en caliente</button></form>
+<p>Volátil: revierte al env al reiniciar. Queda en bitácora.</p></div>
 <div class="card"><h2>Solicitudes de cambio de contraseña (${solis.length})</h2><ul class="feed">${lis || '<li>Sin solicitudes.</li>'}</ul><p>Flujo: reset en consola Keycloak + acción requerida <code>UPDATE_PASSWORD</code> (skill fnc-keycloak-users, staging).</p></div>`));
 });
 
