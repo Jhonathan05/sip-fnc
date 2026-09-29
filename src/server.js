@@ -10,6 +10,7 @@ const views = require('./views');
 const { buildFncSession, isFncValid, fingerprintFor } = require('./session');
 const { getMockSession, isKeycloakMode } = require('./auth-provider');
 const { MODULES, NAV, canAccess, flattenLeaves, findLeaf } = require('./modules');
+const { PROCESO_FORM } = require('./task-meta');
 const { getPool, dbReady } = require('./db');
 const { writeAudit } = require('./audit');
 
@@ -19,6 +20,7 @@ app.set('trust proxy', 1); // IP real tras nginx (cf-connecting-ip / x-forwarded
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: '100kb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'cambiar-en-env-minimo-32-chars',
@@ -192,6 +194,43 @@ app.get('/api/tareas', needLogin, needDb, async (req, res) => {
   res.json(rows);
 });
 
+// POST /api/tareas — crear tarea (todos menos consultor). Consume JSON del modal.
+app.post('/api/tareas', needLogin, needDb, async (req, res) => {
+  const fnc = req.session.fnc;
+  const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
+  const isConsultorOnly = roles.length > 0 && roles.every((r) => r === 'consultor');
+  if (fnc.role !== 'ADMIN' && isConsultorOnly) {
+    return res.status(403).json({ ok: false, error: 'Sin permiso para crear tareas.' });
+  }
+  const b = req.body || {};
+  const titulo = String(b.titulo || '').trim();
+  const catalogo = String(process.env.CLIENT_ROLES || 'admin,coordinador,consultor,analista,auxiliar').split(',').map((r) => r.trim().toLowerCase()).filter(Boolean);
+  const rol = String(b.rol || '').trim().toLowerCase();
+  const fecha = String(b.fecha_limite || '').trim();
+  if (titulo.length < 3 || titulo.length > 200) {
+    return res.status(400).json({ ok: false, error: 'Título entre 3 y 200 caracteres.' });
+  }
+  if (!catalogo.includes(rol)) {
+    return res.status(400).json({ ok: false, error: 'Rol destino inválido.' });
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || fecha < new Date().toISOString().slice(0, 10)) {
+    return res.status(400).json({ ok: false, error: 'Fecha límite inválida (hoy o futuro, AAAA-MM-DD).' });
+  }
+  const proceso = Object.prototype.hasOwnProperty.call(PROCESO_FORM, b.proceso) ? b.proceso : '';
+  try {
+    const { rows } = await getPool().query(
+      `INSERT INTO tasks (rol, titulo, detalle, responsable, area, proceso, fecha_limite, automatica)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      [rol, titulo, String(b.detalle || '').slice(0, 2000), String(b.responsable || '').slice(0, 120),
+       String(b.area || '').slice(0, 120), proceso, fecha, b.automatica === true]);
+    await writeAudit(req, { action: 'tarea.crear', modulo: 'tareas', entidadId: String(rows[0].id), detalle: `Creada: ${titulo}` });
+    return res.status(201).json({ ok: true, id: rows[0].id });
+  } catch (e) {
+    console.error('[api/tareas:create]', e.message);
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+
 // POST /api/tareas/:id/validar — botón único del modal: verifica el proceso
 // (automáticas) o confirma (manuales); si verifica OK, marca completada + audita.
 app.post('/api/tareas/:id/validar', needLogin, needDb, async (req, res) => {
@@ -213,13 +252,6 @@ app.post('/api/tareas/:id/validar', needLogin, needDb, async (req, res) => {
   return res.json({ ok: true, msg: 'Tarea completada.' });
 });
 
-// Mapa proceso → formulario/acción (botón "Ir al formulario" del modal).
-const PROCESO_FORM = {
-  'Órdenes SAP / Inversión mensual': '/dashboard?form=/ordenes-sap/procesos/inversion-mensual',
-  'Distribución / Apertura': '/dashboard?form=/distribucion/actualizaciones/distribuciones',
-  'Asignaciones / Aprobación': '/dashboard?form=/asignaciones/actualizaciones/asignaciones',
-  'Informes / Saldos': '/distribucion/informes/saldos',
-};
 
 // Verificadores de procesos automáticos (el proceso ya se ejecutó → se puede completar).
 async function verifyTask(pool, t) {

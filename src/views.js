@@ -2,6 +2,7 @@
 // módulo → subcategoría (colapsable, memoria localStorage) → hoja.
 // permitido = link, sin acceso pero visible = deshabilitado, CONFIG anclada al fondo.
 const { MODULES, NAV, CONFIG, canAccess, flattenLeaves } = require('./modules');
+const { PROCESO_FORM, clientCatalog, canCreate } = require('./task-meta');
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -99,6 +100,48 @@ if(m)m.addEventListener('click',function(e){if(e.target===m)close();});
 document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
 }catch(e){}})();</script>`;
 
+function taskCreateModal() {
+  const rolOpts = clientCatalog().map((r) => `<option value="${r}"${r === 'analista' ? ' selected' : ''}>${esc(r)}</option>`).join('');
+  const procOpts = Object.keys(PROCESO_FORM).map((p) => `<option>${esc(p)}</option>`).join('');
+  return `<div class="modal-overlay" id="tareaCrearModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-label="Nueva tarea">
+    <h2>Nueva tarea</h2>
+    <div class="fld-grid">
+      <label class="fld"><span>Título *</span><input id="tcTitulo" type="text" maxlength="200" placeholder="Qué hay que hacer"></label>
+      <label class="fld"><span>Rol destino *</span><select id="tcRol">${rolOpts}</select></label>
+      <label class="fld"><span>Responsable</span><input id="tcResp" type="text" maxlength="120" placeholder="Persona o equipo"></label>
+      <label class="fld"><span>Área solicitante</span><input id="tcArea" type="text" maxlength="120"></label>
+      <label class="fld"><span>Proceso</span><select id="tcProc"><option value="">—</option>${procOpts}</select></label>
+      <label class="fld"><span>Fecha límite *</span><input id="tcFecha" type="date"></label>
+      <label class="fld"><span>Detalle</span><input id="tcDetalle" type="text" maxlength="500"></label>
+      <label class="fld"><span>Automática</span><select id="tcAuto"><option value="no">No</option><option value="si">Sí</option></select></label>
+    </div>
+    <p id="tcMsg" class="drawer-msg"></p>
+    <div class="drawer-actions"><button class="btn-primary" id="tcGuardar" type="button" style="margin-top:0">Crear tarea</button><button class="btn-logout" data-close-modal type="button">Cancelar</button></div>
+  </div>
+</div>`;
+}
+
+const TASK_CREATE_JS = `<script>(function(){try{
+var m=document.getElementById('tareaCrearModal');
+function close(){if(m)m.hidden=true;}
+document.querySelectorAll('[data-open-modal="tarea-crear"]').forEach(function(b){b.addEventListener('click',function(){if(!m)return;m.hidden=false;var t=document.getElementById('tcTitulo');if(t)t.focus();});});
+document.querySelectorAll('[data-close-modal]').forEach(function(b){if(!b.__tc){b.__tc=true;b.addEventListener('click',close);}});
+if(m)m.addEventListener('click',function(e){if(e.target===m)close();});
+var g=document.getElementById('tcGuardar');
+if(g)g.addEventListener('click',function(){
+var msg=document.getElementById('tcMsg');
+function val(id){var el=document.getElementById(id);return el?el.value.trim():'';}
+var payload={titulo:val('tcTitulo'),rol:val('tcRol'),responsable:val('tcResp'),area:val('tcArea'),proceso:val('tcProc'),fecha_limite:val('tcFecha'),detalle:val('tcDetalle'),automatica:val('tcAuto')==='si'};
+g.disabled=true;if(msg)msg.textContent='Guardando…';
+fetch('/api/tareas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+if(x.d&&x.d.ok){window.location.reload();return;}
+if(msg)msg.textContent=(x.d&&(x.d.error||x.d.msg))||'No se pudo crear.';
+g.disabled=false;
+}).catch(function(){if(msg)msg.textContent='Error de red.';g.disabled=false;});
+});
+}catch(e){}})();</script>`;
+
 const NAV_MEMORY_JS = `<script>(function(){try{var k='sip-nav-open';var open=JSON.parse(localStorage.getItem(k)||'[]');function save(id,on){try{var cur=JSON.parse(localStorage.getItem(k)||'[]');if(on&&cur.indexOf(id)<0)cur.push(id);if(!on)cur=cur.filter(function(x){return x!==id});localStorage.setItem(k,JSON.stringify(cur));}catch(e){}}document.querySelectorAll('details.tree-sub, details.tree-mod').forEach(function(d){var id=d.getAttribute('data-navkey');if(open.indexOf(id)>=0)d.open=true;d.addEventListener('toggle',function(){save(id,d.open)});});
 var scrollAreas=Array.prototype.slice.call(document.querySelectorAll('.sidebar-nav, .rail-scroll'));
 scrollAreas.forEach(function(el){var scrollT=null;el.addEventListener('scroll',function(){el.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){el.classList.remove('is-scrolling');},800);},{passive:true});});}catch(e){}})();</script>`;
@@ -171,8 +214,9 @@ ${navConfig(active, role)}
 </aside>
 <main class="main-container">${body}</main>
 ${profileModal()}
+${taskCreateModal()}
 ${detailDrawer()}
-${active === '/dashboard' ? NAV_RESET_JS : ''}${NAV_MEMORY_JS}${A11Y_JS}${MODAL_JS}${DRAWER_JS}</body></html>`;
+${active === '/dashboard' ? NAV_RESET_JS : ''}${NAV_MEMORY_JS}${A11Y_JS}${MODAL_JS}${DRAWER_JS}${TASK_CREATE_JS}</body></html>`;
 }
 
 function loginPage(appName, kcMode) {
@@ -252,7 +296,8 @@ function taskCards(fnc, tareas) {
     const vencida = t.fecha_limite && String(t.fecha_limite).slice(0, 10) < today;
     return `<li class="task-item"><span class="task-num tnum drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${i + 1}</span><span class="task-body"><strong class="drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${esc(t.titulo)}${vencida ? ' <span class="badge badge-warn">Vencida</span>' : ''}</strong></span></li>`;
   }).join('');
-  return `<h3 class="rail-sub">Pendientes (${(tareas || []).length})</h3><ul class="task-list">${cards || '<li class="done-empty">Sin pendientes.</li>'}</ul>`;
+  const btn = canCreate(fnc) ? `<button class="btn-primary" data-open-modal="tarea-crear" type="button" style="margin:0 0 10px">＋ Nueva tarea</button>` : '';
+  return `<h3 class="rail-sub">Pendientes (${(tareas || []).length})</h3>${btn}<ul class="task-list">${cards || '<li class="done-empty">Sin pendientes.</li>'}</ul>`;
 }
 
 // Ejercicio completo: últimas tareas hechas (compacto, con quién y cuándo).
