@@ -11,6 +11,7 @@ const { buildFncSession, isFncValid, fingerprintFor } = require('./session');
 const { getMockSession, isKeycloakMode } = require('./auth-provider');
 const { MODULES, NAV, canAccess, flattenLeaves, findLeaf } = require('./modules');
 const { PROCESO_FORM } = require('./task-meta');
+const { hydrate } = require('./prefs');
 const { ensureToken, verifyCsrf } = require('./csrf');
 const { getPool, dbReady } = require('./db');
 const { writeAudit } = require('./audit');
@@ -128,9 +129,10 @@ app.get('/login', (req, res) => {
   res.send(views.loginPage(APP_NAME, isKeycloakMode(), ensureToken(req), req.query.reason));
 });
 
-app.post('/auth/mock', (req, res) => {
+app.post('/auth/mock', async (req, res) => {
   if (isKeycloakMode()) return res.redirect('/auth/app');
   setFnc(req, getMockSession(req));
+  await hydrate(req.session.fnc);
   writeAudit(req, { action: 'login.mock', modulo: 'auth' });
   return res.redirect('/dashboard');
 });
@@ -162,6 +164,9 @@ app.get('/auth/callback/app', async (req, res) => {
     setFnc(req, buildFncSession({
       sub: claims.sub, email, displayName: claims.name || email, roles, req,
     }), tokenSet.id_token);
+    req.session.fnc.givenName = String(claims.given_name || '').trim();
+    req.session.fnc.familyName = String(claims.family_name || '').trim();
+    await hydrate(req.session.fnc);
     delete req.session.kc;
     return res.redirect('/dashboard');
   } catch (e) {
@@ -440,6 +445,58 @@ app.post('/api/perfil/solicitar-clave', needLogin, needDb, async (req, res) => {
     await writeAudit(req, { action: 'clave.solicitar', modulo: 'seguridad', detalle: `Solicitud de cambio de contraseña de ${fnc.email} (pendiente reset admin + UPDATE_PASSWORD)` });
   }
   return res.redirect('/dashboard?msg=clave_solicitada');
+});
+
+// POST /api/perfil/preferencia — {display_mode: full|first} (autoservicio).
+app.post('/api/perfil/preferencia', needLogin, needDb, async (req, res) => {
+  const mode = req.body && req.body.display_mode === 'first' ? 'first' : 'full';
+  const { savePrefs } = require('./prefs');
+  const ok = await savePrefs(req.session.fnc.sub, { display_mode: mode });
+  if (!ok) return res.status(500).json({ ok: false, error: 'No se pudo guardar.' });
+  req.session.fnc.displayMode = mode;
+  await writeAudit(req, { action: 'perfil.preferencia', modulo: 'seguridad', detalle: `Nombre mostrado: ${mode}` });
+  return res.json({ ok: true, display_mode: mode });
+});
+
+// POST /api/perfil/foto — subida propia (multipart, token por header).
+// Límites: jpeg/png/webp, 5 MB, magic-bytes reales; salida webp 256px q80 (~20 KB).
+const multer = require('multer');
+const sharp = require('sharp');
+const fs = require('fs');
+const uploadFoto = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    if (['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) return cb(null, true);
+    return cb(new Error('Tipo no permitido (solo jpeg, png, webp).'));
+  },
+});
+app.post('/api/perfil/foto', needLogin, needDb, (req, res) => {
+  uploadFoto.single('foto')(req, res, async (err) => {
+    if (err) {
+      const msg = String(err.message || '');
+      const code = msg.includes('File too large') || msg.includes('5') ? 413 : 400;
+      return res.status(code).json({ ok: false, error: msg.includes('Tipo') ? msg : 'Archivo inválido o mayor a 5 MB.' });
+    }
+    if (!req.file) return res.status(400).json({ ok: false, error: 'Sin archivo.' });
+    try {
+      const safe = String(req.session.fnc.sub).replace(/[^a-zA-Z0-9-]/g, '_').slice(0, 64) || 'user';
+      const dir = require('path').join(__dirname, '..', 'public', 'img', 'user');
+      fs.mkdirSync(dir, { recursive: true });
+      const out = require('path').join(dir, `${safe}.webp`);
+      await sharp(req.file.buffer).resize(256, 256, { fit: 'cover' }).webp({ quality: 80 }).toFile(out);
+      const stat = fs.statSync(out);
+      const { savePrefs } = require('./prefs');
+      const photo = `/img/user/${safe}.webp`;
+      await savePrefs(req.session.fnc.sub, { display_mode: req.session.fnc.displayMode === 'first' ? 'first' : 'full', photo });
+      req.session.fnc.photo = photo;
+      await writeAudit(req, { action: 'perfil.foto', modulo: 'seguridad', detalle: `Foto actualizada (${Math.round(stat.size / 1024)} KB)` });
+      return res.json({ ok: true, photo, kb: Math.round(stat.size / 1024) });
+    } catch (e) {
+      console.error('[perfil/foto]', e.message);
+      return res.status(400).json({ ok: false, error: 'Imagen inválida o corrupta.' });
+    }
+  });
 });
 
 // Hojas del árbol: /:modulo/:sub/:item con guard por hoja (planas "Fase 2" por ahora).

@@ -16,6 +16,8 @@ function getMockSession(req) {
   });
   // Extensión mock-only (fuera del contrato FncSession): foto de la usuaria ejemplo.
   s.photo = '/img/user/MariaDelCarmen.webp';
+  s.givenName = 'María';
+  s.familyName = 'Reyes';
   return s;
 }
 

@@ -917,6 +917,15 @@ code {
     color: var(--text-muted);
 }
 
+.pref-block {
+    margin: 12px 0 0;
+}
+
+.pref-block input[type="file"] {
+    font-size: var(--fs-table);
+    max-width: 100%;
+}
+
 /* ── Skeletons de formularios (Fase 1 visual, Fase 2 negocio) ── */
 .card.form-slot {
     max-width: none;

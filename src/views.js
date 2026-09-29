@@ -3,6 +3,7 @@
 // permitido = link, sin acceso pero visible = deshabilitado, CONFIG anclada al fondo.
 const { MODULES, NAV, CONFIG, canAccess, flattenLeaves } = require('./modules');
 const { PROCESO_FORM, clientCatalog, canCreate } = require('./task-meta');
+const { shownName } = require('./prefs');
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -120,6 +121,16 @@ function profileModal(csrf) {
   <div class="modal-card" role="dialog" aria-modal="true" aria-label="Mi perfil">
     <h2>Mi perfil</h2>
     <div id="perfilBody"><p>Cargando…</p></div>
+    <div class="pref-block"><span class="a11y-sec-label">Nombre mostrado</span>
+      <div class="a11y-seg" role="group" aria-label="Nombre mostrado">
+        <button id="prefFull" type="button" aria-pressed="true">Completo</button>
+        <button id="prefFirst" type="button" aria-pressed="false">Solo nombre</button>
+      </div>
+    </div>
+    <div class="pref-block"><span class="a11y-sec-label">Foto (jpeg, png, webp · máx 5 MB → se guarda en 256px)</span>
+      <div class="a11y-font"><input id="prefFoto" type="file" accept=".jpg,.jpeg,.png,.webp"><button id="prefFotoBtn" type="button">Subir</button></div>
+    </div>
+    <p id="prefMsg" class="drawer-msg"></p>
     <form method="post" action="/api/perfil/solicitar-clave" style="margin:12px 0 0">${csrfField}
       <button class="btn-primary" type="submit" style="margin-top:0">Solicitar cambio de contraseña</button>
     </form>
@@ -131,7 +142,24 @@ function profileModal(csrf) {
 
 const MODAL_JS = `<script>(function(){try{
 var m=document.getElementById('perfilModal');
-document.querySelectorAll('[data-open-modal="perfil"]').forEach(function(b){b.addEventListener('click',function(){if(!m)return;m.hidden=false;fetch('/api/me').then(function(r){return r.json();}).then(function(u){var left=u.exp&&u.iat?Math.max(0,u.exp-Math.floor(Date.now()/1000)):0;var hh=Math.floor(left/3600),mm=Math.floor((left%3600)/60);document.getElementById('perfilBody').innerHTML='<p>Usuario: <strong>'+String(u.displayName||'')+'</strong></p><p>Email: <strong>'+String(u.email||'')+'</strong></p><p>Rol: <span class=&quot;badge&quot;>'+String(u.role||'')+'</span> '+(u.roles||[]).join(', ')+'</p><p>Sesión vigente por: <strong>'+hh+'h '+mm+'min</strong></p>';}).catch(function(){});});});
+function csrfH(){try{var m=document.querySelector('meta[name="csrf-token"]');return m?m.getAttribute('content')||'':'';}catch(e){return '';}}
+function syncPref(mode){var f=document.getElementById('prefFull'),s=document.getElementById('prefFirst');if(f)f.setAttribute('aria-pressed',mode==='first'?'false':'true');if(s)s.setAttribute('aria-pressed',mode==='first'?'true':'false');}
+function prefMsg(t){var m=document.getElementById('prefMsg');if(m)m.textContent=t||'';}
+document.querySelectorAll('[data-open-modal="perfil"]').forEach(function(b){b.addEventListener('click',function(){if(!m)return;m.hidden=false;prefMsg('');fetch('/api/me').then(function(r){return r.json();}).then(function(u){var left=u.exp&&u.iat?Math.max(0,u.exp-Math.floor(Date.now()/1000)):0;var hh=Math.floor(left/3600),mm=Math.floor((left%3600)/60);document.getElementById('perfilBody').innerHTML='<p>Usuario: <strong>'+String(u.displayName||'')+'</strong></p><p>Email: <strong>'+String(u.email||'')+'</strong></p><p>Rol: <span class=&quot;badge&quot;>'+String(u.role||'')+'</span> '+(u.roles||[]).join(', ')+'</p><p>Sesión vigente por: <strong>'+hh+'h '+mm+'min</strong></p>';syncPref(u.displayMode||'full');}).catch(function(){});});});
+function savePref(mode){prefMsg('Guardando…');fetch('/api/perfil/preferencia',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':csrfH()},body:JSON.stringify({display_mode:mode})}).then(function(r){return r.json();}).then(function(d){if(d&&d.ok){syncPref(d.display_mode);prefMsg('Preferencia guardada. Recarga para verla en el header.');}else{prefMsg((d&&d.error)||'No se pudo guardar.');}}).catch(function(){prefMsg('Error de red.');});}
+var pf=document.getElementById('prefFull'),ps=document.getElementById('prefFirst');
+if(pf)pf.addEventListener('click',function(){savePref('full');});
+if(ps)ps.addEventListener('click',function(){savePref('first');});
+var fb=document.getElementById('prefFotoBtn');
+if(fb)fb.addEventListener('click',function(){
+var fi=document.getElementById('prefFoto');
+if(!fi||!fi.files||!fi.files[0]){prefMsg('Elige un archivo (jpeg, png o webp, máx 5 MB).');return;}
+var fd=new FormData();fd.append('foto',fi.files[0]);
+prefMsg('Subiendo y comprimiendo…');
+fetch('/api/perfil/foto',{method:'POST',headers:{'x-csrf-token':csrfH()},body:fd}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+if(x.d&&x.d.ok){prefMsg('Foto actualizada ('+x.d.kb+' KB). Recarga para verla.');}else{prefMsg((x.d&&(x.d.error||x.d.msg))||('Error '+x.s+'.'));}
+}).catch(function(){prefMsg('Error de red.');});
+});
 function close(){if(m)m.hidden=true;}
 document.querySelectorAll('[data-close-modal]').forEach(function(b){b.addEventListener('click',close);});
 if(m)m.addEventListener('click',function(e){if(e.target===m)close();});
@@ -242,7 +270,7 @@ function layout(appName, fnc, active, body, csrf, nonce) {
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-mini.svg" alt="Comité de Cafeteros del Tolima" height="30"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="26"><span class="brand-divider" aria-hidden="true"></span><div><span class="header-brand-name"><strong>SIP</strong> Sistema de Información de Proyectos</span></div></div></div>
-<div class="header-user-profile">${a11yControls()}${fnc?.photo ? `<img class="user-photo" src="${fnc.photo}" alt="${esc(fnc.displayName || 'Usuario')}">` : `<div class="user-avatar">${esc(initial)}</div>`}<div><span class="user-name">${esc(email)}</span><span class="user-email">${esc(role)}</span></div>
+<div class="header-user-profile">${a11yControls()}${fnc?.photo ? `<img class="user-photo" src="${fnc.photo}" alt="${esc(shownName(fnc) || 'Usuario')}">` : `<div class="user-avatar">${esc(initial)}</div>`}<div><span class="user-name" title="${esc((fnc.displayName || '') + (fnc.email ? ' · ' + fnc.email : ''))}">${esc(shownName(fnc))}</span></div>
 <form method="post" action="/auth/logout" style="margin:0">${csrfField}<button class="btn-logout" type="submit">Salir</button></form></div>
 </div></header>
 <aside class="app-sidebar" aria-label="Navegacion principal">
