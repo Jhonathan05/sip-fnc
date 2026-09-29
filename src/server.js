@@ -31,7 +31,9 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: [(_req, res) => `'nonce-${res.locals.nonce}'`],
-      styleSrc: ["'self'"],
+      // style-src 'unsafe-inline': los style="..." de vistas van a clases poco a
+      // poco; bloquearlos hoy rompería el layout. Scripts siguen con nonce.
+      styleSrc: ["'self'", "'unsafe-inline'"],
       fontSrc: ["'self'"],
       imgSrc: ["'self'", 'data:'],
       connectSrc: ["'self'"],
@@ -400,7 +402,7 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
     // Selección del árbol: el formulario inline marca su hoja como activa
     // (abre módulo/sub y resalta la hoja; sin form queda Dashboard).
     const activePath = form ? form.leaf.path : MODULES[0].path;
-    res.send(page(req, fnc, { path: activePath }, views.dashboardPage(fnc, { saldos, tareas: t.rows, hechas: d.rows, actividad: a.rows, form })));
+    res.send(page(req, fnc, { path: activePath }, views.dashboardPage(fnc, { saldos, tareas: t.rows, hechas: d.rows, actividad: a.rows, form, nonce: req.nonce })));
   } catch (e) {
     console.error('[dashboard]', e.message);
     // Si el error ocurre con ?form válido, conservar la selección del árbol.

@@ -211,7 +211,8 @@ g.disabled=false;
 
 const NAV_MEMORY_JS = `<script>(function(){try{var k='sip-nav-open';var open=JSON.parse(localStorage.getItem(k)||'[]');function save(id,on){try{var cur=JSON.parse(localStorage.getItem(k)||'[]');if(on&&cur.indexOf(id)<0)cur.push(id);if(!on)cur=cur.filter(function(x){return x!==id});localStorage.setItem(k,JSON.stringify(cur));}catch(e){}}document.querySelectorAll('details.tree-sub, details.tree-mod').forEach(function(d){var id=d.getAttribute('data-navkey');if(open.indexOf(id)>=0)d.open=true;d.addEventListener('toggle',function(){save(id,d.open)});});
 var scrollAreas=Array.prototype.slice.call(document.querySelectorAll('.sidebar-nav, .rail-scroll'));
-scrollAreas.forEach(function(el){var scrollT=null;el.addEventListener('scroll',function(){el.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){el.classList.remove('is-scrolling');},800);},{passive:true});});}catch(e){}})();</script>`;
+scrollAreas.forEach(function(el){var scrollT=null;el.addEventListener('scroll',function(){el.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){el.classList.remove('is-scrolling');},800);},{passive:true});});
+document.addEventListener('error',function(e){var t=e.target;if(t&&t.classList&&t.classList.contains('user-photo')){var d=document.createElement('div');d.className='user-avatar';d.textContent=(t.getAttribute('alt')||'U').trim().charAt(0).toUpperCase()||'U';t.replaceWith(d);}},true);}catch(e){}})();</script>`;
 
 // Reset al seleccionar Dashboard: el dashboard sin formulario inline se renderiza con
 // active '/dashboard'. Limpiar la memoria de ramas para que el árbol cargue colapsado.
@@ -463,7 +464,7 @@ render();}catch(e){}})();</script>`;
 
 // Mini panel Actividad reciente: bitácora stepper solo plataforma (el servidor ya
 // excluye login/logout). Item más reciente destacado; 3 por página con paginación.
-function activityFeed(actividad) {
+function activityFeed(actividad, nonce) {
   const rows = actividad || [];
   if (!rows.length) return `<div class="stepper-box"><p class="stepper-empty">Sin movimientos.</p></div>`;
   const PER = 3, pages = Math.ceil(rows.length / PER);
@@ -487,7 +488,7 @@ function activityFeed(actividad) {
       <span class="stepper-count tnum" data-step-count>1 / ${pages}</span>
       <button class="stepper-button stepper-button-primary" data-step-next type="button">Siguiente${STEP_NEXT_SVG}</button>
     </div>` : '';
-  return `<div class="stepper-box" data-stepper>${steps}${controls}</div>${ACTIVITY_PAGER_JS}`;
+  return `<div class="stepper-box" data-stepper>${steps}${controls}</div>${withNonce(ACTIVITY_PAGER_JS, nonce)}`;
 }
 
 // Drawer lateral derecho (detalle Actividad/Tarea): full-height, blur fuera.
@@ -563,7 +564,7 @@ function dashboardPage(fnc, data) {
   const nAct = (data.actividad || []).length;
   return `<div class="dash-grid">
 <div>${kpiStrip(data.saldos)}${formSlot(data.form)}</div>
-<div class="dash-rail"><div class="card rail-card"><div class="rail-card-head"><h2>Actividad reciente</h2><span class="rail-card-meta tnum">${nAct} movimientos</span></div><div class="rail-scroll">${activityFeed(data.actividad)}</div></div><div class="card rail-card"><div class="rail-card-head"><h2>Tareas</h2></div><div class="rail-scroll">${taskCards(fnc, data.tareas)}${doneList(data.hechas)}</div></div></div>
+<div class="dash-rail"><div class="card rail-card"><div class="rail-card-head"><h2>Actividad reciente</h2><span class="rail-card-meta tnum">${nAct} movimientos</span></div><div class="rail-scroll">${activityFeed(data.actividad, data.nonce)}</div></div><div class="card rail-card"><div class="rail-card-head"><h2>Tareas</h2></div><div class="rail-scroll">${taskCards(fnc, data.tareas)}${doneList(data.hechas)}</div></div></div>
 </div>`;
 }
 
