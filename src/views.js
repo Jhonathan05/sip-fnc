@@ -77,12 +77,13 @@ function navConfig(active, role) {
   return `<div class="nav-config"><span class="sidebar-section-label">Configuración</span>${links}</div>`;
 }
 
-function profileModal() {
+function profileModal(csrf) {
+  const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
   return `<div class="modal-overlay" id="perfilModal" hidden>
   <div class="modal-card" role="dialog" aria-modal="true" aria-label="Mi perfil">
     <h2>Mi perfil</h2>
     <div id="perfilBody"><p>Cargando…</p></div>
-    <form method="post" action="/api/perfil/solicitar-clave" style="margin:12px 0 0">
+    <form method="post" action="/api/perfil/solicitar-clave" style="margin:12px 0 0">${csrfField}
       <button class="btn-primary" type="submit" style="margin-top:0">Solicitar cambio de contraseña</button>
     </form>
     <p class="modal-note">Tu solicitud llega al administrador, quien restablece tu acceso y te pide definir una nueva clave en el siguiente ingreso. La consola de cuenta Keycloak no está expuesta.</p>
@@ -134,7 +135,8 @@ var msg=document.getElementById('tcMsg');
 function val(id){var el=document.getElementById(id);return el?el.value.trim():'';}
 var payload={titulo:val('tcTitulo'),rol:val('tcRol'),responsable:val('tcResp'),area:val('tcArea'),proceso:val('tcProc'),fecha_limite:val('tcFecha'),detalle:val('tcDetalle'),automatica:val('tcAuto')==='si'};
 g.disabled=true;if(msg)msg.textContent='Guardando…';
-fetch('/api/tareas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+var tk='';try{var mm=document.querySelector('meta[name="csrf-token"]');tk=mm?mm.getAttribute('content')||'':'';}catch(e){}
+fetch('/api/tareas',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':tk},body:JSON.stringify(payload)}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
 if(x.d&&x.d.ok){window.location.reload();return;}
 if(msg)msg.textContent=(x.d&&(x.d.error||x.d.msg))||'No se pudo crear.';
 g.disabled=false;
@@ -194,15 +196,17 @@ var navBtn=document.getElementById('navCollapseBtn');
 if(navBtn){if(document.documentElement.classList.contains('nav-collapsed'))navBtn.setAttribute('aria-label','Expandir menú');navBtn.addEventListener('click',function(){var on=!document.documentElement.classList.contains('nav-collapsed');document.documentElement.classList.toggle('nav-collapsed',on);navBtn.setAttribute('aria-label',on?'Expandir menú':'Contraer menú');try{localStorage.setItem('sip-nav-collapsed',on?'1':'0');}catch(e){}});}
 sync();}catch(e){}})();</script>`;
 
-function layout(appName, fnc, active, body) {
+function layout(appName, fnc, active, body, csrf) {
   const email = fnc?.email || '';
   const role = fnc?.role || '';
   const initial = email.trim().charAt(0).toUpperCase() || 'U';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${A11Y_HEAD_JS}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
+  const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
+  const csrfMetaTag = csrf ? `<meta name="csrf-token" content="${csrf}">` : '';
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${A11Y_HEAD_JS}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-mini.svg" alt="Comité de Cafeteros del Tolima" height="30"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="26"><span class="brand-divider" aria-hidden="true"></span><div><span class="header-brand-name"><strong>SIP</strong> Sistema de Información de Proyectos</span></div></div></div>
 <div class="header-user-profile">${a11yControls()}<div class="user-avatar">${esc(initial)}</div><div><span class="user-name">${esc(email)}</span><span class="user-email">${esc(role)}</span></div>
-<form method="post" action="/auth/logout" style="margin:0"><button class="btn-logout" type="submit">Salir</button></form></div>
+<form method="post" action="/auth/logout" style="margin:0">${csrfField}<button class="btn-logout" type="submit">Salir</button></form></div>
 </div></header>
 <aside class="app-sidebar" aria-label="Navegacion principal">
 <nav class="sidebar-nav">
@@ -213,19 +217,20 @@ ${navConfig(active, role)}
 <div class="nav-collapse-bar"><button class="nav-collapse-btn" id="navCollapseBtn" aria-label="Contraer menú" title="Contraer / expandir menú"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9.5 3v18"/></svg></button></div>
 </aside>
 <main class="main-container">${body}</main>
-${profileModal()}
+${profileModal(csrf)}
 ${taskCreateModal()}
 ${detailDrawer()}
 ${active === '/dashboard' ? NAV_RESET_JS : ''}${NAV_MEMORY_JS}${A11Y_JS}${MODAL_JS}${DRAWER_JS}${TASK_CREATE_JS}</body></html>`;
 }
 
-function loginPage(appName, kcMode) {
+function loginPage(appName, kcMode, csrf) {
+  const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="card"><div class="login-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-tolima.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-sip" src="/img/logo-sip.svg" alt="SIP" height="30"></div><h1>${esc(appName)}</h1>
 <p>Sistema de Información de Proyectos — gestión e informes contables por periodos.</p>
 ${kcMode
       ? `<a class="btn-primary" href="/auth/app">Continuar con Comit\u00e9 Tolima</a>`
-      : `<form method="post" action="/auth/mock" style="margin:0"><button class="btn-primary" type="submit">Continuar con Comit\u00e9 Tolima</button></form><p><span class="badge">mock offline</span> sin Keycloak.</p>`}
+      : `<form method="post" action="/auth/mock" style="margin:0">${csrfField}<button class="btn-primary" type="submit">Continuar con Comit\u00e9 Tolima</button></form><p><span class="badge">mock offline</span> sin Keycloak.</p>`}
 </div></main></body></html>`;
 }
 
@@ -455,7 +460,13 @@ var b=document.createElement('button');b.textContent='Validar tarea';b.className
 b.addEventListener('click',function(){
 if(!t.automatica&&!window.confirm('¿Confirmas completar "'+(t.titulo||'')+'"?'))return;
 b.disabled=true;
-fetch('/api/tareas/'+encodeURIComponent(t.id)+'/validar',{method:'POST'}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+function csrfHeader() {
+  try {
+    var m = document.querySelector('meta[name="csrf-token"]');
+    return m ? m.getAttribute('content') || '' : '';
+  } catch (e) { return ''; }
+}
+fetch('/api/tareas/'+encodeURIComponent(t.id)+'/validar',{method:'POST',headers:{'x-csrf-token':csrfHeader()}}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
 if(x.d&&x.d.ok){window.location.reload();return;}
 var m=document.getElementById('drawerMsg');if(m)m.textContent=(x.d&&(x.d.msg||x.d.error))||'No se pudo validar.';
 b.disabled=false;

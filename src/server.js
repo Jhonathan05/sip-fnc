@@ -11,6 +11,7 @@ const { buildFncSession, isFncValid, fingerprintFor } = require('./session');
 const { getMockSession, isKeycloakMode } = require('./auth-provider');
 const { MODULES, NAV, canAccess, flattenLeaves, findLeaf } = require('./modules');
 const { PROCESO_FORM } = require('./task-meta');
+const { ensureToken, verifyCsrf } = require('./csrf');
 const { getPool, dbReady } = require('./db');
 const { writeAudit } = require('./audit');
 
@@ -41,6 +42,9 @@ const apiLimiter = rateLimit({
   handler: (req, res) => res.status(429).json({ error: 'Too Many Requests' }),
 });
 app.use('/api/', apiLimiter);
+
+// CSRF synchronizer en todos los POST (tras parsers y sesión).
+app.use(verifyCsrf);
 
 const needLogin = (req, res, next) => {
   const fnc = req.session?.fnc;
@@ -73,7 +77,7 @@ app.get('/', (req, res) => {
 
 app.get('/login', (req, res) => {
   if (isFncValid(req.session?.fnc)) return res.redirect('/dashboard');
-  res.send(views.loginPage(APP_NAME, isKeycloakMode()));
+  res.send(views.loginPage(APP_NAME, isKeycloakMode(), ensureToken(req)));
 });
 
 app.post('/auth/mock', (req, res) => {
@@ -291,7 +295,7 @@ app.get('/api/tareas/:id', needLogin, needDb, async (req, res) => {
   }
 });
 
-const page = (fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body);
+const page = (req, fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body, ensureToken(req));
 
 app.get('/dashboard', needLogin, needDb, async (req, res) => {
   const fnc = req.session.fnc;
@@ -337,7 +341,7 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
     // Selección del árbol: el formulario inline marca su hoja como activa
     // (abre módulo/sub y resalta la hoja; sin form queda Dashboard).
     const activePath = form ? form.leaf.path : MODULES[0].path;
-    res.send(page(fnc, { path: activePath }, views.dashboardPage(fnc, { saldos, tareas: t.rows, hechas: d.rows, actividad: a.rows, form })));
+    res.send(page(req, fnc, { path: activePath }, views.dashboardPage(fnc, { saldos, tareas: t.rows, hechas: d.rows, actividad: a.rows, form })));
   } catch (e) {
     console.error('[dashboard]', e.message);
     // Si el error ocurre con ?form válido, conservar la selección del árbol.
@@ -348,7 +352,7 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
         if (hit && canAccess(fnc.role, hit.leaf) && hit.sub.kind !== 'informe') activePath = hit.leaf.path;
       }
     } catch { /* mantener Dashboard */ }
-    res.send(page(fnc, { path: activePath }, `<div class="alert-err">No se pudo cargar el tablero.</div>`));
+    res.send(page(req, fnc, { path: activePath }, `<div class="alert-err">No se pudo cargar el tablero.</div>`));
   }
 });
 
@@ -363,7 +367,7 @@ for (const mod of NAV.filter((m) => (m.children || []).length > 0)) {
     }
     const subs = (mod.children || []).map((s) =>
       `<div class="card"><h1>${views.esc(s.title)}</h1><p>${views.esc(s.desc || '')}</p><p>${(s.children || []).length} opciones.</p></div>`).join('');
-    res.send(page(fnc, { path: mod.path, title: mod.title },
+    res.send(page(req, fnc, { path: mod.path, title: mod.title },
       `<div class="card"><h1>${views.esc(mod.title)}</h1><p>Negocio en Fase 2. Tu acceso actual: <span class="badge">${views.esc(fnc.role)}</span></p></div>${subs}`));
   });
 }
@@ -391,7 +395,7 @@ for (const { leaf, sub, mod } of flattenLeaves()) {
     if (!canAccess(fnc.role, leaf)) {
       return res.status(403).send(views.errorPage(fnc, 'forbidden'));
     }
-    res.send(page(fnc, { path: leaf.path, title: leaf.title },
+    res.send(page(req, fnc, { path: leaf.path, title: leaf.title },
       `<p><a href="${mod.path}">${views.esc(mod.title)}</a> / ${views.esc(sub.title)}</p><div class="card"><h1>${views.esc(leaf.title)}</h1><p>Negocio en Fase 2. Tu acceso actual: <span class="badge">${views.esc(fnc.role)}</span></p></div>`));
   });
 }
@@ -405,7 +409,7 @@ app.get('/seguridad', needLogin, needRole('ADMIN'), async (req, res) => {
     solis = r.rows;
   } catch { /* sin DB: panel mínimo */ }
   const lis = solis.map((s) => `<li><strong>${views.esc(s.actor_email)}</strong> · ${views.esc(new Date(s.at).toLocaleString('es-CO'))}<br><span>${views.esc(s.detalle || '')}</span></li>`).join('');
-  res.send(page(fnc, { path: '/seguridad', title: 'Seguridad' }, `<div class="card"><h1>Seguridad</h1><p>Solo <span class="badge">ADMIN</span>. Rate-limit vigente: <strong>${views.esc(process.env.RATE_LIMIT_API_PER_MIN || '60')}/min</strong> (override en caliente en Fase 2).</p></div>
+  res.send(page(req, fnc, { path: '/seguridad', title: 'Seguridad' }, `<div class="card"><h1>Seguridad</h1><p>Solo <span class="badge">ADMIN</span>. Rate-limit vigente: <strong>${views.esc(process.env.RATE_LIMIT_API_PER_MIN || '60')}/min</strong> (override en caliente en Fase 2).</p></div>
 <div class="card"><h2>Solicitudes de cambio de contraseña (${solis.length})</h2><ul class="feed">${lis || '<li>Sin solicitudes.</li>'}</ul><p>Flujo: reset en consola Keycloak + acción requerida <code>UPDATE_PASSWORD</code> (skill fnc-keycloak-users, staging).</p></div>`));
 });
 
@@ -423,3 +427,5 @@ if (require.main === module) {
   app.listen(PORT, () => console.log(`[${APP_NAME}] http://localhost:${PORT} provider=${process.env.AUTH_PROVIDER || 'mock'}`));
 }
 module.exports = app;
+
+
