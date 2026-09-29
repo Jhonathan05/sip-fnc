@@ -121,6 +121,9 @@ function profileModal(csrf) {
   <div class="modal-card" role="dialog" aria-modal="true" aria-label="Mi perfil">
     <h2>Mi perfil</h2>
     <div id="perfilBody"><p>Cargando…</p></div>
+    <div class="pref-block"><span class="a11y-sec-label">Mi actividad (incluye mi seguridad)</span>
+      <ul class="feed" id="perfilFeed"><li>Cargando…</li></ul>
+    </div>
     <div class="pref-block"><span class="a11y-sec-label">Nombre mostrado</span>
       <div class="a11y-seg" role="group" aria-label="Nombre mostrado">
         <button id="prefFull" type="button" aria-pressed="true">Completo</button>
@@ -145,7 +148,8 @@ var m=document.getElementById('perfilModal');
 function csrfH(){try{var m=document.querySelector('meta[name="csrf-token"]');return m?m.getAttribute('content')||'':'';}catch(e){return '';}}
 function syncPref(mode){var f=document.getElementById('prefFull'),s=document.getElementById('prefFirst');if(f)f.setAttribute('aria-pressed',mode==='first'?'false':'true');if(s)s.setAttribute('aria-pressed',mode==='first'?'true':'false');}
 function prefMsg(t){var m=document.getElementById('prefMsg');if(m)m.textContent=t||'';}
-document.querySelectorAll('[data-open-modal="perfil"]').forEach(function(b){b.addEventListener('click',function(){if(!m)return;m.hidden=false;prefMsg('');fetch('/api/me').then(function(r){return r.json();}).then(function(u){var left=u.exp&&u.iat?Math.max(0,u.exp-Math.floor(Date.now()/1000)):0;var hh=Math.floor(left/3600),mm=Math.floor((left%3600)/60);document.getElementById('perfilBody').innerHTML='<p>Usuario: <strong>'+String(u.displayName||'')+'</strong></p><p>Email: <strong>'+String(u.email||'')+'</strong></p><p>Rol: <span class=&quot;badge&quot;>'+String(u.role||'')+'</span> '+(u.roles||[]).join(', ')+'</p><p>Sesión vigente por: <strong>'+hh+'h '+mm+'min</strong></p>';syncPref(u.displayMode||'full');}).catch(function(){});});});
+document.querySelectorAll('[data-open-modal="perfil"]').forEach(function(b){b.addEventListener('click',function(){if(!m)return;m.hidden=false;prefMsg('');fetch('/api/me').then(function(r){return r.json();}).then(function(u){var left=u.exp&&u.iat?Math.max(0,u.exp-Math.floor(Date.now()/1000)):0;var hh=Math.floor(left/3600),mm=Math.floor((left%3600)/60);document.getElementById('perfilBody').innerHTML='<p>Usuario: <strong>'+String(u.displayName||'')+'</strong></p><p>Email: <strong>'+String(u.email||'')+'</strong></p><p>Rol: <span class=&quot;badge&quot;>'+String(u.role||'')+'</span> '+(u.roles||[]).join(', ')+'</p><p>Sesión vigente por: <strong>'+hh+'h '+mm+'min</strong></p>';syncPref(u.displayMode||'full');
+fetch('/api/actividad/mia').then(function(r){return r.json();}).then(function(rows){var f=document.getElementById('perfilFeed');if(!f)return;if(!rows||!rows.length){f.innerHTML='<li>Sin movimientos.</li>';return;}f.innerHTML=rows.slice(0,8).map(function(a){var d=new Date(a.at);var when=isNaN(d)?'':d.toLocaleString('es-CO');return '<li><strong>'+String(a.action||'')+'</strong> <span class=&quot;badge&quot;>'+String(a.modulo||'')+'</span><br><span>'+String(a.detalle||'')+'</span> <em class=&quot;tnum&quot;>'+when+'</em></li>';}).join('');}).catch(function(){});}).catch(function(){});});});
 function savePref(mode){prefMsg('Guardando…');fetch('/api/perfil/preferencia',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':csrfH()},body:JSON.stringify({display_mode:mode})}).then(function(r){return r.json();}).then(function(d){if(d&&d.ok){syncPref(d.display_mode);prefMsg('Preferencia guardada. Recarga para verla en el header.');}else{prefMsg((d&&d.error)||'No se pudo guardar.');}}).catch(function(){prefMsg('Error de red.');});}
 var pf=document.getElementById('prefFull'),ps=document.getElementById('prefFirst');
 if(pf)pf.addEventListener('click',function(){savePref('full');});

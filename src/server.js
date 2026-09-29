@@ -218,11 +218,20 @@ app.get('/api/saldos', needLogin, needDb, async (req, res) => {
   }));
 });
 
-// GET /api/actividad — últimos 15 movimientos (bitácora, resumen abstracto).
+// GET /api/actividad — plataforma financiera (sin auth ni seguridad).
 app.get('/api/actividad', needLogin, needDb, async (req, res) => {
   const { rows } = await getPool().query(
     `SELECT id, created_at AS at, actor_email, action, modulo, entidad_id, detalle
-     FROM audit_log ORDER BY id DESC LIMIT 15`);
+     FROM audit_log WHERE modulo NOT IN ('auth','seguridad') ORDER BY id DESC LIMIT 15`);
+  res.json(rows);
+});
+
+// GET /api/actividad/mia — todo lo propio, incluida mi seguridad.
+app.get('/api/actividad/mia', needLogin, needDb, async (req, res) => {
+  const { rows } = await getPool().query(
+    `SELECT id, created_at AS at, actor_email, action, modulo, entidad_id, detalle
+     FROM audit_log WHERE actor_sub = $1 ORDER BY id DESC LIMIT 15`,
+    [req.session.fnc.sub]);
   res.json(rows);
 });
 
@@ -375,7 +384,7 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
     const [s, a] = await Promise.all([
       pool.query('SELECT tipo, vigencia, asignado, ejecutado FROM distribuciones ORDER BY vigencia DESC, tipo'),
       // Mini panel: solo plataforma (auth/sistema queda fuera: login.*, logout).
-      pool.query(`SELECT id, created_at AS at, actor_email, action, modulo, detalle FROM audit_log WHERE action NOT IN ('login.mock','login.keycloak','logout') ORDER BY id DESC LIMIT 15`),
+      pool.query(`SELECT id, created_at AS at, actor_email, action, modulo, detalle FROM audit_log WHERE modulo NOT IN ('auth','seguridad') ORDER BY id DESC LIMIT 15`),
     ]);
     const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
     let tq = `SELECT id, titulo, detalle, responsable, area, proceso, fecha_limite, automatica FROM tasks WHERE estado='pendiente'`;
@@ -535,16 +544,22 @@ app.post('/api/admin/rate-limit', needLogin, needRole('ADMIN'), async (req, res)
 app.get('/seguridad', needLogin, needRole('ADMIN'), async (req, res) => {
   const fnc = req.session.fnc;
   let solis = [];
+  let audit = [];
   try {
     const r = await getPool().query(
       `SELECT actor_email, detalle, created_at AS at FROM audit_log WHERE action = 'clave.solicitar' ORDER BY id DESC LIMIT 20`);
     solis = r.rows;
+    const a = await getPool().query(
+      `SELECT actor_email, action, modulo, detalle, created_at AS at FROM audit_log ORDER BY id DESC LIMIT 50`);
+    audit = a.rows;
   } catch { /* sin DB: panel mínimo */ }
   const lis = solis.map((s) => `<li><strong>${views.esc(s.actor_email)}</strong> · ${views.esc(new Date(s.at).toLocaleString('es-CO'))}<br><span>${views.esc(s.detalle || '')}</span></li>`).join('');
+  const auditRows = audit.map((a) => `<tr><td class="tnum">${views.esc(new Date(a.at).toLocaleString('es-CO'))}</td><td>${views.esc(a.actor_email)}</td><td><code>${views.esc(a.action)}</code></td><td><span class="badge">${views.esc(a.modulo || '')}</span></td><td>${views.esc(a.detalle || '')}</td></tr>`).join('');
   res.send(page(req, fnc, { path: '/seguridad', title: 'Seguridad' }, `<div class="card"><h1>Seguridad</h1><p>Solo <span class="badge">ADMIN</span>. Rate-limit vigente: <strong class="tnum">${rateLimitMax()}/min</strong>${hotMax != null ? ' <span class="badge">override</span>' : ''} (env: ${ENV_MAX}/min).</p>
 <form method="post" action="/api/admin/rate-limit" style="margin:12px 0 0"><input type="hidden" name="_csrf" value="${ensureToken(req)}"><label class="fld"><span>Nuevo límite por minuto y por IP</span><input name="perMin" type="number" min="1" max="100000" value="${rateLimitMax()}"></label><button class="btn-primary" type="submit">Aplicar en caliente</button></form>
 <p>Volátil: revierte al env al reiniciar. Queda en bitácora.</p></div>
-<div class="card"><h2>Solicitudes de cambio de contraseña (${solis.length})</h2><ul class="feed">${lis || '<li>Sin solicitudes.</li>'}</ul><p>Flujo: reset en consola Keycloak + acción requerida <code>UPDATE_PASSWORD</code> (skill fnc-keycloak-users, staging).</p></div>`));
+<div class="card"><h2>Solicitudes de cambio de contraseña (${solis.length})</h2><ul class="feed">${lis || '<li>Sin solicitudes.</li>'}</ul><p>Flujo: reset en consola Keycloak + acción requerida <code>UPDATE_PASSWORD</code> (skill fnc-keycloak-users, staging).</p></div>
+<div class="card"><h2>Auditoría completa (solo admin, incluye seguridad)</h2><table><thead><tr><th>Fecha</th><th>Actor</th><th>Acción</th><th>Módulo</th><th>Detalle</th></tr></thead><tbody>${auditRows || '<tr><td colspan="5">Sin movimientos.</td></tr>'}</tbody></table></div>`));
 });
 
 // Matriz viva de roles: qué ve cada rol (permitido / deshabilitado / oculto).
