@@ -1,5 +1,7 @@
 // Preferencias por usuario (nombre mostrado + foto). Clave: sub de sesión.
 // Espejo en sesión para no consultar en cada render; se refresca al guardar.
+const fs = require('fs');
+const path = require('path');
 const { getPool } = require('./db');
 
 async function getPrefs(sub) {
@@ -38,12 +40,26 @@ function shownName(fnc) {
   return fnc.displayName || fnc.email || '';
 }
 
-/** Hidrata fnc con prefs (llamar tras login y tras guardar). */
+/** Hidrata fnc con prefs (llamar tras login y tras guardar).
+ *  Auto-repara: si la foto referenciada no existe en disco se ignora y se
+ *  limpia la fila (una preferencia nunca debe apuntar a un archivo ausente). */
 async function hydrate(fnc) {
   if (!fnc || !fnc.sub) return fnc;
   const p = await getPrefs(fnc.sub);
   fnc.displayMode = p.display_mode;
-  if (p.photo) fnc.photo = p.photo;
+  if (p.photo) {
+    const abs = path.join(__dirname, '..', 'public', p.photo.replace(/^\//, '').split('/').join(path.sep));
+    if (fs.existsSync(abs)) {
+      fnc.photo = p.photo;
+    } else {
+      const pool = getPool();
+      if (pool) {
+        try {
+          await pool.query('UPDATE user_prefs SET photo = NULL, updated_at = now() WHERE sub = $1', [fnc.sub]);
+        } catch { /* best-effort */ }
+      }
+    }
+  }
   return fnc;
 }
 
