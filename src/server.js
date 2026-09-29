@@ -10,6 +10,7 @@ const views = require('./views');
 const { buildFncSession, isFncValid, fingerprintFor } = require('./session');
 const { getMockSession, isKeycloakMode } = require('./auth-provider');
 const { MODULES, NAV, canAccess, flattenLeaves, findLeaf } = require('./modules');
+const { PROCESO_FORM } = require('./task-meta');
 const { getPool, dbReady } = require('./db');
 const { writeAudit } = require('./audit');
 
@@ -19,6 +20,7 @@ app.set('trust proxy', 1); // IP real tras nginx (cf-connecting-ip / x-forwarded
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: '100kb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'cambiar-en-env-minimo-32-chars',
@@ -154,9 +156,26 @@ app.get('/api/saldos', needLogin, needDb, async (req, res) => {
 // GET /api/actividad — últimos 15 movimientos (bitácora, resumen abstracto).
 app.get('/api/actividad', needLogin, needDb, async (req, res) => {
   const { rows } = await getPool().query(
-    `SELECT created_at AS at, actor_email, action, modulo, entidad_id, detalle
+    `SELECT id, created_at AS at, actor_email, action, modulo, entidad_id, detalle
      FROM audit_log ORDER BY id DESC LIMIT 15`);
   res.json(rows);
+});
+
+// GET /api/actividad/:id — detalle completo para el drawer.
+app.get('/api/actividad/:id', needLogin, needDb, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Id inválido.' });
+  try {
+    const { rows } = await getPool().query(
+      `SELECT id, created_at AS at, actor_sub, actor_email, action, modulo, entidad_id, detalle, ip
+       FROM audit_log WHERE id = $1`,
+      [id]);
+    if (!rows.length) return res.status(404).json({ error: 'No encontrado.' });
+    res.json(rows[0]);
+  } catch (e) {
+    console.error('[api/actividad:id]', e.message);
+    res.status(500).json({ error: 'Error interno.' });
+  }
 });
 
 // GET /api/tareas — pendientes visibles según rol (consultor: lectura).
@@ -175,18 +194,101 @@ app.get('/api/tareas', needLogin, needDb, async (req, res) => {
   res.json(rows);
 });
 
-// POST /api/tareas/:id/completar — con guard (consultor solo lectura) + auditoría.
-app.post('/api/tareas/:id/completar', needLogin, needDb, async (req, res) => {
+// POST /api/tareas — crear tarea (todos menos consultor). Consume JSON del modal.
+app.post('/api/tareas', needLogin, needDb, async (req, res) => {
+  const fnc = req.session.fnc;
+  const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
+  const isConsultorOnly = roles.length > 0 && roles.every((r) => r === 'consultor');
+  if (fnc.role !== 'ADMIN' && isConsultorOnly) {
+    return res.status(403).json({ ok: false, error: 'Sin permiso para crear tareas.' });
+  }
+  const b = req.body || {};
+  const titulo = String(b.titulo || '').trim();
+  const catalogo = String(process.env.CLIENT_ROLES || 'admin,coordinador,consultor,analista,auxiliar').split(',').map((r) => r.trim().toLowerCase()).filter(Boolean);
+  const rol = String(b.rol || '').trim().toLowerCase();
+  const fecha = String(b.fecha_limite || '').trim();
+  if (titulo.length < 3 || titulo.length > 200) {
+    return res.status(400).json({ ok: false, error: 'Título entre 3 y 200 caracteres.' });
+  }
+  if (!catalogo.includes(rol)) {
+    return res.status(400).json({ ok: false, error: 'Rol destino inválido.' });
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || fecha < new Date().toISOString().slice(0, 10)) {
+    return res.status(400).json({ ok: false, error: 'Fecha límite inválida (hoy o futuro, AAAA-MM-DD).' });
+  }
+  const proceso = Object.prototype.hasOwnProperty.call(PROCESO_FORM, b.proceso) ? b.proceso : '';
+  try {
+    const { rows } = await getPool().query(
+      `INSERT INTO tasks (rol, titulo, detalle, responsable, area, proceso, fecha_limite, automatica)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      [rol, titulo, String(b.detalle || '').slice(0, 2000), String(b.responsable || '').slice(0, 120),
+       String(b.area || '').slice(0, 120), proceso, fecha, b.automatica === true]);
+    await writeAudit(req, { action: 'tarea.crear', modulo: 'tareas', entidadId: String(rows[0].id), detalle: `Creada: ${titulo}` });
+    return res.status(201).json({ ok: true, id: rows[0].id });
+  } catch (e) {
+    console.error('[api/tareas:create]', e.message);
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+
+// POST /api/tareas/:id/validar — botón único del modal: verifica el proceso
+// (automáticas) o confirma (manuales); si verifica OK, marca completada + audita.
+app.post('/api/tareas/:id/validar', needLogin, needDb, async (req, res) => {
   const fnc = req.session.fnc;
   const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
   const allowed = fnc.role === 'ADMIN' || roles.some((r) => ['admin', 'coordinador', 'analista', 'auxiliar'].includes(r));
-  if (!allowed) return res.status(403).send(views.errorPage(fnc, 'forbidden'));
-  const { rowCount } = await getPool().query(
-    `UPDATE tasks SET estado = 'hecha', hecha_por = $1, hecha_at = now() WHERE id = $2 AND estado = 'pendiente'`,
-    [fnc.email, Number(req.params.id)]);
-  if (!rowCount) return res.redirect('/dashboard?msg=ya_hecha');
-  await writeAudit(req, { action: 'tarea.completar', modulo: 'tareas', entidadId: String(req.params.id), detalle: 'Tarea marcada hecha' });
-  return res.redirect('/dashboard?msg=tarea_ok');
+  if (!allowed) return res.status(403).json({ ok: false, error: 'Sin permiso.' });
+  const pool = getPool();
+  const { rows } = await pool.query(`SELECT * FROM tasks WHERE id = $1`, [Number(req.params.id)]);
+  const t = rows[0];
+  if (!t) return res.status(404).json({ ok: false, error: 'No encontrada.' });
+  if (t.estado === 'hecha') return res.json({ ok: true, msg: 'Ya estaba completada.' });
+  if (t.automatica) {
+    const v = await verifyTask(pool, t);
+    if (!v.ok) return res.json({ ok: false, msg: v.msg });
+  }
+  await pool.query(`UPDATE tasks SET estado = 'hecha', hecha_por = $1, hecha_at = now() WHERE id = $2`, [fnc.email, t.id]);
+  await writeAudit(req, { action: 'tarea.validar', modulo: 'tareas', entidadId: String(t.id), detalle: `Validada: ${t.titulo}` });
+  return res.json({ ok: true, msg: 'Tarea completada.' });
+});
+
+
+// Verificadores de procesos automáticos (el proceso ya se ejecutó → se puede completar).
+async function verifyTask(pool, t) {
+  const p = String(t.proceso || '').toLowerCase();
+  if (p.includes('distribuci')) {
+    const y = new Date().getFullYear();
+    const r = await pool.query(`SELECT COUNT(*)::int AS n FROM distribuciones WHERE vigencia = $1`, [y]);
+    return r.rows[0].n > 0
+      ? { ok: true, msg: 'Distribuciones de la vigencia verificadas.' }
+      : { ok: false, msg: 'Aún no hay distribuciones de la vigencia cargadas.' };
+  }
+  return { ok: false, msg: 'Este proceso aún no tiene verificación automática: ejecútalo desde su formulario.' };
+}
+
+// GET /api/tareas/:id — detalle completo para el drawer (mismo filtro de rol que la lista).
+app.get('/api/tareas/:id', needLogin, needDb, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Id inválido.' });
+  const fnc = req.session.fnc;
+  const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
+  let q = `SELECT id, created_at AS at, rol, titulo, detalle, responsable, area, proceso, fecha_limite, automatica, estado, hecha_por, hecha_at
+           FROM tasks WHERE id = $1`;
+  const params = [id];
+  if (fnc.role !== 'ADMIN' && !roles.includes('coordinador')) {
+    q += ` AND (estado = 'hecha' OR rol = ANY($2))`;
+    params.push(roles);
+  }
+  try {
+    const { rows } = await getPool().query(q, params);
+    if (!rows.length) return res.status(404).json({ error: 'No encontrado.' });
+    const t = rows[0];
+    t.formUrl = PROCESO_FORM[t.proceso] || null;
+    res.json(t);
+  } catch (e) {
+    console.error('[api/tareas:id]', e.message);
+    res.status(500).json({ error: 'Error interno.' });
+  }
 });
 
 const page = (fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body);
@@ -208,7 +310,7 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
     const [s, a] = await Promise.all([
       pool.query('SELECT tipo, vigencia, asignado, ejecutado FROM distribuciones ORDER BY vigencia DESC, tipo'),
       // Mini panel: solo plataforma (auth/sistema queda fuera: login.*, logout).
-      pool.query(`SELECT created_at AS at, actor_email, action, modulo, detalle FROM audit_log WHERE action NOT IN ('login.mock','login.keycloak','logout') ORDER BY id DESC LIMIT 15`),
+      pool.query(`SELECT id, created_at AS at, actor_email, action, modulo, detalle FROM audit_log WHERE action NOT IN ('login.mock','login.keycloak','logout') ORDER BY id DESC LIMIT 15`),
     ]);
     const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
     let tq = `SELECT id, titulo, detalle, responsable, area, proceso, fecha_limite, automatica FROM tasks WHERE estado='pendiente'`;

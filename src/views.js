@@ -2,6 +2,7 @@
 // módulo → subcategoría (colapsable, memoria localStorage) → hoja.
 // permitido = link, sin acceso pero visible = deshabilitado, CONFIG anclada al fondo.
 const { MODULES, NAV, CONFIG, canAccess, flattenLeaves } = require('./modules');
+const { PROCESO_FORM, clientCatalog, canCreate } = require('./task-meta');
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -99,9 +100,51 @@ if(m)m.addEventListener('click',function(e){if(e.target===m)close();});
 document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
 }catch(e){}})();</script>`;
 
+function taskCreateModal() {
+  const rolOpts = clientCatalog().map((r) => `<option value="${r}"${r === 'analista' ? ' selected' : ''}>${esc(r)}</option>`).join('');
+  const procOpts = Object.keys(PROCESO_FORM).map((p) => `<option>${esc(p)}</option>`).join('');
+  return `<div class="modal-overlay" id="tareaCrearModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-label="Nueva tarea">
+    <h2>Nueva tarea</h2>
+    <div class="fld-grid">
+      <label class="fld"><span>Título *</span><input id="tcTitulo" type="text" maxlength="200" placeholder="Qué hay que hacer"></label>
+      <label class="fld"><span>Rol destino *</span><select id="tcRol">${rolOpts}</select></label>
+      <label class="fld"><span>Responsable</span><input id="tcResp" type="text" maxlength="120" placeholder="Persona o equipo"></label>
+      <label class="fld"><span>Área solicitante</span><input id="tcArea" type="text" maxlength="120"></label>
+      <label class="fld"><span>Proceso</span><select id="tcProc"><option value="">—</option>${procOpts}</select></label>
+      <label class="fld"><span>Fecha límite *</span><input id="tcFecha" type="date"></label>
+      <label class="fld"><span>Detalle</span><input id="tcDetalle" type="text" maxlength="500"></label>
+      <label class="fld"><span>Automática</span><select id="tcAuto"><option value="no">No</option><option value="si">Sí</option></select></label>
+    </div>
+    <p id="tcMsg" class="drawer-msg"></p>
+    <div class="drawer-actions"><button class="btn-primary" id="tcGuardar" type="button" style="margin-top:0">Crear tarea</button><button class="btn-logout" data-close-modal type="button">Cancelar</button></div>
+  </div>
+</div>`;
+}
+
+const TASK_CREATE_JS = `<script>(function(){try{
+var m=document.getElementById('tareaCrearModal');
+function close(){if(m)m.hidden=true;}
+document.querySelectorAll('[data-open-modal="tarea-crear"]').forEach(function(b){b.addEventListener('click',function(){if(!m)return;m.hidden=false;var t=document.getElementById('tcTitulo');if(t)t.focus();});});
+document.querySelectorAll('[data-close-modal]').forEach(function(b){if(!b.__tc){b.__tc=true;b.addEventListener('click',close);}});
+if(m)m.addEventListener('click',function(e){if(e.target===m)close();});
+var g=document.getElementById('tcGuardar');
+if(g)g.addEventListener('click',function(){
+var msg=document.getElementById('tcMsg');
+function val(id){var el=document.getElementById(id);return el?el.value.trim():'';}
+var payload={titulo:val('tcTitulo'),rol:val('tcRol'),responsable:val('tcResp'),area:val('tcArea'),proceso:val('tcProc'),fecha_limite:val('tcFecha'),detalle:val('tcDetalle'),automatica:val('tcAuto')==='si'};
+g.disabled=true;if(msg)msg.textContent='Guardando…';
+fetch('/api/tareas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+if(x.d&&x.d.ok){window.location.reload();return;}
+if(msg)msg.textContent=(x.d&&(x.d.error||x.d.msg))||'No se pudo crear.';
+g.disabled=false;
+}).catch(function(){if(msg)msg.textContent='Error de red.';g.disabled=false;});
+});
+}catch(e){}})();</script>`;
+
 const NAV_MEMORY_JS = `<script>(function(){try{var k='sip-nav-open';var open=JSON.parse(localStorage.getItem(k)||'[]');function save(id,on){try{var cur=JSON.parse(localStorage.getItem(k)||'[]');if(on&&cur.indexOf(id)<0)cur.push(id);if(!on)cur=cur.filter(function(x){return x!==id});localStorage.setItem(k,JSON.stringify(cur));}catch(e){}}document.querySelectorAll('details.tree-sub, details.tree-mod').forEach(function(d){var id=d.getAttribute('data-navkey');if(open.indexOf(id)>=0)d.open=true;d.addEventListener('toggle',function(){save(id,d.open)});});
 var scrollAreas=Array.prototype.slice.call(document.querySelectorAll('.sidebar-nav, .rail-scroll'));
-scrollAreas.forEach(function(el){var scrollT=null;el.addEventListener('scroll',function(){el.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){el.classList.remove('is-scrolling');},800);},{passive:true});});}}catch(e){}})();</script>`;
+scrollAreas.forEach(function(el){var scrollT=null;el.addEventListener('scroll',function(){el.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){el.classList.remove('is-scrolling');},800);},{passive:true});});}catch(e){}})();</script>`;
 
 // Reset al seleccionar Dashboard: el dashboard sin formulario inline se renderiza con
 // active '/dashboard'. Limpiar la memoria de ramas para que el árbol cargue colapsado.
@@ -171,7 +214,9 @@ ${navConfig(active, role)}
 </aside>
 <main class="main-container">${body}</main>
 ${profileModal()}
-${active === '/dashboard' ? NAV_RESET_JS : ''}${NAV_MEMORY_JS}${A11Y_JS}${MODAL_JS}</body></html>`;
+${taskCreateModal()}
+${detailDrawer()}
+${active === '/dashboard' ? NAV_RESET_JS : ''}${NAV_MEMORY_JS}${A11Y_JS}${MODAL_JS}${DRAWER_JS}${TASK_CREATE_JS}</body></html>`;
 }
 
 function loginPage(appName, kcMode) {
@@ -246,24 +291,20 @@ function fmtFechaCorta(v) {
 }
 
 function taskCards(fnc, tareas) {
-  const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
-  const canDo = fnc.role === 'ADMIN' || roles.some((r) => ['admin', 'coordinador', 'analista', 'auxiliar'].includes(r));
   const today = new Date().toISOString().slice(0, 10);
   const cards = (tareas || []).map((t, i) => {
     const vencida = t.fecha_limite && String(t.fecha_limite).slice(0, 10) < today;
-    return `<li class="task-item${vencida ? ' task-item-vencida' : ''}"><span class="task-num tnum" aria-hidden="true">${i + 1}</span><span class="task-body"><strong>${esc(t.titulo)}${vencida ? ' <span class="badge badge-warn">Vencida</span>' : ''}</strong>
-<span class="task-meta">${esc(t.responsable || t.area || '—')} · Límite: <span class="tnum${vencida ? ' text-warn' : ''}">${esc(fmtFechaCorta(t.fecha_limite))}</span> · <span class="badge">${esc(t.automatica ? 'automática' : 'manual')}</span> <span class="badge">${esc(t.proceso || '')}</span></span>
-${t.detalle ? `<span class="task-detail">${esc(t.detalle)}</span>` : ''}
-${canDo ? `<form method="post" action="/api/tareas/${t.id}/completar" style="margin:4px 0 0"><button class="stepper-button stepper-button-primary" type="submit">Marcar hecha</button></form>` : `<span class="badge">solo lectura</span>`}</span></li>`;
+    return `<li class="task-item"><span class="task-num tnum drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${i + 1}</span><span class="task-body"><strong class="drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${esc(t.titulo)}${vencida ? ' <span class="badge badge-warn">Vencida</span>' : ''}</strong></span></li>`;
   }).join('');
-  return `<h3 class="rail-sub">Pendientes (${(tareas || []).length})</h3><ul class="task-list">${cards || '<li class="done-empty">Sin pendientes.</li>'}</ul>`;
+  const btn = canCreate(fnc) ? `<button class="btn-circle" data-open-modal="tarea-crear" type="button" aria-label="Nueva tarea" title="Nueva tarea">＋</button>` : '';
+  return `<div class="tareas-head"><h3 class="rail-sub">Pendientes (${(tareas || []).length})</h3>${btn}</div><ul class="task-list">${cards || '<li class="done-empty">Sin pendientes.</li>'}</ul>`;
 }
 
 // Ejercicio completo: últimas tareas hechas (compacto, con quién y cuándo).
 function doneList(hechas) {
   const rows = hechas || [];
   const items = rows.map((t) =>
-    `<li class="done-item"><span class="done-check" aria-hidden="true">${STEP_CHECK_SVG}</span><span class="done-body"><strong>${esc(t.titulo)}</strong><span class="done-meta">${esc(t.hecha_por || '')} · ${esc(fmtFechaHora(t.hecha_at))} · <span class="badge">${esc(t.rol || '')}</span></span></span></li>`).join('');
+    `<li class="done-item"><span class="done-check drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${STEP_CHECK_SVG}</span><span class="done-body"><strong>${esc(t.titulo)}</strong><span class="done-meta">${esc(t.hecha_por || '')} · ${esc(fmtFechaHora(t.hecha_at))} · <span class="badge">${esc(t.rol || '')}</span></span></span></li>`).join('');
   return `<h3 class="rail-sub">Completadas (${rows.length})</h3><ul class="done-list">${items || '<li class="done-empty">Sin completadas.</li>'}</ul>`;
 }
 
@@ -356,7 +397,7 @@ function activityFeed(actividad) {
     const state = i === 0 ? 'stepper-active' : 'stepper-completed';
     const last = i === rows.length - 1 ? ' stepper-last' : '';
     return `<div class="stepper-step ${state}${last}" data-step="${i}">
-      <div class="stepper-circle" aria-hidden="true">${STEP_CHECK_SVG}</div>
+      <div class="stepper-circle drawer-trigger" data-drawer="actividad" data-id="${a.id}" role="button" tabindex="0" title="Ver detalle">${STEP_CHECK_SVG}</div>
       <div class="stepper-line" aria-hidden="true"></div>
       <div class="stepper-content">
         <div class="stepper-title">${esc(ACTION_LABEL[a.action] || a.action)}</div>
@@ -375,6 +416,69 @@ function activityFeed(actividad) {
   return `<div class="stepper-box" data-stepper>${steps}${controls}</div>${ACTIVITY_PAGER_JS}`;
 }
 
+// Drawer lateral derecho (detalle Actividad/Tarea): full-height, blur fuera.
+function detailDrawer() {
+  return `<div class="drawer-backdrop" id="drawerBackdrop" hidden>
+  <aside class="drawer" role="dialog" aria-modal="true" aria-label="Detalle" id="drawerPanel">
+    <div class="drawer-head"><h2 id="drawerTitle">Detalle</h2><button class="drawer-close" id="drawerClose" aria-label="Cerrar">✕</button></div>
+    <div class="drawer-body" id="drawerBody"><p>Cargando…</p></div>
+  </aside>
+</div>`;
+}
+
+const DRAWER_JS = `<script>(function(){try{
+var back=document.getElementById('drawerBackdrop'),panel=document.getElementById('drawerPanel'),
+title=document.getElementById('drawerTitle'),body=document.getElementById('drawerBody');
+if(!back||!panel)return;
+function q(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function row(k,v){if(v===null||v===undefined||v==='')return '';return '<div class="drawer-row"><span>'+q(k)+'</span><strong>'+q(v)+'</strong></div>';}
+function fmtDT(v){try{return new Date(v).toLocaleString('es-CO');}catch(e){return String(v||'');}}
+function open(){back.hidden=false;requestAnimationFrame(function(){back.classList.add('open');});if(panel)panel.focus&&panel.focus();}
+function close(){back.classList.remove('open');setTimeout(function(){back.hidden=true;},200);}
+function renderActividad(a){
+title.textContent='Actividad';
+body.innerHTML=row('Acción',a.action)+row('Actor',a.actor_email)+row('Módulo',a.modulo)+row('Entidad',a.entidad_id)+row('Detalle',a.detalle)+row('IP',a.ip)+row('Fecha',fmtDT(a.at));
+}
+function renderTarea(t){
+title.textContent=t.estado==='hecha'?'Tarea completada':'Tarea pendiente';
+var lim=t.fecha_limite?String(t.fecha_limite).slice(0,10):'';
+var est=t.estado==='hecha'?'<span class="badge badge-ok">hecha</span>':'<span class="badge badge-pending">pendiente</span>';
+var tipo=t.automatica?'<span class="badge badge-ok">automática</span>':'<span class="badge badge-neutral">manual</span>';
+body.innerHTML=row('Título',t.titulo)+row('Detalle',t.detalle)+row('Responsable',t.responsable)+row('Área',t.area)+row('Proceso',t.proceso)+row('Rol',t.rol)+row('Límite',lim)
++'<div class="drawer-row"><span>Tipo</span><strong>'+tipo+'</strong></div>'
++'<div class="drawer-row"><span>Estado</span><strong>'+est+'</strong></div>'
++row('Completada por',t.hecha_por)+row('Completada el',t.hecha_at?fmtDT(t.hecha_at):'')
++'<div class="drawer-actions" id="drawerActions"></div><p id="drawerMsg" class="drawer-msg"></p>';
+var box=document.getElementById('drawerActions');
+if(!box||t.estado==='hecha')return;
+var b=document.createElement('button');b.textContent='Validar tarea';b.className='btn-primary';b.style.marginTop='0';
+b.addEventListener('click',function(){
+if(!t.automatica&&!window.confirm('¿Confirmas completar "'+(t.titulo||'')+'"?'))return;
+b.disabled=true;
+fetch('/api/tareas/'+encodeURIComponent(t.id)+'/validar',{method:'POST'}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+if(x.d&&x.d.ok){window.location.reload();return;}
+var m=document.getElementById('drawerMsg');if(m)m.textContent=(x.d&&(x.d.msg||x.d.error))||'No se pudo validar.';
+b.disabled=false;
+}).catch(function(){var m=document.getElementById('drawerMsg');if(m)m.textContent='Error de red.';b.disabled=false;});
+});
+box.appendChild(b);
+if(t.formUrl){var a=document.createElement('a');a.textContent='Ir al formulario';a.className='btn-logout';a.style.textDecoration='none';a.style.display='inline-block';a.style.padding='10px 20px';a.href=t.formUrl;box.appendChild(a);}
+}
+function load(kind,id){
+body.innerHTML='<p>Cargando…</p>';open();
+var plural=kind==='tarea'?'tareas':kind;
+fetch('/api/'+plural+'/'+encodeURIComponent(id)).then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();}).then(function(d){
+if(kind==='actividad')renderActividad(d);else renderTarea(d);
+}).catch(function(){body.innerHTML='<p>No se pudo cargar el detalle.</p>';});
+}
+document.addEventListener('click',function(e){var t=e.target.closest?e.target.closest('.drawer-trigger'):null;if(!t)return;e.preventDefault();load(t.getAttribute('data-drawer'),t.getAttribute('data-id'));});
+document.addEventListener('keydown',function(e){
+if(e.key==='Escape'&&!back.hidden)close();
+if((e.key==='Enter'||e.key===' ')&&document.activeElement&&document.activeElement.classList&&document.activeElement.classList.contains('drawer-trigger')){e.preventDefault();var t=document.activeElement;load(t.getAttribute('data-drawer'),t.getAttribute('data-id'));}
+});
+document.getElementById('drawerClose').addEventListener('click',close);
+back.addEventListener('click',function(e){if(e.target===back)close();});
+}catch(e){}})();</script>`;
 function dashboardPage(fnc, data) {
   const nAct = (data.actividad || []).length;
   return `<div class="dash-grid">
