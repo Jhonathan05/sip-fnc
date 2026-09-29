@@ -83,6 +83,37 @@ function navConfig(active, role) {
   return `<div class="nav-config"><span class="sidebar-section-label">Configuración</span>${links}</div>`;
 }
 
+// Modal de inactividad: aviso 60s antes del cierre (5 min), con CSRF para renovar.
+function inactivityModal() {
+  return `<div class="modal-overlay" id="inactModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-label="Sesión por expirar">
+    <h2>Sesión por expirar</h2>
+    <p>Por inactividad se cerrará en <strong class="tnum" id="inactSecs">60</strong>s.</p>
+    <div class="drawer-actions"><button class="btn-primary" id="inactStay" type="button" style="margin-top:0">Seguir activo</button><button class="btn-logout" id="inactExit" type="button">Salir</button></div>
+  </div>
+</div>`;
+}
+
+const INACTIVITY_JS = `<script>(function(){try{
+var WARN_AT=4*60*1000, LIMIT=5*60*1000, deadline=Date.now()+LIMIT, timer=null, shown=false;
+var modal=document.getElementById('inactModal'), secs=document.getElementById('inactSecs');
+function csrfH(){try{var m=document.querySelector('meta[name="csrf-token"]');return m?m.getAttribute('content')||'':'';}catch(e){return '';}}
+function reset(){deadline=Date.now()+LIMIT;if(shown&&modal){modal.hidden=true;shown=false;}}
+function logout(){fetch('/auth/logout',{method:'POST',headers:{'x-csrf-token':csrfH()}}).finally(function(){window.location.href='/login?reason=inactivity';});}
+function tick(){
+var left=deadline-Date.now();
+if(left<=0){clearInterval(timer);logout();return;}
+if(left<=60000&&!shown&&modal){shown=true;modal.hidden=false;}
+if(shown&&secs)secs.textContent=Math.ceil(left/1000);
+}
+['mousemove','keydown','pointerdown','touchstart','scroll'].forEach(function(e){window.addEventListener(e,reset,{passive:true});});
+timer=setInterval(tick,1000);
+var stay=document.getElementById('inactStay');
+if(stay)stay.addEventListener('click',function(){fetch('/api/auth/activity',{method:'POST',headers:{'x-csrf-token':csrfH()}}).finally(function(){reset();});});
+var exit=document.getElementById('inactExit');
+if(exit)exit.addEventListener('click',logout);
+}catch(e){}})();</script>`;
+
 function profileModal(csrf) {
   const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
   return `<div class="modal-overlay" id="perfilModal" hidden>
@@ -224,16 +255,20 @@ ${navConfig(active, role)}
 </aside>
 <main class="main-container">${body}</main>
 ${profileModal(csrf)}
+${inactivityModal()}
 ${taskCreateModal()}
 ${detailDrawer()}
-${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}</body></html>`;
+${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}</body></html>`;
 }
 
-function loginPage(appName, kcMode, csrf) {
+function loginPage(appName, kcMode, csrf, reason) {
   const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
+  const notice = reason === 'inactivity'
+    ? `<div class="alert-err">Sesión cerrada por inactividad. Ingresa de nuevo.</div>` : '';
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="card"><div class="login-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-tolima.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-sip" src="/img/logo-sip.svg" alt="SIP" height="30"></div><h1>${esc(appName)}</h1>
 <p>Sistema de Información de Proyectos — gestión e informes contables por periodos.</p>
+${notice}
 ${kcMode
       ? `<a class="btn-primary" href="/auth/app">Continuar con Comit\u00e9 Tolima</a>`
       : `<form method="post" action="/auth/mock" style="margin:0">${csrfField}<button class="btn-primary" type="submit">Continuar con Comit\u00e9 Tolima</button></form><p><span class="badge">mock offline</span> sin Keycloak.</p>`}

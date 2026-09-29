@@ -68,6 +68,8 @@ app.use('/api/', apiLimiter);
 // CSRF synchronizer en todos los POST (tras parsers y sesión).
 app.use(verifyCsrf);
 
+const INACTIVITY_MS = 5 * 60 * 1000; // 5 min (acta F0)
+
 const needLogin = (req, res, next) => {
   const fnc = req.session?.fnc;
   if (isFncValid(fnc)) {
@@ -75,6 +77,16 @@ const needLogin = (req, res, next) => {
       req.session.destroy(() => res.redirect('/error?reason=state'));
       return;
     }
+    // Inactividad: sin actividad 5 min → destruir + login con motivo.
+    const last = req.session.lastActivity || 0;
+    if (last && Date.now() - last > INACTIVITY_MS) {
+      req.session.destroy(() => {
+        if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Sesión cerrada por inactividad.', code: 'INACTIVE' });
+        return res.redirect('/login?reason=inactivity');
+      });
+      return;
+    }
+    req.session.lastActivity = Date.now();
     return next();
   }
   return res.redirect('/login');
@@ -86,6 +98,7 @@ const needRole = (role) => (req, res, next) => {
 
 function setFnc(req, fnc, idToken) {
   req.session.fnc = fnc;
+  req.session.lastActivity = Date.now();
   req.session.email = fnc.email;
   req.session.role = fnc.role;
   req.session.roles = fnc.roles;
@@ -99,7 +112,7 @@ app.get('/', (req, res) => {
 
 app.get('/login', (req, res) => {
   if (isFncValid(req.session?.fnc)) return res.redirect('/dashboard');
-  res.send(views.loginPage(APP_NAME, isKeycloakMode(), ensureToken(req)));
+  res.send(views.loginPage(APP_NAME, isKeycloakMode(), ensureToken(req), req.query.reason));
 });
 
 app.post('/auth/mock', (req, res) => {
@@ -159,6 +172,12 @@ app.post('/auth/logout', (req, res) => {
 
 app.get('/api/me', needLogin, (req, res) => {
   res.json(req.session.fnc);
+});
+
+// POST /api/auth/activity — renueva actividad (el modal la llama al seguir activo).
+app.post('/api/auth/activity', needLogin, (req, res) => {
+  req.session.lastActivity = Date.now();
+  res.json({ ok: true });
 });
 
 const needDb = async (req, res, next) => {
