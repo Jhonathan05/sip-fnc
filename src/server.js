@@ -15,10 +15,32 @@ const { ensureToken, verifyCsrf } = require('./csrf');
 const { getPool, dbReady } = require('./db');
 const { writeAudit } = require('./audit');
 
+const crypto = require('crypto');
 const APP_NAME = process.env.APP_NAME || 'app-fnc';
 const app = express();
 app.set('trust proxy', 1); // IP real tras nginx (cf-connecting-ip / x-forwarded-for)
-app.use(helmet({ contentSecurityPolicy: false }));
+// Nonce CSP por request (las vistas lo inyectan en cada <script> inline).
+app.use((req, res, next) => {
+  res.locals.nonce = crypto.randomBytes(16).toString('base64');
+  req.nonce = res.locals.nonce;
+  next();
+});
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: [(_req, res) => `'nonce-${res.locals.nonce}'`],
+      styleSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      imgSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    },
+  },
+}));
 app.use(compression());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json({ limit: '100kb' }));
@@ -295,7 +317,7 @@ app.get('/api/tareas/:id', needLogin, needDb, async (req, res) => {
   }
 });
 
-const page = (req, fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body, ensureToken(req));
+const page = (req, fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body, ensureToken(req), req.nonce);
 
 app.get('/dashboard', needLogin, needDb, async (req, res) => {
   const fnc = req.session.fnc;

@@ -8,6 +8,12 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// Inyecta el nonce CSP en cada <script> inline (helmet lo exige por request).
+function withNonce(html, nonce) {
+  if (!nonce) return html;
+  return String(html).split('<script>').join(`<script nonce="${nonce}">`);
+}
+
 // Set Lucide (ISC, sin atribución requerida) inline — cero dependencias.
 const P = {
   dashboard: '<path d="m12 14 4-4" /> <path d="M3.34 19a10 10 0 1 1 17.32 0" />',
@@ -196,13 +202,13 @@ var navBtn=document.getElementById('navCollapseBtn');
 if(navBtn){if(document.documentElement.classList.contains('nav-collapsed'))navBtn.setAttribute('aria-label','Expandir menú');navBtn.addEventListener('click',function(){var on=!document.documentElement.classList.contains('nav-collapsed');document.documentElement.classList.toggle('nav-collapsed',on);navBtn.setAttribute('aria-label',on?'Expandir menú':'Contraer menú');try{localStorage.setItem('sip-nav-collapsed',on?'1':'0');}catch(e){}});}
 sync();}catch(e){}})();</script>`;
 
-function layout(appName, fnc, active, body, csrf) {
+function layout(appName, fnc, active, body, csrf, nonce) {
   const email = fnc?.email || '';
   const role = fnc?.role || '';
   const initial = email.trim().charAt(0).toUpperCase() || 'U';
   const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
   const csrfMetaTag = csrf ? `<meta name="csrf-token" content="${csrf}">` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${A11Y_HEAD_JS}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-mini.svg" alt="Comité de Cafeteros del Tolima" height="30"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="26"><span class="brand-divider" aria-hidden="true"></span><div><span class="header-brand-name"><strong>SIP</strong> Sistema de Información de Proyectos</span></div></div></div>
 <div class="header-user-profile">${a11yControls()}<div class="user-avatar">${esc(initial)}</div><div><span class="user-name">${esc(email)}</span><span class="user-email">${esc(role)}</span></div>
@@ -220,7 +226,7 @@ ${navConfig(active, role)}
 ${profileModal(csrf)}
 ${taskCreateModal()}
 ${detailDrawer()}
-${active === '/dashboard' ? NAV_RESET_JS : ''}${NAV_MEMORY_JS}${A11Y_JS}${MODAL_JS}${DRAWER_JS}${TASK_CREATE_JS}</body></html>`;
+${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}</body></html>`;
 }
 
 function loginPage(appName, kcMode, csrf) {
@@ -332,7 +338,7 @@ function skeletonMaestro(leaf) {
   const body = fields.map((f) => fieldInput(f, fields.indexOf(f))).join('');
   return `<div class="skl-bar"><input type="search" placeholder="Buscar…" disabled aria-label="Buscar"></div>
 <table class="skl-table"><thead><tr>${head}<th>Acciones</th></tr></thead><tbody><tr><td colspan="${fields.length + 1}">Sin registros (skeleton).</td></tr></tbody></table>
-<form class="skl-form" onsubmit="return false"><fieldset disabled><legend>Nuevo registro</legend><div class="fld-grid">${body}</div><button class="btn-primary" type="button" disabled>Guardar (Fase 2)</button></fieldset></form>`;
+<form class="skl-form"><fieldset disabled><legend>Nuevo registro</legend><div class="fld-grid">${body}</div><button class="btn-primary" type="button" disabled>Guardar (Fase 2)</button></fieldset></form>`;
 }
 
 function skeletonInforme(leaf) {
@@ -499,3 +505,4 @@ function dashboardPage(fnc, data) {
 }
 
 module.exports = { layout, loginPage, rolesMatrix, errorPage, esc, dashboardPage };
+
