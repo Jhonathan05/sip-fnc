@@ -218,6 +218,11 @@ var scrollAreas=Array.prototype.slice.call(document.querySelectorAll('.sidebar-n
 scrollAreas.forEach(function(el){var scrollT=null;el.addEventListener('scroll',function(){el.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){el.classList.remove('is-scrolling');},800);},{passive:true});});
 document.addEventListener('error',function(e){var t=e.target;if(t&&t.classList&&t.classList.contains('user-photo')){var d=document.createElement('div');d.className='user-avatar';d.textContent=(t.getAttribute('alt')||'U').trim().charAt(0).toUpperCase()||'U';t.replaceWith(d);}},true);}catch(e){}})();</script>`;
 
+// URL única (método elecciones-fnc): la barra muestra solo el dominio.
+// Enmascara la ruta real a '/' en páginas autenticadas; '/' redirige por
+// sesión y al llegar se re-enmascara. Cosmético: los guards siguen mandando.
+const MASK_JS = `<script>(function(){try{var k='sip-last-path';var here=window.location.pathname+window.location.search;if(here!=='/'){try{sessionStorage.setItem(k,here);}catch(e){}}history.replaceState(null,'','/');window.addEventListener('popstate',function(){history.replaceState(null,'','/');});}catch(e){}})();</script>`;
+
 // Reset al seleccionar Dashboard: el dashboard sin formulario inline se renderiza con
 // active '/dashboard'. Limpiar la memoria de ramas para que el árbol cargue colapsado.
 // Se emite ANTES de NAV_MEMORY_JS para que no reabra nada guardado.
@@ -291,7 +296,7 @@ ${profileModal(csrf)}
 ${inactivityModal()}
 ${taskCreateModal()}
 ${detailDrawer()}
-${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}</body></html>`;
+${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(MASK_JS, nonce)}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}</body></html>`;
 }
 
 function loginPage(appName, kcMode, csrf, reason) {
