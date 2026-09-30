@@ -201,6 +201,34 @@ function findLeaf(path) {
   return null;
 }
 
-module.exports = { MODULES, NAV, CONFIG, BOTH, ADMIN_ONLY, canAccess, flattenLeaves, findLeaf };
+// URLs opacas (opción 4): mapa ESTABLE token↔ruta (orden de declaración).
+// Regla: las páginas nuevas se agregan AL FINAL para no desplazar tokens
+// (los bookmarks dependen de la estabilidad). No es control de acceso:
+// los guards server-side siguen mandando; las rutas reales siguen vivas.
+const TOKEN_PAGES = (() => {
+  const list = [];
+  for (const m of NAV) {
+    list.push(m.path);
+    for (const s of (m.children || [])) {
+      for (const l of (s.children || [])) list.push(l.path);
+    }
+  }
+  list.push('/seguridad', '/roles');
+  return [...new Set(list)];
+})();
+const TOKEN_MAP = {};
+TOKEN_PAGES.forEach((p, i) => { TOKEN_MAP[p] = '/v/' + (1000 + i).toString(36); });
+const TOKEN_REV = {};
+for (const p of Object.keys(TOKEN_MAP)) TOKEN_REV[TOKEN_MAP[p]] = p;
+
+function tokenFor(path) {
+  return TOKEN_MAP[path] || path;
+}
+
+function realFor(token) {
+  return TOKEN_REV['/v/' + String(token || '').toLowerCase()] || null;
+}
+
+module.exports = { MODULES, NAV, CONFIG, BOTH, ADMIN_ONLY, canAccess, flattenLeaves, findLeaf, tokenFor, realFor, TOKEN_MAP };
 
 

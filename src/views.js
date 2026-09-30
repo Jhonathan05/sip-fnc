@@ -1,7 +1,7 @@
 // Vistas vanilla (fnc-layout/vanilla-rendimiento). Nav en árbol guiado por src/modules.js:
 // módulo → subcategoría (colapsable, memoria localStorage) → hoja.
 // permitido = link, sin acceso pero visible = deshabilitado, CONFIG anclada al fondo.
-const { MODULES, NAV, CONFIG, canAccess, flattenLeaves } = require('./modules');
+const { MODULES, NAV, CONFIG, canAccess, flattenLeaves, tokenFor } = require('./modules');
 const { PROCESO_FORM, clientCatalog, canCreate } = require('./task-meta');
 const { shownName } = require('./prefs');
 
@@ -38,7 +38,8 @@ function icon(name) {
 
 function leafLink(leaf, active, role, sub) {
   const isActive = active === leaf.path;
-  const href = sub && sub.kind === 'informe' ? leaf.path : `/dashboard?form=${encodeURIComponent(leaf.path)}`;
+  const tok = tokenFor(leaf.path).replace('/v/', '');
+  const href = sub && sub.kind === 'informe' ? tokenFor(leaf.path) : `${tokenFor('/dashboard')}?f=${encodeURIComponent(tok)}`;
   if (canAccess(role, leaf)) {
     return `<a class="tree-leaf${isActive ? ' active' : ''}" href="${href}" title="${esc(leaf.title)}"><span class="nav-label">${esc(leaf.title)}</span></a>`;
   }
@@ -51,7 +52,7 @@ function navTree(active, role) {
     if (!canAccess(role, mod)) continue;
     const inMod = active === mod.path || active.startsWith(mod.path + '/');
     if (!(mod.children || []).length) {
-      html += `<a class="tab-btn${active === mod.path ? ' active' : ''}" href="${mod.path}" title="${esc(mod.title)}">${icon(mod.icon)}<span class="nav-label">${esc(mod.title)}</span></a>`;
+      html += `<a class="tab-btn${active === mod.path ? ' active' : ''}" href="${tokenFor(mod.path)}" title="${esc(mod.title)}">${icon(mod.icon)}<span class="nav-label">${esc(mod.title)}</span></a>`;
       continue;
     }
     const subs = (mod.children || []).map((sub) => {
@@ -59,12 +60,12 @@ function navTree(active, role) {
       if (!leaves.length) return '';
       const inSub = leaves.some((l) => active === l.path);
       const items = leaves.map((l) => leafLink(l, active, role, sub)).join('');
-      return `<details class="tree-sub" data-navkey="${esc(mod.path + '/' + sub.key)}"${inSub ? ' open' : ''}>
+      return `<details class="tree-sub" data-navkey="${esc(tokenFor(mod.path).replace('/v/', '') + '/' + sub.key)}"${inSub ? ' open' : ''}>
         <summary class="tree-sub-head" title="${esc(sub.title)}">${icon(sub.icon)}<span class="nav-label">${esc(sub.title)}</span></summary>
         <div class="tree-leaves">${items}</div>
       </details>`;
     }).join('');
-    html += `<details class="tree-mod" data-navkey="mod:${esc(mod.path)}"${inMod ? ' open' : ''}>
+    html += `<details class="tree-mod" data-navkey="mod:${esc(tokenFor(mod.path).replace('/v/', ''))}"${inMod ? ' open' : ''}>
       <summary class="tab-btn tree-mod-head${active === mod.path ? ' active' : ''}" title="${esc(mod.title)}">${icon(mod.icon)}<span class="nav-label">${esc(mod.title)}</span></summary>
       <div class="tree-subs">${subs}</div>
     </details>`;
@@ -79,7 +80,7 @@ function navConfig(active, role) {
     if (c.modal) {
       return `<button class="tab-btn" data-open-modal="${esc(c.modal)}" title="${esc(c.title)}">${icon(c.icon)}<span class="nav-label">${esc(c.title)}</span></button>`;
     }
-    return `<a class="tab-btn${active === c.path ? ' active' : ''}" href="${c.path}" title="${esc(c.title)}">${icon(c.icon)}<span class="nav-label">${esc(c.title)}</span></a>`;
+    return `<a class="tab-btn${active === c.path ? ' active' : ''}" href="${tokenFor(c.path)}" title="${esc(c.title)}">${icon(c.icon)}<span class="nav-label">${esc(c.title)}</span></a>`;
   }).join('');
   return `<div class="nav-config"><span class="sidebar-section-label">Configuración</span>${links}</div>`;
 }
@@ -312,11 +313,11 @@ function rolesMatrix(fnc) {
   const rows = MODULES.map((m) => {
     const ok = canAccess(fnc.role, m);
     const estado = ok ? 'permitido' : (m.nav ? 'deshabilitado' : 'oculto');
-    return `<tr><td>${esc(m.title)}</td><td><code>${esc(m.path)}</code></td><td>${esc(m.roles.join(','))}</td><td><span class="badge">${estado}</span></td></tr>`;
+    return `<tr><td>${esc(m.title)}</td><td><code>${esc(tokenFor(m.path))}</code></td><td>${esc(m.roles.join(','))}</td><td><span class="badge">${estado}</span></td></tr>`;
   }).join('');
   const leafRows = flattenLeaves().map(({ leaf, sub, mod }) => {
     const ok = canAccess(fnc.role, leaf);
-    return `<tr><td>${esc(mod.title)} / ${esc(sub.title)} / ${esc(leaf.title)}</td><td><code>${esc(leaf.path)}</code></td><td>${esc(leaf.roles.join(','))}</td><td><span class="badge">${ok ? 'permitido' : 'deshabilitado'}</span></td></tr>`;
+    return `<tr><td>${esc(mod.title)} / ${esc(sub.title)} / ${esc(leaf.title)}</td><td><code>${esc(tokenFor(leaf.path))}</code></td><td>${esc(leaf.roles.join(','))}</td><td><span class="badge">${ok ? 'permitido' : 'deshabilitado'}</span></td></tr>`;
   }).join('');
   return `<div class="card"><h1>Roles</h1>
 <p>Tu rol: <strong>${esc(fnc.role)}</strong> · Client roles: <strong>${esc(fnc.roles.join(','))}</strong></p>
@@ -436,9 +437,9 @@ function formSlot(form) {
   const kinds = { maestro: skeletonMaestro, informe: skeletonInforme, proceso: skeletonProceso, consulta: skeletonConsulta };
   const render = kinds[sub.kind] || skeletonMaestro;
   const body = sub.kind === 'info'
-    ? `<p><a class="btn-primary" href="${leaf.path}">Abrir ${esc(leaf.title)}</a></p>`
+    ? `<p><a class="btn-primary" href="${tokenFor(leaf.path)}">Abrir ${esc(leaf.title)}</a></p>`
     : render(leaf, sub);
-  return `<div class="card form-slot"><p><a href="${mod.path}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)} <span class="badge">skeleton</span></h2>${body}</div>`;
+  return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)} <span class="badge">skeleton</span></h2>${body}</div>`;
 }
 
 function fmtFechaHora(v) {
