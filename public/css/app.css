@@ -1007,6 +1007,35 @@ code {
     background: var(--azul-soft);
 }
 
+/* Paginador de tablas (9 filas por página) */
+.skl-pager {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0;
+    font-size: var(--fs-table);
+}
+
+.skl-pager button {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-card);
+    color: var(--text-dark);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: var(--fs-table);
+}
+
+.skl-pager button:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+
+.skl-pager .tnum {
+    color: var(--text-muted);
+}
+
 /* ── Mini panel Actividad reciente: bitácora stepper + paginación pequeña ── */
 .stepper-box {
     background: var(--bg-card);

@@ -29,14 +29,41 @@ function canDelete(fnc) {
 }
 
 // Maestros Distribución: catálogo tabla/pk/columnas (Fase 2).
+// upper: mayúsculas forzadas · numpk: pk serial (no se envía) ·
+// required: obligatorios · numeric: validación numérica.
 const MAESTROS = {
-  'circunscripciones': { table: 'circunscripciones', pk: 'codigo', cols: ['codigo', 'nombre'] },
-  'municipios': { table: 'municipios', pk: 'codigo', cols: ['codigo', 'nombre', 'circunscripcion'] },
-  'tipos-distribuciones': { table: 'tipos_distribucion', pk: 'codigo', cols: ['codigo', 'nombre'] },
+  'circunscripciones': { table: 'circunscripciones', pk: 'codigo', cols: ['codigo', 'nombre'], upper: true, required: ['codigo', 'nombre'] },
+  'municipios': { table: 'municipios', pk: 'codigo', cols: ['codigo', 'nombre', 'circunscripcion'], upper: true, required: ['codigo', 'nombre'] },
+  'tipos-distribuciones': { table: 'tipos_distribucion', pk: 'codigo', cols: ['codigo', 'nombre'], upper: true, required: ['codigo', 'nombre'] },
+  'distribuciones': { table: 'distribuciones', pk: 'id', numpk: true, cols: ['tipo', 'vigencia', 'asignado', 'ejecutado'], required: ['tipo', 'vigencia'], numeric: ['vigencia', 'asignado', 'ejecutado'] },
+  'distribucion-municipio': { table: 'distribucion_municipio', pk: 'id', numpk: true, cols: ['numero', 'tipo', 'ano', 'ppto', 'municipio', 'valor'], required: ['numero', 'tipo', 'ano', 'municipio', 'valor'], numeric: ['numero', 'tipo', 'ano', 'ppto', 'valor'] },
 };
 
 function validCodigo(v) {
   return typeof v === 'string' && /^[A-Z0-9-]{2,12}$/.test(v.trim().toUpperCase());
+}
+
+// Normaliza un valor según meta (undefined = inválido, null = ausente).
+function normVal(m, col, raw) {
+  let v = String(raw ?? '').trim();
+  if (m.upper) v = v.toUpperCase();
+  if ((m.numeric || []).includes(col)) {
+    if (v === '') return null;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return undefined;
+    if (col !== 'ano' && col !== 'vigencia' && col !== 'numero' && col !== 'tipo' && n < 0) return undefined;
+    return n;
+  }
+  return v;
+}
+
+function pkVal(m, raw) {
+  const v = String(raw ?? '').trim();
+  if (m.numpk) {
+    const n = Number(v);
+    return Number.isInteger(n) && n > 0 ? n : undefined;
+  }
+  return validCodigo(v) ? v.toUpperCase() : undefined;
 }
 
 const { ensureToken, verifyCsrf } = require('./csrf');
@@ -417,12 +444,13 @@ app.get('/api/tareas/:id', needLogin, needDb, async (req, res) => {
 });
 
 
-// CRUD maestros Distribuci�n (tras app + guards).
+// CRUD maestros Distribuci�n (tras app + guards).
 // GET /api/maestros/:id — lista (lectura: todos los roles).
 app.get('/api/maestros/:id', needLogin, needDb, async (req, res) => {
   const m = MAESTROS[req.params.id];
   if (!m) return res.status(404).json({ error: 'Maestro desconocido.' });
-  const { rows } = await getPool().query(`SELECT ${m.cols.join(',')} FROM ${m.table} ORDER BY ${m.pk}`);
+  const sel = [...new Set([m.pk, ...m.cols])];
+  const { rows } = await getPool().query(`SELECT ${sel.join(',')} FROM ${m.table} ORDER BY ${m.pk} LIMIT 500`);
   res.json(rows);
 });
 
@@ -431,19 +459,35 @@ app.post('/api/maestros/:id', needLogin, needDb, async (req, res) => {
   const m = MAESTROS[req.params.id];
   if (!m) return res.status(404).json({ ok: false, error: 'Maestro desconocido.' });
   if (!canWrite(req.session.fnc)) return res.status(403).json({ ok: false, error: 'Sin permiso.' });
+  const cols = m.numpk ? m.cols : m.cols;
   const vals = {};
-  for (const c of m.cols) vals[c] = String((req.body && req.body[c]) || '').trim().toUpperCase();
-  if (!validCodigo(vals[m.pk])) return res.status(400).json({ ok: false, error: 'Código inválido (2-12, A-Z 0-9 -).' });
-  if (!vals.nombre || vals.nombre.length < 2) return res.status(400).json({ ok: false, error: 'Nombre requerido (mín 2).' });
+  for (const c of cols) {
+    if (m.numpk && c === m.pk) continue;
+    vals[c] = normVal(m, c, req.body && req.body[c]);
+  }
+  for (const c of (m.required || [])) {
+    if (vals[c] === null || vals[c] === undefined || vals[c] === '') {
+      return res.status(400).json({ ok: false, error: `Campo requerido: ${c}.` });
+    }
+  }
+  if (Object.values(vals).some((v) => v === undefined)) {
+    return res.status(400).json({ ok: false, error: 'Valor numérico inválido.' });
+  }
+  if (!m.numpk && !validCodigo(vals[m.pk])) {
+    return res.status(400).json({ ok: false, error: 'Código inválido (2-12, A-Z 0-9 -).' });
+  }
+  const keys = Object.keys(vals).filter((c) => vals[c] !== null && !(m.numpk && c === m.pk));
   try {
-    await getPool().query(
-      `INSERT INTO ${m.table} (${m.cols.join(',')}) VALUES (${m.cols.map((_, i) => `$${i + 1}`).join(',')})`,
-      m.cols.map((c) => vals[c] || null));
-    await writeAudit(req, { action: 'maestro.crear', modulo: 'distribucion', entidadId: vals[m.pk], detalle: `${req.params.id}: ${vals[m.pk]}` });
-    return res.status(201).json({ ok: true });
+    const { rows } = await getPool().query(
+      `INSERT INTO ${m.table} (${keys.join(',')}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(',')}) RETURNING ${m.pk}`,
+      keys.map((c) => vals[c]));
+    const newPk = rows[0][m.pk];
+    await writeAudit(req, { action: 'maestro.crear', modulo: 'distribucion', entidadId: String(newPk), detalle: `${req.params.id}: ${newPk}` });
+    return res.status(201).json({ ok: true, id: newPk });
   } catch (e) {
-    if (e.code === '23505') return res.status(409).json({ ok: false, error: 'El código ya existe.' });
+    if (e.code === '23505') return res.status(409).json({ ok: false, error: 'El registro ya existe.' });
     if (e.code === '23503') return res.status(400).json({ ok: false, error: 'Referencia inválida.' });
+    if (e.code === '23514') return res.status(400).json({ ok: false, error: 'Rango inválido (revisa año y montos).' });
     console.error('[maestros:create]', e.message);
     return res.status(500).json({ ok: false, error: 'Error interno.' });
   }
@@ -454,17 +498,20 @@ app.put('/api/maestros/:id/:codigo', needLogin, needDb, async (req, res) => {
   const m = MAESTROS[req.params.id];
   if (!m) return res.status(404).json({ ok: false, error: 'Maestro desconocido.' });
   if (!canWrite(req.session.fnc)) return res.status(403).json({ ok: false, error: 'Sin permiso.' });
-  const pairs = m.cols.filter((c) => c !== m.pk).map((c) => [c, String((req.body && req.body[c]) || '').trim().toUpperCase()]).filter(([, v]) => v);
+  const pk = pkVal(m, req.params.codigo);
+  if (pk === undefined) return res.status(400).json({ ok: false, error: 'Identificador inválido.' });
+  const pairs = m.cols.filter((c) => c !== m.pk).map((c) => [c, normVal(m, c, req.body && req.body[c])]).filter(([, v]) => v !== null && v !== undefined && v !== '');
   if (!pairs.length) return res.status(400).json({ ok: false, error: 'Nada que actualizar.' });
-  if (pairs.some(([, v]) => v.length < 2)) return res.status(400).json({ ok: false, error: 'Valores muy cortos.' });
+  if (pairs.some(([, v]) => typeof v === 'string' && v.length < 2)) return res.status(400).json({ ok: false, error: 'Valores muy cortos.' });
   try {
     const sets = pairs.map(([c], i) => `${c} = $${i + 2}`).join(',');
-    const { rowCount } = await getPool().query(`UPDATE ${m.table} SET ${sets} WHERE ${m.pk} = $1`, [String(req.params.codigo).toUpperCase(), ...pairs.map(([, v]) => v)]);
+    const { rowCount } = await getPool().query(`UPDATE ${m.table} SET ${sets} WHERE ${m.pk} = $1`, [pk, ...pairs.map(([, v]) => v)]);
     if (!rowCount) return res.status(404).json({ ok: false, error: 'No encontrado.' });
-    await writeAudit(req, { action: 'maestro.editar', modulo: 'distribucion', entidadId: String(req.params.codigo).toUpperCase(), detalle: req.params.id });
+    await writeAudit(req, { action: 'maestro.editar', modulo: 'distribucion', entidadId: String(pk), detalle: req.params.id });
     return res.json({ ok: true });
   } catch (e) {
     if (e.code === '23503') return res.status(400).json({ ok: false, error: 'Referencia inválida.' });
+    if (e.code === '23514') return res.status(400).json({ ok: false, error: 'Rango inválido.' });
     console.error('[maestros:update]', e.message);
     return res.status(500).json({ ok: false, error: 'Error interno.' });
   }
@@ -475,10 +522,12 @@ app.delete('/api/maestros/:id/:codigo', needLogin, needDb, async (req, res) => {
   const m = MAESTROS[req.params.id];
   if (!m) return res.status(404).json({ ok: false, error: 'Maestro desconocido.' });
   if (!canDelete(req.session.fnc)) return res.status(403).json({ ok: false, error: 'Solo admin y coordinador.' });
+  const pk = pkVal(m, req.params.codigo);
+  if (pk === undefined) return res.status(400).json({ ok: false, error: 'Identificador inválido.' });
   try {
-    const { rowCount } = await getPool().query(`DELETE FROM ${m.table} WHERE ${m.pk} = $1`, [String(req.params.codigo).toUpperCase()]);
+    const { rowCount } = await getPool().query(`DELETE FROM ${m.table} WHERE ${m.pk} = $1`, [pk]);
     if (!rowCount) return res.status(404).json({ ok: false, error: 'No encontrado.' });
-    await writeAudit(req, { action: 'maestro.borrar', modulo: 'distribucion', entidadId: String(req.params.codigo).toUpperCase(), detalle: req.params.id });
+    await writeAudit(req, { action: 'maestro.borrar', modulo: 'distribucion', entidadId: String(pk), detalle: req.params.id });
     return res.json({ ok: true });
   } catch (e) {
     if (e.code === '23503') return res.status(409).json({ ok: false, error: 'En uso: no se puede borrar.' });
@@ -511,6 +560,10 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
         if (hit.leaf.crud === 'municipios') {
           const c = await getPool().query('SELECT codigo, nombre FROM circunscripciones ORDER BY codigo');
           form.catalogs = { circunscripcion: c.rows };
+        }
+        if (hit.leaf.crud === 'distribucion-municipio') {
+          const c = await getPool().query('SELECT codigo, nombre FROM municipios ORDER BY codigo');
+          form.catalogs = { municipio: c.rows };
         }
       }
     }

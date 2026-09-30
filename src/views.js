@@ -292,7 +292,7 @@ ${profileModal(csrf)}
 ${inactivityModal()}
 ${taskCreateModal()}
 ${detailDrawer()}
-${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}</body></html>`;
+${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}</body></html>`;
 }
 
 function loginPage(appName, kcMode, csrf, reason) {
@@ -445,9 +445,14 @@ function formSlot(form) {
 
 // CRUD funcional de maestros (Fase 2): tabla + alta/edición + borrado con guards.
 function crudField(f, catalogs) {
-  if (f.type === 'select' && f.label === 'Circunscripción' && catalogs.circunscripcion) {
+  const norm = String(f.label || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (norm === 'circunscripcion' && catalogs.circunscripcion) {
     const opts = catalogs.circunscripcion.map((c) => `<option value="${esc(c.codigo)}">${esc(c.codigo)} — ${esc(c.nombre)}</option>`).join('');
     return `<label class="fld"><span>Circunscripción</span><select id="crud-circunscripcion"><option value="">—</option>${opts}</select></label>`;
+  }
+  if (norm === 'municipio' && catalogs.municipio) {
+    const opts = catalogs.municipio.map((c) => `<option value="${esc(c.codigo)}">${esc(c.codigo)} — ${esc(c.nombre)}</option>`).join('');
+    return `<label class="fld"><span>Municipio</span><select id="crud-municipio"><option value="">—</option>${opts}</select></label>`;
   }
   if (f.type === 'select') {
     const opts = (f.options || []).map((o) => `<option>${esc(o)}</option>`).join('');
@@ -480,7 +485,7 @@ const CRUD_JS = `<script>(function(){try{
 function csrfH(){try{var m=document.querySelector('meta[name="csrf-token"]');return m?m.getAttribute('content')||'':'';}catch(e){return '';}}
 function msg(t){var m=document.getElementById('crudMsg');if(m)m.textContent=t||'';}
 function val(id){var el=document.getElementById(id);return el?el.value.trim().toUpperCase():'';}
-function collect(){var map={'código':'codigo','nombre':'nombre','circunscripción':'circunscripcion','tipo':'tipo','año':'ano','ppto':'ppto','municipio':'municipio','valor':'valor','número':'numero','numero':'numero','presupuesto':'presupuesto'};var o={};document.querySelectorAll('.form-slot .fld-grid .fld').forEach(function(l){var s=l.querySelector('span');var i=l.querySelector('input,select');if(s&&i){var k=map[s.textContent.trim().toLowerCase()]||s.textContent.trim().toLowerCase();o[k]=i.value.trim();}});return o;}
+function collect(){var map={'código':'codigo','nombre':'nombre','circunscripción':'circunscripcion','tipo':'tipo','año':'vigencia','presupuesto':'asignado','número':'numero','numero':'numero','ppto':'ppto','municipio':'municipio','valor':'valor','ejecutado':'ejecutado','ano':'ano'};var o={};document.querySelectorAll('.form-slot .fld-grid .fld').forEach(function(l){var s=l.querySelector('span');var i=l.querySelector('input,select');if(s&&i){var k=map[s.textContent.trim().toLowerCase()]||s.textContent.trim().toLowerCase();o[k]=i.value.trim();}});return o;}
 var g=document.getElementById('crudGuardar');
 if(g)g.addEventListener('click',function(){
 var id=g.getAttribute('data-crud-id');var editPk=g.getAttribute('data-edit-pk')||'';
@@ -508,6 +513,27 @@ if(x.d&&x.d.ok){window.location.reload();return;}
 msg((x.d&&(x.d.error||x.d.msg))||('Error '+x.s+'.'));
 }).catch(function(){msg('Error de red.');});
 });});
+}catch(e){}})();</script>`;
+
+const PAGER_JS = `<script>(function(){try{
+var PER=9;
+document.querySelectorAll('table.skl-table').forEach(function(tbl){
+var rows=tbl.querySelectorAll('tbody tr');
+if(rows.length<=PER)return;
+var pages=Math.ceil(rows.length/PER),cur=0;
+var bar=document.createElement('div');bar.className='skl-pager';
+bar.innerHTML='<button type="button" data-pg-prev>« Anterior</button><span class="tnum" data-pg-count></span><button type="button" data-pg-next>Siguiente »</button>';
+tbl.parentNode.insertBefore(bar,tbl.nextSibling);
+function render(){
+rows.forEach(function(r,i){r.style.display=(i>=cur*PER&&i<(cur+1)*PER)?'':'none';});
+var c=bar.querySelector('[data-pg-count]');if(c)c.textContent=(cur+1)+' / '+pages;
+var p=bar.querySelector('[data-pg-prev]'),n=bar.querySelector('[data-pg-next]');
+if(p)p.disabled=cur===0;if(n)n.disabled=cur===pages-1;
+}
+bar.querySelector('[data-pg-prev]').addEventListener('click',function(){if(cur>0){cur--;render();}});
+bar.querySelector('[data-pg-next]').addEventListener('click',function(){if(cur<pages-1){cur++;render();}});
+render();
+});
 }catch(e){}})();</script>`;
 
 function fmtFechaHora(v) {
