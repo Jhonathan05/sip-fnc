@@ -9,7 +9,7 @@ const kc = require('./kc');
 const views = require('./views');
 const { buildFncSession, isFncValid, fingerprintFor } = require('./session');
 const { getMockSession, isKeycloakMode } = require('./auth-provider');
-const { MODULES, NAV, canAccess, flattenLeaves, findLeaf } = require('./modules');
+const { MODULES, NAV, canAccess, flattenLeaves, findLeaf, tokenFor, realFor } = require('./modules');
 const { PROCESO_FORM } = require('./task-meta');
 const { hydrate } = require('./prefs');
 const { ensureToken, verifyCsrf } = require('./csrf');
@@ -20,6 +20,16 @@ const crypto = require('crypto');
 const APP_NAME = process.env.APP_NAME || 'app-fnc';
 const app = express();
 app.set('trust proxy', 1); // IP real tras nginx (cf-connecting-ip / x-forwarded-for)
+// URLs opacas: /v/:token → ruta real (conserva query). Primero de todo;
+// los guards y el resto operan sobre la ruta real. Token inválido → 404.
+app.use((req, res, next) => {
+  if (req.path === '/v' || req.path.startsWith('/v/')) {
+    const real = realFor(req.path.slice(3));
+    if (!real) return res.status(404).send(views.errorPage(req.session?.fnc, 'callback'));
+    req.url = real + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '');
+  }
+  next();
+});
 // Nonce CSP por request (las vistas lo inyectan en cada <script> inline).
 app.use((req, res, next) => {
   res.locals.nonce = crypto.randomBytes(16).toString('base64');
@@ -122,12 +132,12 @@ function setFnc(req, fnc, idToken) {
 }
 
 app.get('/', (req, res) => {
-  if (isFncValid(req.session?.fnc)) return res.redirect('/dashboard');
+  if (isFncValid(req.session?.fnc)) return res.redirect(tokenFor('/dashboard'));
   return res.redirect('/login');
 });
 
 app.get('/login', (req, res) => {
-  if (isFncValid(req.session?.fnc)) return res.redirect('/dashboard');
+  if (isFncValid(req.session?.fnc)) return res.redirect(tokenFor('/dashboard'));
   res.send(views.loginPage(APP_NAME, isKeycloakMode(), ensureToken(req), req.query.reason));
 });
 
@@ -136,7 +146,7 @@ app.post('/auth/mock', async (req, res) => {
   setFnc(req, getMockSession(req));
   await hydrate(req.session.fnc);
   writeAudit(req, { action: 'login.mock', modulo: 'auth' });
-  return res.redirect('/dashboard');
+  return res.redirect(tokenFor('/dashboard'));
 });
 
 app.get('/auth/app', (req, res) => {
@@ -170,7 +180,7 @@ app.get('/auth/callback/app', async (req, res) => {
     req.session.fnc.familyName = String(claims.family_name || '').trim();
     await hydrate(req.session.fnc);
     delete req.session.kc;
-    return res.redirect('/dashboard');
+    return res.redirect(tokenFor('/dashboard'));
   } catch (e) {
     console.error(`[${APP_NAME}] callback:`, e.message);
     return res.redirect('/error?reason=callback');
@@ -340,6 +350,18 @@ async function verifyTask(pool, t) {
   return { ok: false, msg: 'Este proceso aún no tiene verificación automática: ejecútalo desde su formulario.' };
 }
 
+// Traduce una URL interna con ruta real a su forma pública con token
+// ('/dashboard?form=/x' → '/v/xxx?f=yyy'; resto → tokenFor directo).
+function publicFormUrl(stored) {
+  if (!stored) return null;
+  const m = String(stored).match(/^\/dashboard\?form=(.+)$/);
+  if (m) {
+    const leafTok = tokenFor(decodeURIComponent(m[1])).replace('/v/', '');
+    return `${tokenFor('/dashboard')}?f=${encodeURIComponent(leafTok)}`;
+  }
+  return tokenFor(stored);
+}
+
 // GET /api/tareas/:id — detalle completo para el drawer (mismo filtro de rol que la lista).
 app.get('/api/tareas/:id', needLogin, needDb, async (req, res) => {
   const id = Number(req.params.id);
@@ -357,7 +379,7 @@ app.get('/api/tareas/:id', needLogin, needDb, async (req, res) => {
     const { rows } = await getPool().query(q, params);
     if (!rows.length) return res.status(404).json({ error: 'No encontrado.' });
     const t = rows[0];
-    t.formUrl = PROCESO_FORM[t.proceso] || null;
+    t.formUrl = publicFormUrl(PROCESO_FORM[t.proceso] || null);
     res.json(t);
   } catch (e) {
     console.error('[api/tareas:id]', e.message);
@@ -370,14 +392,16 @@ const page = (req, fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body
 app.get('/dashboard', needLogin, needDb, async (req, res) => {
   const fnc = req.session.fnc;
   try {
-    // Formulario inline: ?form=/ruta/hoja (informes → vista independiente).
+    // Formulario inline: ?f=<token> (legacy ?form=<ruta>). Informes → vista independiente.
     let form = null;
-    if (req.query.form) {
-      const hit = findLeaf(String(req.query.form));
+    const fTok = req.query.f ? realFor(String(req.query.f)) : null;
+    const fPath = fTok || (req.query.form ? String(req.query.form) : null);
+    if (fPath) {
+      const hit = findLeaf(fPath);
       if (!hit || !canAccess(fnc.role, hit.leaf)) {
         return res.status(403).send(views.errorPage(fnc, 'forbidden'));
       }
-      if (hit.sub.kind === 'informe') return res.redirect(hit.leaf.path);
+      if (hit.sub.kind === 'informe') return res.redirect(tokenFor(hit.leaf.path));
       form = hit;
     }
     const pool = getPool();
@@ -417,8 +441,10 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
     // Si el error ocurre con ?form válido, conservar la selección del árbol.
     let activePath = MODULES[0].path;
     try {
-      if (req.query.form) {
-        const hit = findLeaf(String(req.query.form));
+      const fTok2 = req.query.f ? realFor(String(req.query.f)) : null;
+      const fPath2 = fTok2 || (req.query.form ? String(req.query.form) : null);
+      if (fPath2) {
+        const hit = findLeaf(fPath2);
         if (hit && canAccess(fnc.role, hit.leaf) && hit.sub.kind !== 'informe') activePath = hit.leaf.path;
       }
     } catch { /* mantener Dashboard */ }
@@ -443,7 +469,7 @@ for (const mod of NAV.filter((m) => (m.children || []).length > 0)) {
 }
 
 // Mi perfil vive en el modal de Configuración; URL vieja redirige al dashboard.
-app.get('/perfil/perfil/mi-perfil', needLogin, (req, res) => res.redirect('/dashboard'));
+app.get('/perfil/perfil/mi-perfil', needLogin, (req, res) => res.redirect(tokenFor('/dashboard')));
 
 // POST /api/perfil/solicitar-clave — opción C: solicitud auditada al admin
 // (payload listo para webhook Discord en staging; el reset KC se cablea con fnc-keycloak-users).
@@ -455,7 +481,7 @@ app.post('/api/perfil/solicitar-clave', needLogin, needDb, async (req, res) => {
   if (rows[0].n === 0) {
     await writeAudit(req, { action: 'clave.solicitar', modulo: 'seguridad', detalle: `Solicitud de cambio de contraseña de ${fnc.email} (pendiente reset admin + UPDATE_PASSWORD)` });
   }
-  return res.redirect('/dashboard?msg=clave_solicitada');
+  return res.redirect(tokenFor('/dashboard')+'?msg=clave_solicitada');
 });
 
 // POST /api/perfil/preferencia — {display_mode: full|first} (autoservicio).
@@ -538,7 +564,7 @@ app.post('/api/admin/rate-limit', needLogin, needRole('ADMIN'), async (req, res)
   hotMax = perMin === ENV_MAX ? null : perMin;
   await writeAudit(req, { action: 'ratelimit.override', modulo: 'seguridad', detalle: `Límite a ${perMin}/min` });
   if ((req.headers.accept || '').includes('application/json')) return res.json({ ok: true, perMin });
-  return res.redirect('/seguridad?msg=ratelimit_ok');
+  return res.redirect(tokenFor('/seguridad')+'?msg=ratelimit_ok');
 });
 
 app.get('/seguridad', needLogin, needRole('ADMIN'), async (req, res) => {
@@ -564,7 +590,7 @@ app.get('/seguridad', needLogin, needRole('ADMIN'), async (req, res) => {
 
 // Matriz viva de roles: qué ve cada rol (permitido / deshabilitado / oculto).
 app.get('/roles', needLogin, (req, res) => {
-  res.send(page(req.session.fnc, { path: '/roles', title: 'Roles' }, views.rolesMatrix(req.session.fnc)));
+  res.send(page(req, req.session.fnc, { path: '/roles', title: 'Roles' }, views.rolesMatrix(req.session.fnc)));
 });
 
 app.get('/error', (req, res) => {
@@ -576,5 +602,6 @@ if (require.main === module) {
   app.listen(PORT, () => console.log(`[${APP_NAME}] http://localhost:${PORT} provider=${process.env.AUTH_PROVIDER || 'mock'}`));
 }
 module.exports = app;
+
 
 
