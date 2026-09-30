@@ -825,7 +825,13 @@ app.post('/api/smtp/guardar', needLogin, needRole('ADMIN'), needDb, async (req, 
     return res.redirect(tokenFor('/smtp') + '?msg=ok');
   } catch (e) {
     console.error('[smtp/guardar]', e.message);
-    return res.redirect(tokenFor('/smtp') + '?msg=' + encodeURIComponent('No se pudo guardar (¿ENCRYPTION_KEY?).'));
+    // Mensaje según causa: tabla ausente (migrate 004) vs clave ausente/corta vs otro.
+    const msg = (e.code === '42P01' || /does not exist/i.test(e.message || ''))
+      ? 'Falta la tabla app_settings: corre node db/migrate.js (004).'
+      : (/ENCRYPTION_KEY/.test(e.message || ''))
+        ? 'Falta ENCRYPTION_KEY (mín 32) en el .env: agrégala y reinicia.'
+        : 'No se pudo guardar.';
+    return res.redirect(tokenFor('/smtp') + '?msg=' + encodeURIComponent(msg));
   }
 });
 

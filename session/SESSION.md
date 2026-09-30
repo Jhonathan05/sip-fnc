@@ -41,7 +41,7 @@ Flip KC staging: registrar `sip-fnc-client` en `fnc-realm` + `AUTH_PROVIDER=keyc
 - Foto: jpeg/png/webp ≤5 MB → webp 256px q80, un archivo por `sub`.
 - Actividad en 3 niveles (plataforma / mía / auditoría admin).
 - SMTP: solo Resend, API key cifrada en BD, módulo Email solo admin.
-- Skills en `fnc-base/appweb-skills-fnc` (sede canónica), nunca por proyecto.
+- Skills en `G:\Open\appweb-skills-fnc` (sede canónica), nunca por proyecto.
 - Principios Modo B en cada cierre: 1) nada KC a medias, 2) sesión por contrato, 3) re-correr e2e al flipear.
 
 ## Pendiente (orden sugerido)

@@ -22,5 +22,8 @@
     "openid-client": "^5.7.1",
     "pg": "8.23.0",
     "sharp": "0.35.5"
+  },
+  "overrides": {
+    "uuid": "^11.0.0"
   }
 }
