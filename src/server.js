@@ -115,6 +115,7 @@ const needLogin = (req, res, next) => {
     req.session.lastActivity = Date.now();
     return next();
   }
+  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'No autenticado.' });
   return res.redirect('/login');
 };
 const needRole = (role) => (req, res, next) => {
