@@ -145,15 +145,15 @@ describe('auth + CSRF + contrato', () => {
 
 describe('URLs opacas + guards', () => {
   it('token dashboard y hoja → 200; real sigue viva', async () => {
-    assert.equal((await fetchJ('/v/rs')).status, 200);
+    assert.equal((await fetchJ(mods.tokenFor('/dashboard'))).status, 200);
     assert.equal((await fetchJ('/dashboard')).status, 200);
-    assert.equal((await fetchJ('/v/sc')).status, 200);
+    assert.equal((await fetchJ(mods.tokenFor('/adjudicaciones/procesos-especiales/sorteo'))).status, 200);
   });
   it('token inválido → 404', async () => {
     assert.equal((await fetchJ('/v/zz')).status, 404);
   });
   it('seguridad admin → 200 con auditoría', async () => {
-    const r = await fetchJ('/v/tb');
+    const r = await fetchJ(mods.tokenFor('/seguridad'));
     assert.equal(r.status, 200);
     assert.match(await r.text(), /Auditor/);
   });
