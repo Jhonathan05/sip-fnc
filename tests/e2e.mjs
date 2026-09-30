@@ -19,7 +19,11 @@ const TEST_DB = 'postgresql://sip:sip-dev-sololocal@localhost:5433/sip_fnc_test'
 const SESSION_SECRET = 'e2e fixed secret minimo 32 chars 0123456789abcdef';
 
 let server = null;
+let serverConsultor = null;
 const jar = { cookie: '' };
+const jarC = { cookie: '' };
+const PORT_C = 3102;
+const BASE_C = `http://localhost:${PORT_C}`;
 
 async function fetchJ(pathname, opts = {}) {
   const headers = { ...(opts.headers || {}) };
@@ -27,6 +31,15 @@ async function fetchJ(pathname, opts = {}) {
   const res = await fetch(BASE + pathname, { redirect: 'manual', ...opts, headers });
   const sets = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
   if (sets.length) jar.cookie = sets.map((c) => c.split(';')[0].trim()).join('; ');
+  return res;
+}
+
+async function fetchC(pathname, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  if (jarC.cookie) headers.Cookie = jarC.cookie;
+  const res = await fetch(BASE_C + pathname, { redirect: 'manual', ...opts, headers });
+  const sets = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
+  if (sets.length) jarC.cookie = sets.map((c) => c.split(';')[0].trim()).join('; ');
   return res;
 }
 
@@ -69,10 +82,29 @@ before(async () => {
     await new Promise((r) => setTimeout(r, 500));
   }
   assert.equal(up, 200, 'servidor e2e arriba');
+  serverConsultor = spawn('node', ['src/server.js'], {
+    cwd: ROOT,
+    env: {
+      ...process.env, PORT: String(PORT_C), DATABASE_URL: TEST_DB, SESSION_SECRET,
+      AUTH_PROVIDER: 'mock', MOCK_ROLES: 'consultor',
+      CLIENT_ROLES: 'admin,coordinador,consultor,analista,auxiliar',
+      APP_BASE: BASE_C, RATE_LIMIT_API_PER_MIN: '1000',
+      KEYCLOAK_URL: 'http://fnc-keycloak:8080/auth', KEYCLOAK_PUBLIC_URL: 'http://localhost:8080/auth',
+      KEYCLOAK_REALM: 'fnc-realm', KEYCLOAK_CLIENT_ID: 'sip-fnc-client', KEYCLOAK_CLIENT_SECRET: 'x',
+    },
+    stdio: 'pipe',
+  });
+  let upC = 0;
+  for (let i = 0; i < 40; i++) {
+    try { const r = await fetch(`${BASE_C}/login`); if (r.status === 200) { upC = 200; break; } } catch { /* esperando */ }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  assert.equal(upC, 200, 'servidor e2e consultor arriba');
 });
 
 after(async () => {
   if (server) server.kill();
+  if (serverConsultor) serverConsultor.kill();
   await new Promise((r) => setTimeout(r, 1000));
   // Limpieza disco: fotos subidas por la suite (test-hygiene: ambos lados).
   for (const f of fs.readdirSync(path.join(ROOT, 'public', 'img', 'user'))) {
@@ -174,6 +206,42 @@ describe('tareas e2e', () => {
   it('detalle inexistente → 404; id inválido → 400', async () => {
     assert.equal((await fetchJ('/api/tareas/999999')).status, 404);
     assert.equal((await fetchJ('/api/tareas/abc')).status, 400);
+  });
+});
+
+describe('rol consultor (solo lectura)', () => {
+  let consultorTask = null;
+  it('login → FUNCIONARIO sin Seguridad en nav', async () => {
+    jarC.cookie = '';
+    const lh = await (await fetchC('/login')).text();
+    const tok = (lh.match(/name="_csrf" value="([^"]+)"/) || [])[1];
+    assert.ok(tok);
+    await fetchC('/auth/mock', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: tok }) });
+    const me = await (await fetchC('/api/me')).json();
+    assert.equal(me.role, 'FUNCIONARIO');
+    assert.ok(me.roles.includes('consultor'));
+    const dash = await (await fetchC('/dashboard')).text();
+    assert.ok(!dash.includes('/seguridad'), 'sin Seguridad en nav');
+  });
+  it('seguridad y admin → 403', async () => {
+    assert.equal((await fetchC('/seguridad')).status, 403);
+    assert.equal((await fetchC('/api/admin/rate-limit')).status, 403);
+  });
+  it('crear y validar → 403; leer tareas → 200', async () => {
+    const d = await (await fetchC('/dashboard')).text();
+    const mt = (d.match(/name="csrf-token" content="([^"]+)"/) || [])[1];
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    assert.equal((await fetchC('/api/tareas', { method: 'POST', headers: h, body: JSON.stringify({ titulo: '[e2e] No debe crear', rol: 'consultor', fecha_limite: '2030-01-15' }) })).status, 403);
+    assert.equal((await fetchC('/api/tareas')).status, 200);
+    const list = await (await fetchC('/api/tareas')).json();
+    if (list.length) {
+      consultorTask = list[0].id;
+      assert.equal((await fetchC(`/api/tareas/${consultorTask}/validar`, { method: 'POST', headers: { 'x-csrf-token': mt } })).status, 403);
+    }
+  });
+  it('botón Nueva tarea oculto y sin botón completar', async () => {
+    const dash = await (await fetchC('/dashboard')).text();
+    assert.ok(!dash.includes('<button class="btn-circle" data-open-modal="tarea-crear"'), 'sin disparador crear');
   });
 });
 
