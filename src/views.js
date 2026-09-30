@@ -292,7 +292,7 @@ ${profileModal(csrf)}
 ${inactivityModal()}
 ${taskCreateModal()}
 ${detailDrawer()}
-${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}</body></html>`;
+${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}</body></html>`;
 }
 
 function loginPage(appName, kcMode, csrf, reason) {
@@ -434,13 +434,81 @@ function formSlot(form) {
     return `<div class="card form-slot"><h2>Formularios</h2><p>Selecciona una opción del nav izquierdo: los formularios pequeños se abren aquí; los informes tienen vista propia.</p></div>`;
   }
   const { leaf, sub, mod } = form;
+  if (leaf.crud && form.rows) return crudMaestro(leaf, form);
   const kinds = { maestro: skeletonMaestro, informe: skeletonInforme, proceso: skeletonProceso, consulta: skeletonConsulta };
   const render = kinds[sub.kind] || skeletonMaestro;
   const body = sub.kind === 'info'
     ? `<p><a class="btn-primary" href="${tokenFor(leaf.path)}">Abrir ${esc(leaf.title)}</a></p>`
     : render(leaf, sub);
-  return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)} <span class="badge">skeleton</span></h2>${body}</div>`;
+  return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)}</h2>${body}</div>`;
 }
+
+// CRUD funcional de maestros (Fase 2): tabla + alta/edición + borrado con guards.
+function crudField(f, catalogs) {
+  if (f.type === 'select' && f.label === 'Circunscripción' && catalogs.circunscripcion) {
+    const opts = catalogs.circunscripcion.map((c) => `<option value="${esc(c.codigo)}">${esc(c.codigo)} — ${esc(c.nombre)}</option>`).join('');
+    return `<label class="fld"><span>Circunscripción</span><select id="crud-circunscripcion"><option value="">—</option>${opts}</select></label>`;
+  }
+  if (f.type === 'select') {
+    const opts = (f.options || []).map((o) => `<option>${esc(o)}</option>`).join('');
+    return `<label class="fld"><span>${esc(f.label)}</span><select id="crud-${esc(f.label)}"><option value="">—</option>${opts}</select></label>`;
+  }
+  const t = f.type === 'number' ? 'number' : 'text';
+  return `<label class="fld"><span>${esc(f.label)}</span><input id="crud-${esc(f.label)}" type="${t}"></label>`;
+}
+
+function crudMaestro(leaf, form) {
+  const perms = form.perms || {};
+  const cols = Object.keys((form.rows && form.rows[0]) || { codigo: '', nombre: '' });
+  const head = cols.map((c) => `<th>${esc(c)}</th>`).join('');
+  const bodyRows = (form.rows || []).map((r) => {
+    const tds = cols.map((c) => `<td class="tnum">${esc(r[c] == null ? '' : String(r[c]))}</td>`).join('');
+    const pk = esc(r.codigo || '');
+    const edit = perms.w ? `<button class="stepper-button" data-crud-edit="${pk}" type="button">Editar</button>` : '';
+    const del = perms.d ? `<button class="stepper-button" data-crud-del="${pk}" type="button">Borrar</button>` : '';
+    return `<tr data-crud-row="${pk}">${tds}<td>${edit} ${del}</td></tr>`;
+  }).join('');
+  const fields = (leaf.fields || []).map((f) => crudField(f, form.catalogs || {})).join('');
+  const save = perms.w ? `<button class="btn-primary" id="crudGuardar" data-crud-id="${esc(leaf.crud)}" type="button" style="margin-top:0">Guardar</button>` : `<p><span class="badge">solo lectura</span></p>`;
+  return `<div class="card form-slot"><h2>${esc(leaf.title)}</h2>
+<p id="crudMsg" class="drawer-msg"></p>
+<table class="skl-table"><thead><tr>${head}<th>Acciones</th></tr></thead><tbody>${bodyRows || `<tr><td colspan="${cols.length + 1}">Sin registros.</td></tr>`}</tbody></table>
+<div class="fld-grid">${fields}</div>${save}</div>`;
+}
+
+const CRUD_JS = `<script>(function(){try{
+function csrfH(){try{var m=document.querySelector('meta[name="csrf-token"]');return m?m.getAttribute('content')||'':'';}catch(e){return '';}}
+function msg(t){var m=document.getElementById('crudMsg');if(m)m.textContent=t||'';}
+function val(id){var el=document.getElementById(id);return el?el.value.trim().toUpperCase():'';}
+function collect(){var map={'código':'codigo','nombre':'nombre','circunscripción':'circunscripcion','tipo':'tipo','año':'ano','ppto':'ppto','municipio':'municipio','valor':'valor','número':'numero','numero':'numero','presupuesto':'presupuesto'};var o={};document.querySelectorAll('.form-slot .fld-grid .fld').forEach(function(l){var s=l.querySelector('span');var i=l.querySelector('input,select');if(s&&i){var k=map[s.textContent.trim().toLowerCase()]||s.textContent.trim().toLowerCase();o[k]=i.value.trim();}});return o;}
+var g=document.getElementById('crudGuardar');
+if(g)g.addEventListener('click',function(){
+var id=g.getAttribute('data-crud-id');var editPk=g.getAttribute('data-edit-pk')||'';
+var body=collect();var method=editPk?'PUT':'POST';var url='/api/maestros/'+id+(editPk?'/'+encodeURIComponent(editPk):'');
+msg('Guardando…');
+fetch(url,{method:method,headers:{'Content-Type':'application/json','x-csrf-token':csrfH()},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+if(x.d&&x.d.ok){window.location.reload();return;}
+msg((x.d&&(x.d.error||x.d.msg))||('Error '+x.s+'.'));
+}).catch(function(){msg('Error de red.');});
+});
+document.querySelectorAll('[data-crud-edit]').forEach(function(b){b.addEventListener('click',function(){
+var pk=b.getAttribute('data-crud-edit');var row=document.querySelector('tr[data-crud-row="'+pk+'"]');
+if(row){var cells=row.querySelectorAll('td');var labels=document.querySelectorAll('.form-slot .fld-grid .fld span');cells.forEach(function(c,i){if(i<labels.length){var inp=labels[i].parentElement.querySelector('input,select');if(inp)inp.value=c.textContent.trim();}});}
+var gg=document.getElementById('crudGuardar');if(gg){gg.setAttribute('data-edit-pk',pk);gg.textContent='Actualizar';}
+msg('Editando '+pk+' (código inmutable).');
+});});
+document.querySelectorAll('[data-crud-del]').forEach(function(b){b.addEventListener('click',function(){
+var pk=b.getAttribute('data-crud-del');
+if(!window.confirm('¿Borrar '+pk+'?'))return;
+var id=(document.getElementById('crudGuardar')||{}).getAttribute?document.getElementById('crudGuardar').getAttribute('data-crud-id'):'';
+var parts=window.location.search.match(/f=([^&]+)/);var leafId=id;
+msg('Borrando…');
+fetch('/api/maestros/'+leafId+'/'+encodeURIComponent(pk),{method:'DELETE',headers:{'x-csrf-token':csrfH()}}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+if(x.d&&x.d.ok){window.location.reload();return;}
+msg((x.d&&(x.d.error||x.d.msg))||('Error '+x.s+'.'));
+}).catch(function(){msg('Error de red.');});
+});});
+}catch(e){}})();</script>`;
 
 function fmtFechaHora(v) {
   if (!v) return '—';

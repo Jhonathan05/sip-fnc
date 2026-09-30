@@ -15,9 +15,9 @@ const NAV = [
         key: 'actualizaciones', title: 'Actualizaciones', icon: 'tareas',
                 desc: 'Maestros y distribuciones por vigencia.',
         children: [
-          { path: '/distribucion/actualizaciones/circunscripciones', title: 'Circunscripciones', roles: BOTH, fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }] },
-          { path: '/distribucion/actualizaciones/municipios', title: 'Municipios', roles: BOTH, fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }, { label: 'Circunscripción', type: 'select', options: ['Norte', 'Sur', 'Oriente', 'Occidente', 'Centro'] }] },
-          { path: '/distribucion/actualizaciones/tipos-distribuciones', title: 'Tipos de Distribuciones', roles: BOTH, fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }] },
+          { path: '/distribucion/actualizaciones/circunscripciones', title: 'Circunscripciones', roles: BOTH, crud: 'circunscripciones', fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }] },
+          { path: '/distribucion/actualizaciones/municipios', title: 'Municipios', roles: BOTH, crud: 'municipios', fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }, { label: 'Circunscripción', type: 'select', options: ['Norte', 'Sur', 'Oriente', 'Occidente', 'Centro'] }] },
+          { path: '/distribucion/actualizaciones/tipos-distribuciones', title: 'Tipos de Distribuciones', roles: BOTH, crud: 'tipos-distribuciones', fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }] },
           { path: '/distribucion/actualizaciones/distribuciones', title: 'Distribuciones', roles: BOTH, fields: [{ label: 'Tipo', type: 'select', options: ['Municipio vigencia actual', 'Municipio anteriores', 'Circunscripción actual', 'Circunscripción anteriores'] }, { label: 'Año', type: 'number' }, { label: 'Presupuesto', type: 'number' }] },
           { path: '/distribucion/actualizaciones/distribucion-municipio', title: 'Distribución por Municipio', roles: BOTH, fields: [{ label: 'Número', type: 'number' }, { label: 'Tipo', type: 'number' }, { label: 'Año', type: 'number' }, { label: 'Ppto', type: 'number' }, { label: 'Municipio', type: 'text' }, { label: 'Valor', type: 'number' }] },
         ],

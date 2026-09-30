@@ -12,6 +12,33 @@ const { getMockSession, isKeycloakMode } = require('./auth-provider');
 const { MODULES, NAV, canAccess, flattenLeaves, findLeaf, tokenFor, realFor } = require('./modules');
 const { PROCESO_FORM } = require('./task-meta');
 const { hydrate } = require('./prefs');
+
+// Guards granulares Fase 2 (primera granularidad fina real):
+// leer: todos · crear/editar: todos menos consultor · borrar: admin + coordinador.
+function canWrite(fnc) {
+  if (!fnc) return false;
+  if (fnc.role === 'ADMIN') return true;
+  const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
+  return roles.some((r) => ['admin', 'coordinador', 'analista', 'auxiliar'].includes(r));
+}
+function canDelete(fnc) {
+  if (!fnc) return false;
+  if (fnc.role === 'ADMIN') return true;
+  const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
+  return roles.some((r) => ['admin', 'coordinador'].includes(r));
+}
+
+// Maestros Distribución: catálogo tabla/pk/columnas (Fase 2).
+const MAESTROS = {
+  'circunscripciones': { table: 'circunscripciones', pk: 'codigo', cols: ['codigo', 'nombre'] },
+  'municipios': { table: 'municipios', pk: 'codigo', cols: ['codigo', 'nombre', 'circunscripcion'] },
+  'tipos-distribuciones': { table: 'tipos_distribucion', pk: 'codigo', cols: ['codigo', 'nombre'] },
+};
+
+function validCodigo(v) {
+  return typeof v === 'string' && /^[A-Z0-9-]{2,12}$/.test(v.trim().toUpperCase());
+}
+
 const { ensureToken, verifyCsrf } = require('./csrf');
 const { getPool, dbReady } = require('./db');
 const { writeAudit } = require('./audit');
@@ -122,6 +149,7 @@ const needRole = (role) => (req, res, next) => {
   if (req.session?.fnc?.role === role) return next();
   return res.status(403).send(views.errorPage(req.session?.fnc, 'forbidden'));
 };
+
 
 function setFnc(req, fnc, idToken) {
   req.session.fnc = fnc;
@@ -388,6 +416,76 @@ app.get('/api/tareas/:id', needLogin, needDb, async (req, res) => {
   }
 });
 
+
+// CRUD maestros Distribuci�n (tras app + guards).
+// GET /api/maestros/:id — lista (lectura: todos los roles).
+app.get('/api/maestros/:id', needLogin, needDb, async (req, res) => {
+  const m = MAESTROS[req.params.id];
+  if (!m) return res.status(404).json({ error: 'Maestro desconocido.' });
+  const { rows } = await getPool().query(`SELECT ${m.cols.join(',')} FROM ${m.table} ORDER BY ${m.pk}`);
+  res.json(rows);
+});
+
+// POST /api/maestros/:id — crear (todos menos consultor).
+app.post('/api/maestros/:id', needLogin, needDb, async (req, res) => {
+  const m = MAESTROS[req.params.id];
+  if (!m) return res.status(404).json({ ok: false, error: 'Maestro desconocido.' });
+  if (!canWrite(req.session.fnc)) return res.status(403).json({ ok: false, error: 'Sin permiso.' });
+  const vals = {};
+  for (const c of m.cols) vals[c] = String((req.body && req.body[c]) || '').trim().toUpperCase();
+  if (!validCodigo(vals[m.pk])) return res.status(400).json({ ok: false, error: 'Código inválido (2-12, A-Z 0-9 -).' });
+  if (!vals.nombre || vals.nombre.length < 2) return res.status(400).json({ ok: false, error: 'Nombre requerido (mín 2).' });
+  try {
+    await getPool().query(
+      `INSERT INTO ${m.table} (${m.cols.join(',')}) VALUES (${m.cols.map((_, i) => `$${i + 1}`).join(',')})`,
+      m.cols.map((c) => vals[c] || null));
+    await writeAudit(req, { action: 'maestro.crear', modulo: 'distribucion', entidadId: vals[m.pk], detalle: `${req.params.id}: ${vals[m.pk]}` });
+    return res.status(201).json({ ok: true });
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ ok: false, error: 'El código ya existe.' });
+    if (e.code === '23503') return res.status(400).json({ ok: false, error: 'Referencia inválida.' });
+    console.error('[maestros:create]', e.message);
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+
+// PUT /api/maestros/:id/:codigo — editar (todos menos consultor; pk inmutable).
+app.put('/api/maestros/:id/:codigo', needLogin, needDb, async (req, res) => {
+  const m = MAESTROS[req.params.id];
+  if (!m) return res.status(404).json({ ok: false, error: 'Maestro desconocido.' });
+  if (!canWrite(req.session.fnc)) return res.status(403).json({ ok: false, error: 'Sin permiso.' });
+  const pairs = m.cols.filter((c) => c !== m.pk).map((c) => [c, String((req.body && req.body[c]) || '').trim().toUpperCase()]).filter(([, v]) => v);
+  if (!pairs.length) return res.status(400).json({ ok: false, error: 'Nada que actualizar.' });
+  if (pairs.some(([, v]) => v.length < 2)) return res.status(400).json({ ok: false, error: 'Valores muy cortos.' });
+  try {
+    const sets = pairs.map(([c], i) => `${c} = $${i + 2}`).join(',');
+    const { rowCount } = await getPool().query(`UPDATE ${m.table} SET ${sets} WHERE ${m.pk} = $1`, [String(req.params.codigo).toUpperCase(), ...pairs.map(([, v]) => v)]);
+    if (!rowCount) return res.status(404).json({ ok: false, error: 'No encontrado.' });
+    await writeAudit(req, { action: 'maestro.editar', modulo: 'distribucion', entidadId: String(req.params.codigo).toUpperCase(), detalle: req.params.id });
+    return res.json({ ok: true });
+  } catch (e) {
+    if (e.code === '23503') return res.status(400).json({ ok: false, error: 'Referencia inválida.' });
+    console.error('[maestros:update]', e.message);
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+
+// DELETE /api/maestros/:id/:codigo — borrar (admin + coordinador).
+app.delete('/api/maestros/:id/:codigo', needLogin, needDb, async (req, res) => {
+  const m = MAESTROS[req.params.id];
+  if (!m) return res.status(404).json({ ok: false, error: 'Maestro desconocido.' });
+  if (!canDelete(req.session.fnc)) return res.status(403).json({ ok: false, error: 'Solo admin y coordinador.' });
+  try {
+    const { rowCount } = await getPool().query(`DELETE FROM ${m.table} WHERE ${m.pk} = $1`, [String(req.params.codigo).toUpperCase()]);
+    if (!rowCount) return res.status(404).json({ ok: false, error: 'No encontrado.' });
+    await writeAudit(req, { action: 'maestro.borrar', modulo: 'distribucion', entidadId: String(req.params.codigo).toUpperCase(), detalle: req.params.id });
+    return res.json({ ok: true });
+  } catch (e) {
+    if (e.code === '23503') return res.status(409).json({ ok: false, error: 'En uso: no se puede borrar.' });
+    console.error('[maestros:delete]', e.message);
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
 const page = (req, fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body, ensureToken(req), req.nonce);
 
 app.get('/dashboard', needLogin, needDb, async (req, res) => {
@@ -404,6 +502,17 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
       }
       if (hit.sub.kind === 'informe') return res.redirect(tokenFor(hit.leaf.path));
       form = hit;
+      form.perms = { w: canWrite(fnc), d: canDelete(fnc) };
+      // Maestros con CRUD real: precarga filas + catálogos para el renderer.
+      if (hit.leaf.crud && MAESTROS[hit.leaf.crud]) {
+        const mc = MAESTROS[hit.leaf.crud];
+        const r = await getPool().query(`SELECT ${mc.cols.join(',')} FROM ${mc.table} ORDER BY ${mc.pk}`);
+        form.rows = r.rows;
+        if (hit.leaf.crud === 'municipios') {
+          const c = await getPool().query('SELECT codigo, nombre FROM circunscripciones ORDER BY codigo');
+          form.catalogs = { circunscripcion: c.rows };
+        }
+      }
     }
     const pool = getPool();
     const [s, a] = await Promise.all([
