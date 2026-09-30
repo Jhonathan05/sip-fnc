@@ -14,6 +14,9 @@ async function main() {
   const sql2 = fs.readFileSync(path.join(__dirname, 'migrate', '002_user_prefs.sql'), 'utf8');
   await pool.query(sql2);
   console.log('[migrate] 002_user_prefs ok');
+  const sql3 = fs.readFileSync(path.join(__dirname, 'migrate', '003_distribucion_maestros.sql'), 'utf8');
+  await pool.query(sql3);
+  console.log('[migrate] 003_distribucion_maestros ok');
 
   // Seed: 4 distribuciones vigencia actual
   const y = new Date().getFullYear();
