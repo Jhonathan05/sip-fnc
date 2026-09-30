@@ -113,6 +113,9 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json({ limit: '100kb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use(session({
+  // Cookie propia por proyecto (nunca el default connect.sid): las cookies no
+  // distinguen puertos y otra app en localhost la pisaría (doble login).
+  name: 'sip.sid',
   secret: process.env.SESSION_SECRET || 'cambiar-en-env-minimo-32-chars',
   resave: false,
   saveUninitialized: false,
@@ -194,6 +197,9 @@ app.get('/', (req, res) => {
 
 app.get('/login', (req, res) => {
   if (isFncValid(req.session?.fnc)) return res.redirect(tokenFor('/dashboard'));
+  // Sin caché: atrás tras login revalida y redirige al dashboard
+  // (nunca se reenvía un formulario viejo con token huérfano).
+  res.set('Cache-Control', 'no-store');
   res.send(views.loginPage(APP_NAME, isKeycloakMode(), ensureToken(req), req.query.reason));
 });
 

@@ -254,45 +254,7 @@ code {
     font-weight: 500;
 }
 
-/* ── Botón + popover Accesibilidad (header, a la izquierda del perfil) ── */
-.a11y-wrap {
-    position: relative;
-}
-
-.a11y-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    border: 1px solid var(--border-light);
-    background: var(--bg-card);
-    color: var(--text-dark);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.a11y-btn:hover {
-    background: var(--azul-soft);
-}
-
-.a11y-pop {
-    position: absolute;
-    right: 0;
-    top: 44px;
-    width: 230px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-light);
-    border-radius: 14px;
-    box-shadow: var(--shadow-subtle);
-    padding: 12px;
-    z-index: 200;
-}
-
-.a11y-pop[hidden] {
-    display: none;
-}
-
+/* ── Accesibilidad en el pie del nav: botones independientes con estilo toggle ── */
 .a11y-sec-label {
     font-size: var(--fs-label);
     text-transform: uppercase;
@@ -353,11 +315,9 @@ code {
     cursor: not-allowed;
 }
 
-.a11y-fontval {
-    flex: 1;
-    text-align: center;
-    font-size: var(--fs-table);
-    font-variant-numeric: tabular-nums;
+/* Color a 100%: letra en tamaño base (indicador sin % readout) */
+.nav-collapse-bar .nav-collapse-btn.is-default {
+    color: var(--azul-ink);
 }
 
 /* ── Nav árbol SIP (módulo → sub → hoja), plano ── */
@@ -476,12 +436,15 @@ code {
     outline-offset: 2px;
 }
 
-/* ── Nav colapsable: solo iconos + hover expande (overlay) ── */
+/* ── Barra inferior del nav: toggle + accesibilidad en fila ── */
 .nav-collapse-bar {
     border-top: 1px solid var(--border-light);
     margin: 6px 0 0 -20px;
-    padding: 10px 0 0 20px;
+    padding: 10px 12px 0 20px;
     display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
 }
 
 .nav-collapse-btn {
@@ -497,6 +460,9 @@ code {
     justify-content: center;
     padding: 0;
     flex-shrink: 0;
+    font-size: var(--fs-table);
+    font-weight: 600;
+    font-family: inherit;
 }
 
 .nav-collapse-btn:hover {
@@ -504,12 +470,17 @@ code {
     color: var(--azul-ink);
 }
 
+.nav-collapse-btn:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+
 .nav-collapse-btn svg {
     transition: transform 200ms ease;
 }
 
-/* Colapsado: icono espejado (barra a la derecha = expandir) */
-.nav-collapsed .nav-collapse-btn svg {
+/* Colapsado: icono del toggle espejado (barra a la derecha = expandir) */
+.nav-collapsed #navCollapseBtn svg {
     transform: scaleX(-1);
 }
 
@@ -517,12 +488,31 @@ code {
     justify-content: center;
     margin: 6px -11px 0;
     padding: 10px 11px 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
 }
 
-.nav-collapsed .app-sidebar:hover .nav-collapse-bar {
-    justify-content: flex-start;
+.nav-collapsed:not(.nav-lock) .app-sidebar:hover .nav-collapse-bar {
+    justify-content: space-between;
+    flex-direction: row;
+    align-items: center;
     margin: 6px 0 0 -20px;
-    padding: 10px 0 0 20px;
+    padding: 10px 12px 0 20px;
+}
+
+/* Grupo accesibilidad: separado del toggle, con respiro propio */
+.a11y-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.nav-collapsed .a11y-group {
+    flex-direction: column;
+    gap: 6px;
+}
+.nav-collapsed:not(.nav-lock) .app-sidebar:hover .a11y-group {
+    flex-direction: row;
 }
 
 .nav-collapsed .sidebar-nav {
@@ -530,7 +520,7 @@ code {
     align-items: center;
 }
 
-.nav-collapsed .app-sidebar:hover .sidebar-nav {
+.nav-collapsed:not(.nav-lock) .app-sidebar:hover .sidebar-nav {
     align-items: stretch;
 }
 
@@ -544,7 +534,7 @@ code {
     padding-right: 11px;
 }
 
-.nav-collapsed .app-sidebar:hover {
+.nav-collapsed:not(.nav-lock) .app-sidebar:hover {
     width: 264px;
     padding: 24px 20px 10px 20px;
     padding-right: 0;
@@ -555,8 +545,8 @@ code {
     display: none;
 }
 
-.nav-collapsed .app-sidebar:hover .sidebar-nav .nav-label,
-.nav-collapsed .app-sidebar:hover .sidebar-section-label {
+.nav-collapsed:not(.nav-lock) .app-sidebar:hover .sidebar-nav .nav-label,
+.nav-collapsed:not(.nav-lock) .app-sidebar:hover .sidebar-section-label {
     display: revert;
 }
 
@@ -565,8 +555,8 @@ code {
     display: none;
 }
 
-.nav-collapsed .app-sidebar:hover .tree-subs,
-.nav-collapsed .app-sidebar:hover .tree-leaves {
+.nav-collapsed:not(.nav-lock) .app-sidebar:hover .tree-subs,
+.nav-collapsed:not(.nav-lock) .app-sidebar:hover .tree-leaves {
     display: flex;
 }
 
@@ -577,8 +567,8 @@ code {
     padding-right: 0;
 }
 
-.nav-collapsed .app-sidebar:hover .tab-btn,
-.nav-collapsed .app-sidebar:hover .tree-sub-head {
+.nav-collapsed:not(.nav-lock) .app-sidebar:hover .tab-btn,
+.nav-collapsed:not(.nav-lock) .app-sidebar:hover .tree-sub-head {
     justify-content: flex-start;
     padding: 8px 12px;
 }
@@ -587,7 +577,7 @@ code {
     padding: 7px 0;
 }
 
-.nav-collapsed .app-sidebar:hover .tree-sub-head {
+.nav-collapsed:not(.nav-lock) .app-sidebar:hover .tree-sub-head {
     padding: 7px 12px;
 }
 
@@ -595,7 +585,7 @@ code {
     align-items: center;
 }
 
-.nav-collapsed .app-sidebar:hover .nav-config {
+.nav-collapsed:not(.nav-lock) .app-sidebar:hover .nav-config {
     align-items: stretch;
 }
 
@@ -1424,7 +1414,7 @@ code {
 .print-only { display: none; }
 @media print {
     .header-fnc, .app-sidebar, .skl-bar, .skl-pager, .stepper-controls,
-    .a11y-wrap, .header-user-profile form, .modal-overlay, .nav-collapse-bar { display: none !important; }
+    .header-user-profile form, .modal-overlay, .nav-collapse-bar { display: none !important; }
     .main-container { margin: 0; padding: 0; }
     .card.form-slot { border: 0; box-shadow: none; max-width: none; padding: 0; }
     .print-only { display: block; margin-bottom: 12px; font-size: 12px; color: #000; }

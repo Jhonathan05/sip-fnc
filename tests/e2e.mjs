@@ -145,6 +145,14 @@ describe('auth + CSRF + contrato', () => {
     assert.equal(me.role, 'ADMIN');
   });
   it('login mock → 302 a token dashboard', async () => { await loginAsAdmin(); });
+  it('cookie de sesión propia (sip.sid) + login sin caché', async () => {
+    jar.cookie = '';
+    const r = await fetchJ('/login');
+    const sets = r.headers.getSetCookie ? r.headers.getSetCookie() : [];
+    assert.ok(sets.some((c) => c.startsWith('sip.sid=')), 'Set-Cookie sip.sid, nunca connect.sid');
+    assert.match(String(r.headers.get('cache-control') || ''), /no-store/, 'login no cacheable (atrás no reenvía forms viejos)');
+    await loginAsAdmin(); // restaura jar con sesión para los siguientes
+  });
   it('GET /api/me devuelve FncSession con exp-iat=28800', async () => {
     const me = await (await fetchJ('/api/me')).json();
     for (const k of ['sub', 'email', 'displayName', 'roles', 'role', 'fingerprint', 'iat', 'exp']) assert.ok(me[k] !== undefined, k);
@@ -159,6 +167,21 @@ describe('auth + CSRF + contrato', () => {
     const n = (csp.match(/nonce-([^']+)/) || [])[1];
     assert.ok(n && html.includes(`nonce="${n}"`));
     assert.match(html, /__fncFetch/, 'wrapper fetch auto-redirect INACTIVE');
+  });
+  it('a11y botones independientes al pie del nav + nav-lock', async () => {
+    const html = await (await fetchJ('/dashboard')).text();
+    const iBar = html.indexOf('nav-collapse-bar');
+    for (const id of ['id="navCollapseBtn"', 'id="fontDown"', 'id="fontUp"', 'id="themeToggle"']) {
+      const i = html.indexOf(id);
+      assert.ok(i > iBar, `${id} dentro de la barra inferior`);
+    }
+    assert.ok(!html.includes('a11yBtn') && !html.includes('a11yPop'), 'sin popover legacy');
+    const iGroup = html.indexOf('class="a11y-group"');
+    assert.ok(iGroup > iBar && html.indexOf('id="themeToggle"') > iGroup, 'a11y agrupado separado del toggle');
+    const iHead = html.indexOf('header-user-profile');
+    assert.ok(iHead > 0 && !html.slice(iHead, iHead + 2000).includes('fontDown'), 'header sin accesibilidad');
+    assert.match(html, /nav-lock/, 'lógica nav-lock presente');
+    assert.match(html, /is-default/, 'color a 100% presente');
   });
 });
 
