@@ -98,6 +98,8 @@ function inactivityModal() {
 }
 
 const INACTIVITY_JS = `<script>(function(){try{
+// Flujos fetch ante sesión muerta: 401 INACTIVE redirige al login con motivo.
+if(!window.__fncFetch&&window.fetch){window.__fncFetch=window.fetch;window.fetch=function(u,o){return window.__fncFetch(u,o).then(function(r){if(r&&r.status===401){try{r.clone().json().then(function(d){if(d&&d.code==='INACTIVE')window.location.href='/login?reason=inactivity';}).catch(function(){});}catch(e){}}return r;});};}
 var WARN_AT=4*60*1000, LIMIT=5*60*1000, deadline=Date.now()+LIMIT, timer=null, shown=false;
 var modal=document.getElementById('inactModal'), secs=document.getElementById('inactSecs');
 function csrfH(){try{var m=document.querySelector('meta[name="csrf-token"]');return m?m.getAttribute('content')||'':'';}catch(e){return '';}}
@@ -274,7 +276,7 @@ function layout(appName, fnc, active, body, csrf, nonce) {
   const initial = email.trim().charAt(0).toUpperCase() || 'U';
   const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
   const csrfMetaTag = csrf ? `<meta name="csrf-token" content="${csrf}">` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-print"><link rel="stylesheet" href="/css/app.css?v=20260928-print"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-mini.svg" alt="Comité de Cafeteros del Tolima" height="30"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="26"><span class="brand-divider" aria-hidden="true"></span><div><span class="header-brand-name"><strong>SIP</strong> Sistema de Información de Proyectos</span></div></div></div>
 <div class="header-user-profile">${a11yControls()}${fnc?.photo ? `<img class="user-photo" src="${fnc.photo}" alt="${esc(shownName(fnc) || 'Usuario')}">` : `<div class="user-avatar">${esc(initial)}</div>`}<div><span class="user-name" title="${esc((fnc.displayName || '') + (fnc.email ? ' · ' + fnc.email : ''))}">${esc(shownName(fnc))}</span></div>
@@ -293,14 +295,16 @@ ${profileModal(csrf)}
 ${inactivityModal()}
 ${taskCreateModal()}
 ${detailDrawer()}
-${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}</body></html>`;
+${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}${withNonce(PRINT_JS, nonce)}</body></html>`;
 }
 
 function loginPage(appName, kcMode, csrf, reason) {
   const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
   const notice = reason === 'inactivity'
-    ? `<div class="alert-err">Sesión cerrada por inactividad. Ingresa de nuevo.</div>` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
+    ? `<div class="alert-err">Sesión cerrada por inactividad. Ingresa de nuevo.</div>`
+    : reason === 'sesion'
+      ? `<div class="alert-err">Tu sesión se renovó (reinicio o expiración). Ingresa de nuevo e intenta otra vez.</div>` : '';
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-print"><link rel="stylesheet" href="/css/app.css?v=20260928-print"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="card"><div class="login-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-tolima.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-sip" src="/img/logo-sip.svg" alt="SIP" height="30"></div><h1>${esc(appName)}</h1>
 <p>Sistema de Información de Proyectos — gestión e informes contables por periodos.</p>
 ${notice}
@@ -329,7 +333,7 @@ function rolesMatrix(fnc) {
 
 function errorPage(fnc, reason) {
   const msgs = { state: 'Sesión de autenticación inválida.', callback: 'No se pudo completar el acceso.', forbidden: 'Sin permiso para este módulo.' };
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928-grid"><link rel="stylesheet" href="/css/app.css?v=20260928-grid"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928-print"><link rel="stylesheet" href="/css/app.css?v=20260928-print"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="alert-err">${esc(msgs[reason] || msgs.callback)}</div>
 <a class="btn-primary" href="/">Reintentar</a></main></body></html>`;
 }
@@ -426,8 +430,13 @@ function informePage(hit, query, data, inf) {
     if (['tipo', 'ano', 'municipio'].includes(k) && query[k] !== '') qs.set(k, String(query[k]));
   }
   const exp = `/api/informes/${esc(inf.id)}${qs.toString() ? '/xlsx?' + qs.toString() : '/xlsx'}`;
+  const fTxt = [];
+  if (query.tipo) fTxt.push(`Tipo: ${query.tipo}`);
+  if (query.ano) fTxt.push(`Año: ${query.ano}`);
+  if (query.municipio) fTxt.push(`Municipio: ${query.municipio}`);
   return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)}</h2>
-<form method="get" action=""><div class="skl-bar">${flds}<button class="btn-primary" type="submit" style="margin-top:0">Filtrar</button><a class="btn-logout" style="text-decoration:none;display:inline-block;padding:10px 20px" href="${exp}">Exportar Excel</a></div></form>
+<div class="print-only"><strong>SIP-FNC · Sistema de Información de Proyectos</strong><br>${esc(leaf.title)} · ${esc(fTxt.length ? fTxt.join(' · ') : 'Sin filtros')} · ${esc(fmtFechaHora(new Date()))} · ${data.rows.length} filas</div>
+<form method="get" action=""><div class="skl-bar">${flds}<button class="btn-primary" type="submit" style="margin-top:0">Filtrar</button><a class="btn-logout" style="text-decoration:none;display:inline-block;padding:10px 20px" href="${exp}">Exportar Excel</a><button class="btn-logout" id="btnImprimir" type="button" style="padding:10px 20px">Imprimir</button></div></form>
 <table class="skl-table"><thead><tr>${head}</tr></thead><tbody>${bodyRows || `<tr><td colspan="${data.cols.length}">Sin resultados.</td></tr>`}</tbody></table>
 <p><span class="badge tnum">${data.rows.length} filas</span></p></div>`;
 }
@@ -556,6 +565,9 @@ bar.querySelector('[data-pg-next]').addEventListener('click',function(){if(cur<p
 render();
 });
 }catch(e){}})();</script>`;
+
+// Imprimir informe: diálogo nativo (con previsualización). Sin inline onclick (CSP nonce).
+const PRINT_JS = `<script>(function(){try{var b=document.getElementById('btnImprimir');if(b)b.addEventListener('click',function(){window.print();});}catch(e){}})();</script>`;
 
 function fmtFechaHora(v) {
   if (!v) return '—';

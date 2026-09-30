@@ -43,6 +43,7 @@ Flip KC staging: registrar `sip-fnc-client` en `fnc-realm` + `AUTH_PROVIDER=keyc
 - SMTP: solo Resend, API key cifrada en BD, módulo Email solo admin.
 - Skills en `G:\Open\appweb-skills-fnc` (sede canónica), nunca por proyecto.
 - Principios Modo B en cada cierre: 1) nada KC a medias, 2) sesión por contrato, 3) re-correr e2e al flipear.
+- Tras cada pull/cambio con `--watch`: reinicio + re-login obligatorios (sesiones en memoria se pierden; forms viejos dan 403 CSRF con redirect a login).
 
 ## Pendiente (orden sugerido)
 1. Resto módulos Fase 2 con negocio real (Adjudicaciones, Asignaciones, Órdenes SAP, Contratos).

@@ -126,6 +126,24 @@ describe('auth + CSRF + contrato', () => {
     const r = await fetchJ('/auth/mock', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'x=1' });
     assert.equal(r.status, 403);
   });
+  it('POST sin token con Accept html → 302 a login?reason=sesion', async () => {
+    jar.cookie = '';
+    const r = await fetchJ('/auth/mock', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'text/html' }, body: 'x=1' });
+    assert.equal(r.status, 302);
+    assert.match(r.headers.get('location'), /\/login\?reason=sesion/);
+    const l = await (await fetchJ('/login?reason=sesion')).text();
+    assert.match(l, /sesión se renovó/);
+  });
+  it('sesión perdida a mitad de flujo: redirect con motivo + re-login recupera', async () => {
+    await loginAsAdmin();
+    jar.cookie = ''; // simula sesión destruida (restart/inactividad)
+    const r = await fetchJ('/api/email/probar', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'text/html' }, body: 'to=a@b.co&_csrf=viejo' });
+    assert.equal(r.status, 302);
+    assert.match(r.headers.get('location'), /\/login\?reason=sesion/);
+    await loginAsAdmin();
+    const me = await (await fetchJ('/api/me')).json();
+    assert.equal(me.role, 'ADMIN');
+  });
   it('login mock → 302 a token dashboard', async () => { await loginAsAdmin(); });
   it('GET /api/me devuelve FncSession con exp-iat=28800', async () => {
     const me = await (await fetchJ('/api/me')).json();
@@ -140,6 +158,7 @@ describe('auth + CSRF + contrato', () => {
     const html = await r.text();
     const n = (csp.match(/nonce-([^']+)/) || [])[1];
     assert.ok(n && html.includes(`nonce="${n}"`));
+    assert.match(html, /__fncFetch/, 'wrapper fetch auto-redirect INACTIVE');
   });
 });
 
@@ -151,6 +170,11 @@ describe('URLs opacas + guards', () => {
   });
   it('token inválido → 404', async () => {
     assert.equal((await fetchJ('/v/zz')).status, 404);
+  });
+  it('API desconocida → 404 JSON', async () => {
+    const r = await fetchJ('/api/no-existe-xyz');
+    assert.equal(r.status, 404);
+    assert.equal((await r.json()).error, 'Ruta API desconocida.');
   });
   it('seguridad admin → 200 con auditoría', async () => {
     const r = await fetchJ(mods.tokenFor('/seguridad'));
@@ -276,7 +300,14 @@ describe('maestros distribucion e informes', () => {
   it('informes rinden + xlsx descarga + año inválido 400', async () => {
     const s = await fetchJ('/distribucion/informes/saldos');
     assert.equal(s.status, 200);
-    assert.match(await s.text(), /asignado/);
+    const html = await s.text();
+    assert.match(html, /asignado/);
+    assert.match(html, /id="btnImprimir"/, 'botón Imprimir');
+    assert.match(html, /class="print-only"/, 'membrete solo-impresión');
+    assert.match(html, /getElementById\('btnImprimir'\)/, 'PRINT_JS con nonce');
+    const css = await (await fetchJ('/css/app.css')).text();
+    assert.match(css, /@media print/, 'reglas de impresión');
+    assert.match(css, /\.print-only\s*\{\s*display:\s*none/, 'membrete oculto en pantalla');
     const x = await fetchJ('/api/informes/saldos/xlsx');
     assert.equal(x.status, 200);
     assert.match(x.headers.get('content-type'), /spreadsheetml/);

@@ -895,6 +895,11 @@ app.get('/error', (req, res) => {
   res.send(views.errorPage(req.session?.fnc, req.query.reason));
 });
 
+// API desconocida: JSON (no HTML) para clientes viejos o rutas retiradas.
+app.use('/api/', (req, res) => {
+  res.status(404).json({ error: 'Ruta API desconocida.' });
+});
+
 const PORT = process.env.PORT || 3020;
 if (require.main === module) {
   app.listen(PORT, () => console.log(`[${APP_NAME}] http://localhost:${PORT} provider=${process.env.AUTH_PROVIDER || 'mock'}`));

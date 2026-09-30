@@ -26,16 +26,27 @@ function verifyCsrf(req, res, next) {
   const good = Buffer.from(String((req.session && req.session.csrf) || ''));
   const sent = String((req.body && req.body._csrf) || req.headers['x-csrf-token'] || '');
   if (!good.length || !sent.length || good.length !== sent.length) {
-    return res.status(403).send('CSRF inválido.');
+    return csrfFail(req, res);
   }
   try {
     if (!crypto.timingSafeEqual(good, Buffer.from(sent))) {
-      return res.status(403).send('CSRF inválido.');
+      return csrfFail(req, res);
     }
   } catch {
-    return res.status(403).send('CSRF inválido.');
+    return csrfFail(req, res);
   }
   return next();
+}
+
+// Fallo CSRF: idempotente y sin callejón. Clientes HTML (forms del navegador,
+// Accept text/html) van a /login?reason=sesion con mensaje; APIs/fetch
+// reciben el 403 de siempre (contrato + e2e intactos).
+function csrfFail(req, res) {
+  const accept = String(req.headers.accept || '');
+  if (accept.includes('text/html')) {
+    return res.redirect('/login?reason=sesion');
+  }
+  return res.status(403).send('CSRF inválido.');
 }
 
 module.exports = { ensureToken, csrfInput, csrfMeta, verifyCsrf };
