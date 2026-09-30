@@ -15,11 +15,11 @@ const NAV = [
         key: 'actualizaciones', title: 'Actualizaciones', icon: 'tareas',
                 desc: 'Maestros y distribuciones por vigencia.',
         children: [
-          { path: '/distribucion/actualizaciones/circunscripciones', title: 'Circunscripciones', roles: BOTH, fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }] },
-          { path: '/distribucion/actualizaciones/municipios', title: 'Municipios', roles: BOTH, fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }, { label: 'Circunscripción', type: 'select', options: ['Norte', 'Sur', 'Oriente', 'Occidente', 'Centro'] }] },
-          { path: '/distribucion/actualizaciones/tipos-distribuciones', title: 'Tipos de Distribuciones', roles: BOTH, fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }] },
-          { path: '/distribucion/actualizaciones/distribuciones', title: 'Distribuciones', roles: BOTH, fields: [{ label: 'Tipo', type: 'select', options: ['Municipio vigencia actual', 'Municipio anteriores', 'Circunscripción actual', 'Circunscripción anteriores'] }, { label: 'Año', type: 'number' }, { label: 'Presupuesto', type: 'number' }] },
-          { path: '/distribucion/actualizaciones/distribucion-municipio', title: 'Distribución por Municipio', roles: BOTH, fields: [{ label: 'Número', type: 'number' }, { label: 'Tipo', type: 'number' }, { label: 'Año', type: 'number' }, { label: 'Ppto', type: 'number' }, { label: 'Municipio', type: 'text' }, { label: 'Valor', type: 'number' }] },
+          { path: '/distribucion/actualizaciones/circunscripciones', title: 'Circunscripciones', roles: BOTH, crud: 'circunscripciones', fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }] },
+          { path: '/distribucion/actualizaciones/municipios', title: 'Municipios', roles: BOTH, crud: 'municipios', fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }, { label: 'Circunscripción', type: 'select', options: ['Norte', 'Sur', 'Oriente', 'Occidente', 'Centro'] }] },
+          { path: '/distribucion/actualizaciones/tipos-distribuciones', title: 'Tipos de Distribuciones', roles: BOTH, crud: 'tipos-distribuciones', fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }] },
+          { path: '/distribucion/actualizaciones/distribuciones', title: 'Distribuciones', roles: BOTH, crud: 'distribuciones', fields: [{ label: 'Tipo', type: 'select', options: ['municipio_actual', 'municipio_anteriores', 'circunscripcion_actual', 'circunscripcion_anteriores'] }, { label: 'Año', type: 'number' }, { label: 'Presupuesto', type: 'number' }] },
+          { path: '/distribucion/actualizaciones/distribucion-municipio', title: 'Distribución por Municipio', roles: BOTH, crud: 'distribucion-municipio', fields: [{ label: 'Número', type: 'number' }, { label: 'Tipo', type: 'number' }, { label: 'Año', type: 'number' }, { label: 'Ppto', type: 'number' }, { label: 'Municipio', type: 'text' }, { label: 'Valor', type: 'number' }] },
         ],
       },
       {
@@ -165,11 +165,13 @@ const NAV = [
       },
     ],
   },
+  { path: '/email', title: 'Email', icon: 'mail', roles: ADMIN_ONLY, nav: true },
 ];
 
 // Categoría global de configuración, anclada al fondo del nav.
 const CONFIG = [
   { path: '/seguridad', title: 'Seguridad', icon: 'seguridad', roles: ADMIN_ONLY, nav: true },
+  { path: '/smtp', title: 'SMTP', icon: 'procesos', roles: ADMIN_ONLY, nav: true },
   { path: '/roles', title: 'Roles', icon: 'roles', roles: BOTH, nav: true },
   { path: '#perfil', title: 'Perfil', icon: 'perfil', roles: BOTH, nav: true, modal: 'perfil' },
 ];
@@ -214,6 +216,9 @@ const TOKEN_PAGES = (() => {
     }
   }
   list.push('/seguridad', '/roles');
+  for (const c of CONFIG) {
+    if (c.path && c.path.startsWith('/') && !c.modal) list.push(c.path);
+  }
   return [...new Set(list)];
 })();
 const TOKEN_MAP = {};

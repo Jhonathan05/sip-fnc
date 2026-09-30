@@ -12,6 +12,60 @@ const { getMockSession, isKeycloakMode } = require('./auth-provider');
 const { MODULES, NAV, canAccess, flattenLeaves, findLeaf, tokenFor, realFor } = require('./modules');
 const { PROCESO_FORM } = require('./task-meta');
 const { hydrate } = require('./prefs');
+
+// Guards granulares Fase 2 (primera granularidad fina real):
+// leer: todos · crear/editar: todos menos consultor · borrar: admin + coordinador.
+function canWrite(fnc) {
+  if (!fnc) return false;
+  if (fnc.role === 'ADMIN') return true;
+  const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
+  return roles.some((r) => ['admin', 'coordinador', 'analista', 'auxiliar'].includes(r));
+}
+function canDelete(fnc) {
+  if (!fnc) return false;
+  if (fnc.role === 'ADMIN') return true;
+  const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
+  return roles.some((r) => ['admin', 'coordinador'].includes(r));
+}
+
+// Maestros Distribución: catálogo tabla/pk/columnas (Fase 2).
+// upper: mayúsculas forzadas · numpk: pk serial (no se envía) ·
+// required: obligatorios · numeric: validación numérica.
+const MAESTROS = {
+  'circunscripciones': { table: 'circunscripciones', pk: 'codigo', cols: ['codigo', 'nombre'], upper: true, required: ['codigo', 'nombre'] },
+  'municipios': { table: 'municipios', pk: 'codigo', cols: ['codigo', 'nombre', 'circunscripcion'], upper: true, required: ['codigo', 'nombre'] },
+  'tipos-distribuciones': { table: 'tipos_distribucion', pk: 'codigo', cols: ['codigo', 'nombre'], upper: true, required: ['codigo', 'nombre'] },
+  'distribuciones': { table: 'distribuciones', pk: 'id', numpk: true, cols: ['tipo', 'vigencia', 'asignado', 'ejecutado'], required: ['tipo', 'vigencia'], numeric: ['vigencia', 'asignado', 'ejecutado'] },
+  'distribucion-municipio': { table: 'distribucion_municipio', pk: 'id', numpk: true, cols: ['numero', 'tipo', 'ano', 'ppto', 'municipio', 'valor'], required: ['numero', 'tipo', 'ano', 'municipio', 'valor'], numeric: ['numero', 'tipo', 'ano', 'ppto', 'valor'] },
+};
+
+function validCodigo(v) {
+  return typeof v === 'string' && /^[A-Z0-9-]{2,12}$/.test(v.trim().toUpperCase());
+}
+
+// Normaliza un valor según meta (undefined = inválido, null = ausente).
+function normVal(m, col, raw) {
+  let v = String(raw ?? '').trim();
+  if (m.upper) v = v.toUpperCase();
+  if ((m.numeric || []).includes(col)) {
+    if (v === '') return null;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return undefined;
+    if (col !== 'ano' && col !== 'vigencia' && col !== 'numero' && col !== 'tipo' && n < 0) return undefined;
+    return n;
+  }
+  return v;
+}
+
+function pkVal(m, raw) {
+  const v = String(raw ?? '').trim();
+  if (m.numpk) {
+    const n = Number(v);
+    return Number.isInteger(n) && n > 0 ? n : undefined;
+  }
+  return validCodigo(v) ? v.toUpperCase() : undefined;
+}
+
 const { ensureToken, verifyCsrf } = require('./csrf');
 const { getPool, dbReady } = require('./db');
 const { writeAudit } = require('./audit');
@@ -115,12 +169,14 @@ const needLogin = (req, res, next) => {
     req.session.lastActivity = Date.now();
     return next();
   }
+  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'No autenticado.' });
   return res.redirect('/login');
 };
 const needRole = (role) => (req, res, next) => {
   if (req.session?.fnc?.role === role) return next();
   return res.status(403).send(views.errorPage(req.session?.fnc, 'forbidden'));
 };
+
 
 function setFnc(req, fnc, idToken) {
   req.session.fnc = fnc;
@@ -387,6 +443,98 @@ app.get('/api/tareas/:id', needLogin, needDb, async (req, res) => {
   }
 });
 
+
+// CRUD maestros Distribuci�n (tras app + guards).
+// GET /api/maestros/:id — lista (lectura: todos los roles).
+app.get('/api/maestros/:id', needLogin, needDb, async (req, res) => {
+  const m = MAESTROS[req.params.id];
+  if (!m) return res.status(404).json({ error: 'Maestro desconocido.' });
+  const sel = [...new Set([m.pk, ...m.cols])];
+  const { rows } = await getPool().query(`SELECT ${sel.join(',')} FROM ${m.table} ORDER BY ${m.pk} LIMIT 500`);
+  res.json(rows);
+});
+
+// POST /api/maestros/:id — crear (todos menos consultor).
+app.post('/api/maestros/:id', needLogin, needDb, async (req, res) => {
+  const m = MAESTROS[req.params.id];
+  if (!m) return res.status(404).json({ ok: false, error: 'Maestro desconocido.' });
+  if (!canWrite(req.session.fnc)) return res.status(403).json({ ok: false, error: 'Sin permiso.' });
+  const cols = m.numpk ? m.cols : m.cols;
+  const vals = {};
+  for (const c of cols) {
+    if (m.numpk && c === m.pk) continue;
+    vals[c] = normVal(m, c, req.body && req.body[c]);
+  }
+  for (const c of (m.required || [])) {
+    if (vals[c] === null || vals[c] === undefined || vals[c] === '') {
+      return res.status(400).json({ ok: false, error: `Campo requerido: ${c}.` });
+    }
+  }
+  if (Object.values(vals).some((v) => v === undefined)) {
+    return res.status(400).json({ ok: false, error: 'Valor numérico inválido.' });
+  }
+  if (!m.numpk && !validCodigo(vals[m.pk])) {
+    return res.status(400).json({ ok: false, error: 'Código inválido (2-12, A-Z 0-9 -).' });
+  }
+  const keys = Object.keys(vals).filter((c) => vals[c] !== null && !(m.numpk && c === m.pk));
+  try {
+    const { rows } = await getPool().query(
+      `INSERT INTO ${m.table} (${keys.join(',')}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(',')}) RETURNING ${m.pk}`,
+      keys.map((c) => vals[c]));
+    const newPk = rows[0][m.pk];
+    await writeAudit(req, { action: 'maestro.crear', modulo: 'distribucion', entidadId: String(newPk), detalle: `${req.params.id}: ${newPk}` });
+    return res.status(201).json({ ok: true, id: newPk });
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ ok: false, error: 'El registro ya existe.' });
+    if (e.code === '23503') return res.status(400).json({ ok: false, error: 'Referencia inválida.' });
+    if (e.code === '23514') return res.status(400).json({ ok: false, error: 'Rango inválido (revisa año y montos).' });
+    console.error('[maestros:create]', e.message);
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+
+// PUT /api/maestros/:id/:codigo — editar (todos menos consultor; pk inmutable).
+app.put('/api/maestros/:id/:codigo', needLogin, needDb, async (req, res) => {
+  const m = MAESTROS[req.params.id];
+  if (!m) return res.status(404).json({ ok: false, error: 'Maestro desconocido.' });
+  if (!canWrite(req.session.fnc)) return res.status(403).json({ ok: false, error: 'Sin permiso.' });
+  const pk = pkVal(m, req.params.codigo);
+  if (pk === undefined) return res.status(400).json({ ok: false, error: 'Identificador inválido.' });
+  const pairs = m.cols.filter((c) => c !== m.pk).map((c) => [c, normVal(m, c, req.body && req.body[c])]).filter(([, v]) => v !== null && v !== undefined && v !== '');
+  if (!pairs.length) return res.status(400).json({ ok: false, error: 'Nada que actualizar.' });
+  if (pairs.some(([, v]) => typeof v === 'string' && v.length < 2)) return res.status(400).json({ ok: false, error: 'Valores muy cortos.' });
+  try {
+    const sets = pairs.map(([c], i) => `${c} = $${i + 2}`).join(',');
+    const { rowCount } = await getPool().query(`UPDATE ${m.table} SET ${sets} WHERE ${m.pk} = $1`, [pk, ...pairs.map(([, v]) => v)]);
+    if (!rowCount) return res.status(404).json({ ok: false, error: 'No encontrado.' });
+    await writeAudit(req, { action: 'maestro.editar', modulo: 'distribucion', entidadId: String(pk), detalle: req.params.id });
+    return res.json({ ok: true });
+  } catch (e) {
+    if (e.code === '23503') return res.status(400).json({ ok: false, error: 'Referencia inválida.' });
+    if (e.code === '23514') return res.status(400).json({ ok: false, error: 'Rango inválido.' });
+    console.error('[maestros:update]', e.message);
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+
+// DELETE /api/maestros/:id/:codigo — borrar (admin + coordinador).
+app.delete('/api/maestros/:id/:codigo', needLogin, needDb, async (req, res) => {
+  const m = MAESTROS[req.params.id];
+  if (!m) return res.status(404).json({ ok: false, error: 'Maestro desconocido.' });
+  if (!canDelete(req.session.fnc)) return res.status(403).json({ ok: false, error: 'Solo admin y coordinador.' });
+  const pk = pkVal(m, req.params.codigo);
+  if (pk === undefined) return res.status(400).json({ ok: false, error: 'Identificador inválido.' });
+  try {
+    const { rowCount } = await getPool().query(`DELETE FROM ${m.table} WHERE ${m.pk} = $1`, [pk]);
+    if (!rowCount) return res.status(404).json({ ok: false, error: 'No encontrado.' });
+    await writeAudit(req, { action: 'maestro.borrar', modulo: 'distribucion', entidadId: String(pk), detalle: req.params.id });
+    return res.json({ ok: true });
+  } catch (e) {
+    if (e.code === '23503') return res.status(409).json({ ok: false, error: 'En uso: no se puede borrar.' });
+    console.error('[maestros:delete]', e.message);
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
 const page = (req, fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body, ensureToken(req), req.nonce);
 
 app.get('/dashboard', needLogin, needDb, async (req, res) => {
@@ -403,6 +551,21 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
       }
       if (hit.sub.kind === 'informe') return res.redirect(tokenFor(hit.leaf.path));
       form = hit;
+      form.perms = { w: canWrite(fnc), d: canDelete(fnc) };
+      // Maestros con CRUD real: precarga filas + catálogos para el renderer.
+      if (hit.leaf.crud && MAESTROS[hit.leaf.crud]) {
+        const mc = MAESTROS[hit.leaf.crud];
+        const r = await getPool().query(`SELECT ${mc.cols.join(',')} FROM ${mc.table} ORDER BY ${mc.pk}`);
+        form.rows = r.rows;
+        if (hit.leaf.crud === 'municipios') {
+          const c = await getPool().query('SELECT codigo, nombre FROM circunscripciones ORDER BY codigo');
+          form.catalogs = { circunscripcion: c.rows };
+        }
+        if (hit.leaf.crud === 'distribucion-municipio') {
+          const c = await getPool().query('SELECT codigo, nombre FROM municipios ORDER BY codigo');
+          form.catalogs = { municipio: c.rows };
+        }
+      }
     }
     const pool = getPool();
     const [s, a] = await Promise.all([
@@ -540,6 +703,53 @@ app.post('/api/perfil/foto', needLogin, needDb, (req, res) => {
   });
 });
 
+const { INFORMES, buildXlsx } = require('./informes');
+
+// Informes Distribución reales (Fase 2): filtros + tabla + exportar Excel.
+// Van ANTES del bucle genérico de hojas. Export: /api/informes/:id/xlsx.
+const INFORME_LEAVES = {
+  '/distribucion/informes/por-distribucion': 'por-distribucion',
+  '/distribucion/informes/por-ano': 'por-ano',
+  '/distribucion/informes/saldos': 'saldos',
+  '/distribucion/informes/cuenta-corriente': 'cuenta-corriente',
+};
+
+for (const [leafPath, infId] of Object.entries(INFORME_LEAVES)) {
+  app.get(leafPath, needLogin, needDb, async (req, res) => {
+    const fnc = req.session.fnc;
+    const hit = findLeaf(leafPath);
+    if (!hit || !canAccess(fnc.role, hit.leaf)) {
+      return res.status(403).send(views.errorPage(fnc, 'forbidden'));
+    }
+    try {
+      const data = await INFORMES[infId].run(getPool(), req.query);
+      res.send(page(req, fnc, { path: leafPath, title: hit.leaf.title },
+        views.informePage(hit, req.query, data, { id: infId, filters: INFORMES[infId].filters })));
+    } catch (e) {
+      const code = e.status || 500;
+      if (code === 400) return res.status(400).send(page(req, fnc, { path: leafPath, title: hit.leaf.title }, `<div class="alert-err">${views.esc(e.message)}</div>`));
+      console.error('[informes]', e.message);
+      return res.status(500).send(page(req, fnc, { path: leafPath, title: hit.leaf.title }, `<div class="alert-err">No se pudo generar el informe.</div>`));
+    }
+  });
+}
+
+app.get('/api/informes/:id/xlsx', needLogin, needDb, async (req, res) => {
+  const def = INFORMES[req.params.id];
+  if (!def) return res.status(404).json({ error: 'Informe desconocido.' });
+  try {
+    const data = await def.run(getPool(), req.query);
+    const buf = await buildXlsx(def.title, data.cols, data.rows);
+    await writeAudit(req, { action: 'informe.exportar', modulo: 'distribucion', detalle: `${req.params.id} (${data.rows.length} filas)` });
+    res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.set('Content-Disposition', `attachment; filename="sip-${req.params.id}.xlsx"`);
+    return res.send(buf);
+  } catch (e) {
+    console.error('[informes:xlsx]', e.message);
+    return res.status(500).json({ error: 'No se pudo exportar.' });
+  }
+});
+
 // Hojas del árbol: /:modulo/:sub/:item con guard por hoja (planas "Fase 2" por ahora).
 for (const { leaf, sub, mod } of flattenLeaves()) {
   app.get(leaf.path, needLogin, (req, res) => {
@@ -565,6 +775,88 @@ app.post('/api/admin/rate-limit', needLogin, needRole('ADMIN'), async (req, res)
   await writeAudit(req, { action: 'ratelimit.override', modulo: 'seguridad', detalle: `Límite a ${perMin}/min` });
   if ((req.headers.accept || '').includes('application/json')) return res.json({ ok: true, perMin });
   return res.redirect(tokenFor('/seguridad')+'?msg=ratelimit_ok');
+});
+
+// GET /smtp — formulario Resend (solo ADMIN; la clave jamás se muestra completa).
+app.get('/smtp', needLogin, needRole('ADMIN'), async (req, res) => {
+  const fnc = req.session.fnc;
+  let masked = '—', from = '', hasKey = false;
+  try {
+    const pool = getPool();
+    if (pool) {
+      const { rows } = await pool.query(`SELECT clave, valor FROM app_settings WHERE clave IN ('resend_api_key','mail_from')`);
+      const { maskSecret, decSecret } = require('./crypto');
+      for (const r of rows) {
+        if (r.clave === 'mail_from') from = r.valor;
+        if (r.clave === 'resend_api_key') { try { masked = maskSecret(decSecret(r.valor)); hasKey = true; } catch { /* corrupto */ } }
+      }
+    }
+  } catch { /* sin DB */ }
+  const msg = req.query.msg === 'ok' ? `<div class="card"><p><span class="badge">Guardado.</span></p></div>`
+    : req.query.msg ? `<div class="alert-err">${views.esc(String(req.query.msg))}</div>` : '';
+  res.send(page(req, fnc, { path: '/smtp', title: 'SMTP' }, `${msg}<div class="card"><h1>SMTP · Resend</h1>
+<p>API key actual: <strong class="tnum">${views.esc(masked)}</strong> ${hasKey ? '<span class="badge">configurada</span>' : '<span class="badge badge-warn">pendiente</span>'}</p>
+<form method="post" action="/api/smtp/guardar" style="margin:12px 0 0"><input type="hidden" name="_csrf" value="${ensureToken(req)}">
+<label class="fld"><span>API key Resend (vacío = conservar)</span><input name="resend_api_key" type="password" autocomplete="off"></label>
+<label class="fld"><span>Remitente (Nombre &lt;correo@dominio&gt;)</span><input name="mail_from" type="text" value="${views.esc(from)}" maxlength="160"></label>
+<button class="btn-primary" type="submit">Guardar</button></form>
+<p>Secretos cifrados (AES-256-GCM) en BD. Requiere <code>ENCRYPTION_KEY</code> en el host.</p></div>`));
+});
+
+// POST /api/smtp/guardar — guarda cifrado (solo ADMIN, auditado sin secretos).
+app.post('/api/smtp/guardar', needLogin, needRole('ADMIN'), needDb, async (req, res) => {
+  const key = String((req.body && req.body.resend_api_key) || '').trim();
+  const from = String((req.body && req.body.mail_from) || '').trim().slice(0, 160);
+  if (from && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(from.replace(/^.*</, '').replace(/>$/, ''))) {
+    return res.redirect(tokenFor('/smtp') + '?msg=' + encodeURIComponent('Remitente inválido.'));
+  }
+  try {
+    const { encSecret } = require('./crypto');
+    const pool = getPool();
+    if (key) {
+      await pool.query(`INSERT INTO app_settings (clave, valor, secreto) VALUES ('resend_api_key',$1,TRUE)
+        ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor, updated_at = now()`, [encSecret(key)]);
+    }
+    if (from) {
+      await pool.query(`INSERT INTO app_settings (clave, valor, secreto) VALUES ('mail_from',$1,FALSE)
+        ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor, updated_at = now()`, [from]);
+    }
+    await writeAudit(req, { action: 'smtp.guardar', modulo: 'seguridad', detalle: `SMTP actualizado${key ? ' (key)' : ''}${from ? ' (remitente)' : ''}` });
+    return res.redirect(tokenFor('/smtp') + '?msg=ok');
+  } catch (e) {
+    console.error('[smtp/guardar]', e.message);
+    return res.redirect(tokenFor('/smtp') + '?msg=' + encodeURIComponent('No se pudo guardar (¿ENCRYPTION_KEY?).'));
+  }
+});
+
+// GET /email — probar envío (solo ADMIN): un input mail + botón.
+app.get('/email', needLogin, needRole('ADMIN'), (req, res) => {
+  const fnc = req.session.fnc;
+  const msg = req.query.msg === 'ok' ? `<div class="card"><p><span class="badge">Correo enviado.</span> Revisa el inbox.</p></div>`
+    : req.query.msg ? `<div class="alert-err">${views.esc(String(req.query.msg))}</div>` : '';
+  res.send(page(req, fnc, { path: '/email', title: 'Email' }, `${msg}<div class="card"><h1>Probar correo</h1>
+<p>Envía un correo de prueba con la configuración del módulo SMTP.</p>
+<form method="post" action="/api/email/probar" style="margin:12px 0 0"><input type="hidden" name="_csrf" value="${ensureToken(req)}">
+<label class="fld"><span>Correo destino</span><input name="to" type="email" required maxlength="160" placeholder="destino@dominio.com"></label>
+<button class="btn-primary" type="submit">Enviar prueba</button></form></div>`));
+});
+
+// POST /api/email/probar — envío de prueba (solo ADMIN, auditado por dominio).
+app.post('/api/email/probar', needLogin, needRole('ADMIN'), needDb, async (req, res) => {
+  const to = String((req.body && req.body.to) || '').trim().toLowerCase().slice(0, 160);
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
+    return res.redirect(tokenFor('/email') + '?msg=' + encodeURIComponent('Correo inválido.'));
+  }
+  try {
+    const { sendMail } = require('./mail');
+    await sendMail({ to, subject: 'SIP-FNC · Correo de prueba', title: 'Correo de prueba', body: `<p>La configuración SMTP de <strong>SIP-FNC</strong> funciona correctamente.</p>` });
+    const dom = to.split('@')[1];
+    await writeAudit(req, { action: 'email.probar', modulo: 'seguridad', detalle: `Prueba a @${dom}` });
+    return res.redirect(tokenFor('/email') + '?msg=ok');
+  } catch (e) {
+    console.error('[email/probar]', e.message);
+    return res.redirect(tokenFor('/email') + '?msg=' + encodeURIComponent(e.message || 'No se pudo enviar.'));
+  }
 });
 
 app.get('/seguridad', needLogin, needRole('ADMIN'), async (req, res) => {

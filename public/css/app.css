@@ -636,13 +636,18 @@ code {
     display: grid;
     grid-template-columns: 1fr 330px;
     gap: 20px;
-    align-items: stretch;
+    align-items: start;
     min-height: calc(100vh - 200px);
 }
 
 @media (max-width: 1100px) {
     .dash-grid {
         grid-template-columns: 1fr;
+    }
+
+    .dash-rail {
+        position: static;
+        max-height: none;
     }
 }
 
@@ -729,6 +734,11 @@ code {
     width: 330px;
     max-width: 100%;
     min-height: 0;
+    position: sticky;
+    top: 100px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    padding-right: 2px;
 }
 
 .rail-card {
@@ -736,7 +746,8 @@ code {
     padding: 16px 18px;
     display: flex;
     flex-direction: column;
-    min-height: 0;
+    min-height: 330px;
+    max-height: 330px;
     flex: 1 1 0;
 }
 
@@ -1007,6 +1018,35 @@ code {
     background: var(--azul-soft);
 }
 
+/* Paginador de tablas (9 filas por página) */
+.skl-pager {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0;
+    font-size: var(--fs-table);
+}
+
+.skl-pager button {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-card);
+    color: var(--text-dark);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: var(--fs-table);
+}
+
+.skl-pager button:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+
+.skl-pager .tnum {
+    color: var(--text-muted);
+}
+
 /* ── Mini panel Actividad reciente: bitácora stepper + paginación pequeña ── */
 .stepper-box {
     background: var(--bg-card);
@@ -1125,6 +1165,10 @@ code {
     justify-content: space-between;
     gap: 8px;
     margin-top: 14px;
+    position: sticky;
+    bottom: 0;
+    background: var(--bg-card);
+    padding: 8px 0 2px;
 }
 
 .stepper-button {
