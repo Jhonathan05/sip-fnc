@@ -1,6 +1,6 @@
 {
   "name": "sip-fnc",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "description": "SIP-FNC: gestion e informes contables por periodos (Express + Vanilla + Postgres)",
   "main": "src/server.js",
