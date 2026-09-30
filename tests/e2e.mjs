@@ -64,6 +64,7 @@ async function csrfMeta() {
 before(async () => {
   execSync('node tests/db-admin.cjs create', { stdio: 'pipe', cwd: ROOT });
   execSync('node db/migrate.js', { stdio: 'pipe', cwd: ROOT, env: { ...process.env, DATABASE_URL: TEST_DB } });
+  execSync('node db/seed_distribucion.js', { stdio: 'pipe', cwd: ROOT, env: { ...process.env, DATABASE_URL: TEST_DB } });
   server = spawn('node', ['src/server.js'], {
     cwd: ROOT,
     env: {
@@ -160,7 +161,7 @@ describe('URLs opacas + guards', () => {
     const tokLeaf = mods.tokenFor('/distribucion/actualizaciones/municipios').slice(3);
     const f = await fetchJ(`/v/rs?f=${tokLeaf}`);
     assert.equal(f.status, 200);
-    assert.match(await f.text(), /skeleton/);
+    assert.match(await f.text(), /crudGuardar/);
     const tokInf = mods.tokenFor('/distribucion/informes/saldos').slice(3);
     const inf = await fetchJ(`/v/rs?f=${tokInf}`);
     assert.equal(inf.status, 302);
@@ -242,6 +243,45 @@ describe('rol consultor (solo lectura)', () => {
   it('botón Nueva tarea oculto y sin botón completar', async () => {
     const dash = await (await fetchC('/dashboard')).text();
     assert.ok(!dash.includes('<button class="btn-circle" data-open-modal="tarea-crear"'), 'sin disparador crear');
+  });
+});
+
+describe('maestros distribucion e informes', () => {
+  it('CRUD circunscripciones (crear, duplicado 409, borrar)', async () => {
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    const c = await (await fetchJ('/api/maestros/circunscripciones', { method: 'POST', headers: h, body: JSON.stringify({ codigo: 'TST', nombre: 'Prueba E2E' }) })).json();
+    assert.equal(c.ok, true);
+    assert.equal((await fetchJ('/api/maestros/circunscripciones', { method: 'POST', headers: h, body: JSON.stringify({ codigo: 'TST', nombre: 'Dup' }) })).status, 409);
+    const u = await (await fetchJ('/api/maestros/circunscripciones/TST', { method: 'PUT', headers: h, body: JSON.stringify({ nombre: 'Editada' }) })).json();
+    assert.equal(u.ok, true);
+    const d = await (await fetchJ('/api/maestros/circunscripciones/TST', { method: 'DELETE', headers: h })).json();
+    assert.equal(d.ok, true);
+  });
+  it('distribuciones: validación numérica + FK municipio', async () => {
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    const y = new Date().getFullYear() + 1;
+    const c = await (await fetchJ('/api/maestros/distribuciones', { method: 'POST', headers: h, body: JSON.stringify({ tipo: 'municipio_actual', vigencia: y, asignado: 5000000 }) })).json();
+    assert.equal(c.ok, true);
+    assert.equal((await fetchJ('/api/maestros/distribuciones', { method: 'POST', headers: h, body: JSON.stringify({ tipo: 'x', vigencia: 'no-num' }) })).status, 400);
+    const dmun = await (await fetchJ('/api/maestros/distribucion-municipio', { method: 'POST', headers: h, body: JSON.stringify({ numero: 1, tipo: 2, ano: y, ppto: 100, municipio: 'IBG', valor: 999 }) })).json();
+    assert.equal(dmun.ok, true);
+    assert.equal((await fetchJ('/api/maestros/distribucion-municipio', { method: 'POST', headers: h, body: JSON.stringify({ numero: 2, tipo: 2, ano: y, municipio: 'ZZZ', valor: 1 }) })).status, 400);
+    await fetchJ(`/api/maestros/distribuciones/${c.id}`, { method: 'DELETE', headers: h });
+    await fetchJ(`/api/maestros/distribucion-municipio/${dmun.id}`, { method: 'DELETE', headers: h });
+    const check = await (await fetchJ('/api/maestros/distribucion-municipio')).json();
+    assert.ok(!check.some((r) => r.municipio === 'IBG' && r.valor === 999 || r.valor === '999'));
+  });
+  it('informes rinden + xlsx descarga + año inválido 400', async () => {
+    const s = await fetchJ('/distribucion/informes/saldos');
+    assert.equal(s.status, 200);
+    assert.match(await s.text(), /asignado/);
+    const x = await fetchJ('/api/informes/saldos/xlsx');
+    assert.equal(x.status, 200);
+    assert.match(x.headers.get('content-type'), /spreadsheetml/);
+    assert.ok((await x.arrayBuffer()).byteLength > 1000);
+    assert.equal((await fetchJ('/distribucion/informes/saldos?ano=xx')).status, 400);
   });
 });
 

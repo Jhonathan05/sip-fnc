@@ -703,6 +703,53 @@ app.post('/api/perfil/foto', needLogin, needDb, (req, res) => {
   });
 });
 
+const { INFORMES, buildXlsx } = require('./informes');
+
+// Informes Distribución reales (Fase 2): filtros + tabla + exportar Excel.
+// Van ANTES del bucle genérico de hojas. Export: /api/informes/:id/xlsx.
+const INFORME_LEAVES = {
+  '/distribucion/informes/por-distribucion': 'por-distribucion',
+  '/distribucion/informes/por-ano': 'por-ano',
+  '/distribucion/informes/saldos': 'saldos',
+  '/distribucion/informes/cuenta-corriente': 'cuenta-corriente',
+};
+
+for (const [leafPath, infId] of Object.entries(INFORME_LEAVES)) {
+  app.get(leafPath, needLogin, needDb, async (req, res) => {
+    const fnc = req.session.fnc;
+    const hit = findLeaf(leafPath);
+    if (!hit || !canAccess(fnc.role, hit.leaf)) {
+      return res.status(403).send(views.errorPage(fnc, 'forbidden'));
+    }
+    try {
+      const data = await INFORMES[infId].run(getPool(), req.query);
+      res.send(page(req, fnc, { path: leafPath, title: hit.leaf.title },
+        views.informePage(hit, req.query, data, { id: infId, filters: INFORMES[infId].filters })));
+    } catch (e) {
+      const code = e.status || 500;
+      if (code === 400) return res.status(400).send(page(req, fnc, { path: leafPath, title: hit.leaf.title }, `<div class="alert-err">${views.esc(e.message)}</div>`));
+      console.error('[informes]', e.message);
+      return res.status(500).send(page(req, fnc, { path: leafPath, title: hit.leaf.title }, `<div class="alert-err">No se pudo generar el informe.</div>`));
+    }
+  });
+}
+
+app.get('/api/informes/:id/xlsx', needLogin, needDb, async (req, res) => {
+  const def = INFORMES[req.params.id];
+  if (!def) return res.status(404).json({ error: 'Informe desconocido.' });
+  try {
+    const data = await def.run(getPool(), req.query);
+    const buf = await buildXlsx(def.title, data.cols, data.rows);
+    await writeAudit(req, { action: 'informe.exportar', modulo: 'distribucion', detalle: `${req.params.id} (${data.rows.length} filas)` });
+    res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.set('Content-Disposition', `attachment; filename="sip-${req.params.id}.xlsx"`);
+    return res.send(buf);
+  } catch (e) {
+    console.error('[informes:xlsx]', e.message);
+    return res.status(500).json({ error: 'No se pudo exportar.' });
+  }
+});
+
 // Hojas del árbol: /:modulo/:sub/:item con guard por hoja (planas "Fase 2" por ahora).
 for (const { leaf, sub, mod } of flattenLeaves()) {
   app.get(leaf.path, needLogin, (req, res) => {

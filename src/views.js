@@ -410,9 +410,29 @@ function skeletonMaestro(leaf) {
 <form class="skl-form"><fieldset disabled><legend>Nuevo registro</legend><div class="fld-grid">${body}</div><button class="btn-primary" type="button" disabled>Guardar (Fase 2)</button></fieldset></form>`;
 }
 
+function informePage(hit, query, data, inf) {
+  const { leaf, sub, mod } = hit;
+  const flds = ((inf && inf.filters) || []).map((f) => {
+    const v = query[f.name] != null ? String(query[f.name]) : '';
+    const t = f.type === 'number' ? 'number' : 'text';
+    return `<label class="fld"><span>${esc(f.label)}</span><input name="${esc(f.name)}" type="${t}" value="${esc(v)}"></label>`;
+  }).join('');
+  const head = data.cols.map((c) => `<th>${esc(c)}</th>`).join('');
+  const bodyRows = data.rows.map((r) =>
+    `<tr>${data.cols.map((c) => `<td class="tnum">${esc(r[c] == null ? '' : String(r[c]))}</td>`).join('')}</tr>`).join('');
+  const qs = new URLSearchParams();
+  for (const k of Object.keys(query)) {
+    if (['tipo', 'ano', 'municipio'].includes(k) && query[k] !== '') qs.set(k, String(query[k]));
+  }
+  const exp = `/api/informes/${esc(inf.id)}${qs.toString() ? '/xlsx?' + qs.toString() : '/xlsx'}`;
+  return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)}</h2>
+<form method="get" action=""><div class="skl-bar">${flds}<button class="btn-primary" type="submit" style="margin-top:0">Filtrar</button><a class="btn-logout" style="text-decoration:none;display:inline-block;padding:10px 20px" href="${exp}">Exportar Excel</a></div></form>
+<table class="skl-table"><thead><tr>${head}</tr></thead><tbody>${bodyRows || `<tr><td colspan="${data.cols.length}">Sin resultados.</td></tr>`}</tbody></table>
+<p><span class="badge tnum">${data.rows.length} filas</span></p></div>`;
+}
+
 function skeletonInforme(leaf) {
-  return `<div class="skl-bar"><label class="fld"><span>Año</span><input type="number" disabled></label>
-<label class="fld"><span>Formato</span><select disabled><option>Pantalla</option><option>Excel</option></select></label>
+  return `<div class="skl-bar"><label class="fld"><span>Filtro</span><input type="text" disabled></label>
 <button class="btn-primary" type="button" disabled>Generar (Fase 2)</button></div>
 <table class="skl-table"><thead><tr><th>${esc(leaf.title)}</th></tr></thead><tbody><tr><td>Sin resultados (skeleton).</td></tr></tbody></table>`;
 }
@@ -667,5 +687,5 @@ function dashboardPage(fnc, data) {
 </div>`;
 }
 
-module.exports = { layout, loginPage, rolesMatrix, errorPage, esc, dashboardPage };
+module.exports = { layout, loginPage, rolesMatrix, errorPage, esc, dashboardPage, informePage };
 
