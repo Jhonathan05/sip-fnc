@@ -777,6 +777,88 @@ app.post('/api/admin/rate-limit', needLogin, needRole('ADMIN'), async (req, res)
   return res.redirect(tokenFor('/seguridad')+'?msg=ratelimit_ok');
 });
 
+// GET /smtp — formulario Resend (solo ADMIN; la clave jamás se muestra completa).
+app.get('/smtp', needLogin, needRole('ADMIN'), async (req, res) => {
+  const fnc = req.session.fnc;
+  let masked = '—', from = '', hasKey = false;
+  try {
+    const pool = getPool();
+    if (pool) {
+      const { rows } = await pool.query(`SELECT clave, valor FROM app_settings WHERE clave IN ('resend_api_key','mail_from')`);
+      const { maskSecret, decSecret } = require('./crypto');
+      for (const r of rows) {
+        if (r.clave === 'mail_from') from = r.valor;
+        if (r.clave === 'resend_api_key') { try { masked = maskSecret(decSecret(r.valor)); hasKey = true; } catch { /* corrupto */ } }
+      }
+    }
+  } catch { /* sin DB */ }
+  const msg = req.query.msg === 'ok' ? `<div class="card"><p><span class="badge">Guardado.</span></p></div>`
+    : req.query.msg ? `<div class="alert-err">${views.esc(String(req.query.msg))}</div>` : '';
+  res.send(page(req, fnc, { path: '/smtp', title: 'SMTP' }, `${msg}<div class="card"><h1>SMTP · Resend</h1>
+<p>API key actual: <strong class="tnum">${views.esc(masked)}</strong> ${hasKey ? '<span class="badge">configurada</span>' : '<span class="badge badge-warn">pendiente</span>'}</p>
+<form method="post" action="/api/smtp/guardar" style="margin:12px 0 0"><input type="hidden" name="_csrf" value="${ensureToken(req)}">
+<label class="fld"><span>API key Resend (vacío = conservar)</span><input name="resend_api_key" type="password" autocomplete="off"></label>
+<label class="fld"><span>Remitente (Nombre &lt;correo@dominio&gt;)</span><input name="mail_from" type="text" value="${views.esc(from)}" maxlength="160"></label>
+<button class="btn-primary" type="submit">Guardar</button></form>
+<p>Secretos cifrados (AES-256-GCM) en BD. Requiere <code>ENCRYPTION_KEY</code> en el host.</p></div>`));
+});
+
+// POST /api/smtp/guardar — guarda cifrado (solo ADMIN, auditado sin secretos).
+app.post('/api/smtp/guardar', needLogin, needRole('ADMIN'), needDb, async (req, res) => {
+  const key = String((req.body && req.body.resend_api_key) || '').trim();
+  const from = String((req.body && req.body.mail_from) || '').trim().slice(0, 160);
+  if (from && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(from.replace(/^.*</, '').replace(/>$/, ''))) {
+    return res.redirect(tokenFor('/smtp') + '?msg=' + encodeURIComponent('Remitente inválido.'));
+  }
+  try {
+    const { encSecret } = require('./crypto');
+    const pool = getPool();
+    if (key) {
+      await pool.query(`INSERT INTO app_settings (clave, valor, secreto) VALUES ('resend_api_key',$1,TRUE)
+        ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor, updated_at = now()`, [encSecret(key)]);
+    }
+    if (from) {
+      await pool.query(`INSERT INTO app_settings (clave, valor, secreto) VALUES ('mail_from',$1,FALSE)
+        ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor, updated_at = now()`, [from]);
+    }
+    await writeAudit(req, { action: 'smtp.guardar', modulo: 'seguridad', detalle: `SMTP actualizado${key ? ' (key)' : ''}${from ? ' (remitente)' : ''}` });
+    return res.redirect(tokenFor('/smtp') + '?msg=ok');
+  } catch (e) {
+    console.error('[smtp/guardar]', e.message);
+    return res.redirect(tokenFor('/smtp') + '?msg=' + encodeURIComponent('No se pudo guardar (¿ENCRYPTION_KEY?).'));
+  }
+});
+
+// GET /email — probar envío (solo ADMIN): un input mail + botón.
+app.get('/email', needLogin, needRole('ADMIN'), (req, res) => {
+  const fnc = req.session.fnc;
+  const msg = req.query.msg === 'ok' ? `<div class="card"><p><span class="badge">Correo enviado.</span> Revisa el inbox.</p></div>`
+    : req.query.msg ? `<div class="alert-err">${views.esc(String(req.query.msg))}</div>` : '';
+  res.send(page(req, fnc, { path: '/email', title: 'Email' }, `${msg}<div class="card"><h1>Probar correo</h1>
+<p>Envía un correo de prueba con la configuración del módulo SMTP.</p>
+<form method="post" action="/api/email/probar" style="margin:12px 0 0"><input type="hidden" name="_csrf" value="${ensureToken(req)}">
+<label class="fld"><span>Correo destino</span><input name="to" type="email" required maxlength="160" placeholder="destino@dominio.com"></label>
+<button class="btn-primary" type="submit">Enviar prueba</button></form></div>`));
+});
+
+// POST /api/email/probar — envío de prueba (solo ADMIN, auditado por dominio).
+app.post('/api/email/probar', needLogin, needRole('ADMIN'), needDb, async (req, res) => {
+  const to = String((req.body && req.body.to) || '').trim().toLowerCase().slice(0, 160);
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
+    return res.redirect(tokenFor('/email') + '?msg=' + encodeURIComponent('Correo inválido.'));
+  }
+  try {
+    const { sendMail } = require('./mail');
+    await sendMail({ to, subject: 'SIP-FNC · Correo de prueba', title: 'Correo de prueba', body: `<p>La configuración SMTP de <strong>SIP-FNC</strong> funciona correctamente.</p>` });
+    const dom = to.split('@')[1];
+    await writeAudit(req, { action: 'email.probar', modulo: 'seguridad', detalle: `Prueba a @${dom}` });
+    return res.redirect(tokenFor('/email') + '?msg=ok');
+  } catch (e) {
+    console.error('[email/probar]', e.message);
+    return res.redirect(tokenFor('/email') + '?msg=' + encodeURIComponent(e.message || 'No se pudo enviar.'));
+  }
+});
+
 app.get('/seguridad', needLogin, needRole('ADMIN'), async (req, res) => {
   const fnc = req.session.fnc;
   let solis = [];

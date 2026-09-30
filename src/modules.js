@@ -165,11 +165,13 @@ const NAV = [
       },
     ],
   },
+  { path: '/email', title: 'Email', icon: 'mail', roles: ADMIN_ONLY, nav: true },
 ];
 
 // Categoría global de configuración, anclada al fondo del nav.
 const CONFIG = [
   { path: '/seguridad', title: 'Seguridad', icon: 'seguridad', roles: ADMIN_ONLY, nav: true },
+  { path: '/smtp', title: 'SMTP', icon: 'procesos', roles: ADMIN_ONLY, nav: true },
   { path: '/roles', title: 'Roles', icon: 'roles', roles: BOTH, nav: true },
   { path: '#perfil', title: 'Perfil', icon: 'perfil', roles: BOTH, nav: true, modal: 'perfil' },
 ];
@@ -214,6 +216,9 @@ const TOKEN_PAGES = (() => {
     }
   }
   list.push('/seguridad', '/roles');
+  for (const c of CONFIG) {
+    if (c.path && c.path.startsWith('/') && !c.modal) list.push(c.path);
+  }
   return [...new Set(list)];
 })();
 const TOKEN_MAP = {};
