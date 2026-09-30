@@ -159,6 +159,16 @@ describe('auth + CSRF + contrato', () => {
     assert.equal(me.exp - me.iat, 28800);
     assert.equal(me.role, 'ADMIN');
   });
+  it('header con menú usuario (Perfil + Cerrar Sesión, sin botón Salir)', async () => {
+    const html = await (await fetchJ('/dashboard')).text();
+    const iHead = html.indexOf('header-user-profile');
+    assert.ok(iHead > 0, 'header presente');
+    const head = html.slice(iHead, iHead + 2500);
+    assert.ok(!head.includes('>Salir<'), 'sin botón Salir en header');
+    assert.ok(head.includes('class="user-menu"'), 'menú flotante presente');
+    assert.ok(head.includes('data-open-modal="perfil"') && head.includes('>Perfil<'), 'item Perfil abre modal');
+    assert.ok(head.includes('/auth/logout') && head.includes('>Cerrar Sesión<'), 'item Cerrar Sesión con POST');
+  });
   it('dashboard con CSP + nonce coincidente', async () => {
     const r = await fetchJ('/dashboard');
     const csp = r.headers.get('content-security-policy');

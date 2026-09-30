@@ -200,6 +200,82 @@ code {
     display: block;
 }
 
+/* ── Menú de usuario flotante (hover/foco, sin JS) ── */
+.user-menu {
+    position: relative;
+}
+
+.user-menu-trigger {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 10px;
+    font-family: inherit;
+    color: var(--text-dark);
+}
+
+.user-menu-trigger:hover {
+    background: var(--azul-soft);
+}
+
+.user-menu-pop {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    min-width: 180px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    box-shadow: var(--shadow-subtle);
+    padding: 6px;
+    z-index: 200;
+    display: none;
+}
+
+/* Puente invisible sobre el hueco trigger-menú: sin esto el :hover se pierde a mitad de camino */
+.user-menu-pop::before {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    height: 12px;
+}
+
+.user-menu:hover .user-menu-pop,
+.user-menu:focus-within .user-menu-pop {
+    display: block;
+}
+
+.user-menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: none;
+    color: var(--text-dark);
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: var(--fs-table);
+    font-family: inherit;
+}
+
+.user-menu-item:hover {
+    background: var(--azul-soft);
+    color: var(--azul-ink);
+}
+
+.user-menu-pop form {
+    border-top: 1px solid var(--border-light);
+    margin-top: 4px;
+    padding-top: 4px;
+}
+
 .btn-logout {
     border: 1px solid var(--border-light);
     background: var(--bg-card);
