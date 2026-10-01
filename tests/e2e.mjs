@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import vm from 'node:vm';
 
 const require = createRequire(import.meta.url);
 const mods = require('../src/modules.js');
@@ -212,6 +213,17 @@ describe('auth + CSRF + contrato', () => {
     assert.match(html, /nav-lock/, 'lógica nav-lock presente');
     assert.match(html, /is-default/, 'color a 100% presente');
   });
+  it('JS inline compila en dashboard plano y con formulario (gate anti-SyntaxError)', async () => {
+    await loginAsAdmin();
+    for (const q of ['', `?f=${mods.tokenFor('/distribucion/actualizaciones/municipios').slice(3)}`]) {
+      const html = await (await fetchJ(`/dashboard${q}`)).text();
+      const blocks = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
+      assert.ok(blocks.length > 5, `scripts presentes (${q || 'plano'})`);
+      for (const [, body] of blocks) {
+        assert.doesNotThrow(() => new vm.Script(body), `script roto en /dashboard${q}`);
+      }
+    }
+  });
 });
 
 describe('blindaje pre-acción + overlay', () => {
@@ -403,6 +415,74 @@ describe('maestros distribucion e informes', () => {
     assert.match(x.headers.get('content-type'), /spreadsheetml/);
     assert.ok((await x.arrayBuffer()).byteLength > 1000);
     assert.equal((await fetchJ('/distribucion/informes/saldos?ano=xx')).status, 400);
+  });
+});
+
+describe('regla de oro (2 pasos)', () => {
+  const VY = 2031;
+  async function reglaXlsx(reglas) {
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('% producción');
+    ws.addRow(['Circunscripción', 'Municipio', '% participación en la producción', '70% producción', 'UPAS', 'Distribución de UPAS', '30% UPAS', 'Regla de Oro Compuesta']);
+    for (const [circ, mun, r] of reglas) ws.addRow([circ, mun, 0.1, 0.07, 100, 0.1, 0.03, r]);
+    return Buffer.from(await wb.xlsx.writeBuffer());
+  }
+  async function subir(buf, vigencia) {
+    const mt = await csrfMeta();
+    const fd = new FormData();
+    fd.append('archivo', new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'regla.xlsx');
+    fd.append('vigencia', String(vigencia));
+    return fetchJ('/api/regla-oro/cargar', { method: 'POST', headers: { 'x-csrf-token': mt, Accept: 'application/json' }, body: fd });
+  }
+  it('paso 1 carga 3 reglas (Chaparral .5, Ortega .3, Falán .2)', async () => {
+    await loginAsAdmin();
+    const r = await subir(await reglaXlsx([['Chaparral', 'Chaparral', 0.5], ['Chaparral', 'Ortega', 0.3], ['Fresno', 'Falan', 0.2]]), VY);
+    assert.equal(r.status, 200);
+    const d = await r.json();
+    assert.equal(d.ok, true);
+    assert.equal(d.n, 3);
+  });
+  it('paso 1 rechaza suma != 1.0 y municipio fantasma (0 guardados)', async () => {
+    await loginAsAdmin();
+    const r = await subir(await reglaXlsx([['Chaparral', 'Chaparral', 0.5], ['Chaparral', 'Ortega', 0.5], ['Fresno', 'Falan', 0.5]]), VY + 1);
+    assert.equal(r.status, 400);
+    assert.match((await r.json()).error, /Rechazado/);
+    const r2 = await subir(await reglaXlsx([['Chaparral', 'Chaparral', 0.5], ['Chaparral', 'Narnia', 0.5]]), VY + 2);
+    assert.equal(r2.status, 400);
+  });
+  it('paso 2 asigna exacto por circunscripción (625/375/500)', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const r = await fetchJ('/api/regla-oro/asignar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': mt, Accept: 'application/json' },
+      body: JSON.stringify({ vigencia: VY, numero: 9, tipo: 9, totales: { CHAP: 1000, FRES: 500 } }),
+    });
+    assert.equal(r.status, 200);
+    const d = await r.json();
+    assert.equal(d.ok, true);
+    assert.equal(d.n, 3);
+    const { Pool } = require('pg');
+    const p = new Pool({ connectionString: TEST_DB });
+    try {
+      const { rows } = await p.query(`SELECT municipio, valor, ppto FROM distribucion_municipio WHERE ano=$1 AND numero=9 AND tipo=9 ORDER BY municipio`, [VY]);
+      assert.deepEqual(rows.map((x) => [x.municipio, Number(x.valor), Number(x.ppto)]),
+        [['CHA', 625, 1000], ['FAL', 500, 500], ['ORT', 375, 1000]]);
+    } finally { await p.end(); }
+  });
+  it('consultor no carga ni asigna (403)', async () => {
+    jarC.cookie = '';
+    const lh = await (await fetchC('/login')).text();
+    const tok = (lh.match(/name="_csrf" value="([^"]+)"/) || [])[1];
+    await fetchC('/auth/mock', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: tok }) });
+    const d = await (await fetchC('/dashboard')).text();
+    const mt = (d.match(/name="csrf-token" content="([^"]+)"/) || [])[1];
+    const fd = new FormData();
+    fd.append('vigencia', String(VY));
+    const r = await fetchC('/api/regla-oro/cargar', { method: 'POST', headers: { 'x-csrf-token': mt, Accept: 'application/json' }, body: fd });
+    assert.equal(r.status, 403);
+    const r2 = await fetchC('/api/regla-oro/asignar', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': mt, Accept: 'application/json' }, body: JSON.stringify({ vigencia: VY, numero: 1, tipo: 1, totales: {} }) });
+    assert.equal(r2.status, 403);
   });
 });
 

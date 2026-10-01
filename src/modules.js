@@ -17,6 +17,7 @@ const NAV = [
         children: [
           { path: '/distribucion/actualizaciones/distribuciones', title: 'Distribuciones', roles: BOTH, crud: 'distribuciones', fields: [{ label: 'Tipo', type: 'select', options: ['municipio_actual', 'municipio_anteriores', 'circunscripcion_actual', 'circunscripcion_anteriores'] }, { label: 'Año', type: 'number' }, { label: 'Presupuesto', type: 'number' }] },
           { path: '/distribucion/actualizaciones/distribucion-municipio', title: 'Distribución por Municipio', roles: BOTH, crud: 'distribucion-municipio', fields: [{ label: 'Número', type: 'number' }, { label: 'Tipo', type: 'number' }, { label: 'Año', type: 'number' }, { label: 'Ppto', type: 'number' }, { label: 'Municipio', type: 'text' }, { label: 'Valor', type: 'number' }] },
+          { path: '/distribucion/actualizaciones/regla-oro', title: 'Regla de Oro', roles: BOTH, reglaOro: true },
         ],
       },
       {
@@ -275,6 +276,7 @@ const TOKEN_PAGES = [
   '/seguridad',
   '/roles',
   '/smtp',
+  '/distribucion/actualizaciones/regla-oro',
 ];
 const TOKEN_MAP = {};
 TOKEN_PAGES.forEach((p, i) => { TOKEN_MAP[p] = '/v/' + (1000 + i).toString(36); });

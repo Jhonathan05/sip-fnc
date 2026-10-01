@@ -20,6 +20,9 @@ async function main() {
   const sql4 = fs.readFileSync(path.join(__dirname, 'migrate', '004_app_settings.sql'), 'utf8');
   await pool.query(sql4);
   console.log('[migrate] 004_app_settings ok');
+  const sql5 = fs.readFileSync(path.join(__dirname, 'migrate', '005_regla_oro.sql'), 'utf8');
+  await pool.query(sql5);
+  console.log('[migrate] 005_regla_oro ok');
 
   // Seed: 4 distribuciones vigencia actual
   const y = new Date().getFullYear();

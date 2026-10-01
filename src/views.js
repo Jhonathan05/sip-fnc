@@ -100,7 +100,7 @@ function inactivityModal() {
 
 const INACTIVITY_JS = `<script>(function(){try{
 // Blindaje fetch v2: todo 401 de /api → login con motivo.
-if(!window.__fncFetch&&window.fetch){window.__fncFetch=window.fetch;window.fetch=function(u,o){function attempt(){return window.__fncFetch(u,o).then(function(r){if(r&&r.status===401){try{r.clone().json().then(function(d){window.location.href='/login?reason=inactivity';}return r;}).catch(function(e){connShow();return new Promise(function(res){function again(){window.__fncFetch(u,o).then(function(r){connHide();res(r);}).catch(function(){setTimeout(again,5000);});}setTimeout(again,5000);});});}return attempt();};}
+if(!window.__fncFetch&&window.fetch){window.__fncFetch=window.fetch;window.fetch=function(u,o){function attempt(){return window.__fncFetch(u,o).then(function(r){if(r&&r.status===401){window.location.href='/login?reason=inactivity';}return r;}).catch(function(e){connShow();return new Promise(function(res){function again(){window.__fncFetch(u,o).then(function(r){connHide();res(r);}).catch(function(){setTimeout(again,5000);});}setTimeout(again,5000);});});}return attempt();};}
 function connShow(){var o=document.getElementById('connOverlay');if(o)o.hidden=false;}
 function connHide(){var o=document.getElementById('connOverlay');if(o)o.hidden=true;}
 // Pre-check de sesión para acciones críticas (validar/crear/guardar/enviar).
@@ -271,7 +271,7 @@ function layout(appName, fnc, active, body, csrf, nonce, extra) {
   const nVencidas = (extra && Number(extra.nVencidas)) || 0;
   const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
   const csrfMetaTag = csrf ? `<meta name="csrf-token" content="${csrf}">` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-cfg"><link rel="stylesheet" href="/css/app.css?v=20260928-cfg"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-jsfix"><link rel="stylesheet" href="/css/app.css?v=20260928-jsfix"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-mini.svg" alt="Comité de Cafeteros del Tolima" height="30"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="26"><span class="brand-divider" aria-hidden="true"></span><div><span class="header-brand-name"><strong>SIP</strong> Sistema de Información de Proyectos</span></div></div></div>
 <div class="header-user-profile"><a class="hdr-icon" href="/dashboard" aria-label="Notificaciones" title="Tareas vencidas: ir al dashboard">${icon('mail')}${nVencidas > 0 ? `<span class="hdr-badge tnum">${nVencidas > 9 ? '9+' : nVencidas}</span>` : ''}</a><span class="hdr-icon" aria-label="Mensajes" title="Mensajes — próximamente" aria-disabled="true">${icon('chat')}</span><div class="user-menu"><button class="user-menu-trigger" aria-haspopup="true" aria-label="Menú de usuario" title="${esc((fnc.displayName || '') + (fnc.email ? ' · ' + fnc.email : ''))}"><span class="user-name">${esc(shownName(fnc))}</span>${fnc?.photo ? `<img class="user-photo" src="${fnc.photo}" alt="${esc(shownName(fnc) || 'Usuario')}">` : `<div class="user-avatar">${esc(initial)}</div>`}</button><div class="user-menu-pop" role="menu"><button class="user-menu-item" data-open-modal="perfil" type="button" role="menuitem">Perfil</button><form method="post" action="/auth/logout" style="margin:0">${csrfField}<button class="user-menu-item" type="submit" role="menuitem">Cerrar Sesión</button></form></div></div></div>
@@ -290,7 +290,33 @@ ${inactivityModal()}
 ${taskCreateModal()}
 ${detailDrawer()}
 <div class="conn-overlay" id="connOverlay" hidden><div class="modal-card" role="alert"><h2>Sin conexión</h2><p>Se perdió la conexión con el servidor. Reintentando automáticamente…</p><button class="btn-primary" id="connRetry" type="button" style="margin-top:0">Reintentar ahora</button></div></div>
-${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}${withNonce(PRINT_JS, nonce)}</body></html>`;
+${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}${withNonce(PRINT_JS, nonce)}${withNonce(REGLA_JS, nonce)}</body></html>`;
+
+// Regla de Oro en 2 pasos: paso 1 carga xlsx (tabla % sin valores),
+// paso 2 totales por circunscripción → valores por municipio.
+function reglaOroView(form, fnc) {
+  const { leaf, sub, mod } = form;
+  const vy = form.vigencia;
+  const canW = form.perms && form.perms.w;
+  const rows = (form.reglaRows || []).map((r) =>
+    `<tr><td>${esc(r.municipio_nombre || r.municipio)}</td><td>${esc(r.circ_nombre || '—')}</td><td class="tnum">${(Number(r.regla) * 100).toFixed(2)}%</td><td class="tnum">—</td></tr>`).join('');
+  const tots = (form.circs || []).map((c) =>
+    `<label class="fld"><span>${esc(c.nombre)}</span><input id="reglaTot_${esc(c.codigo)}" type="number" min="0" step="0.01" placeholder="0"></label>`).join('');
+  const upForm = canW ? `<div class="skl-bar"><label class="fld"><span>Vigencia</span><input id="reglaVig" type="number" value="${vy}" min="2000" max="2100"></label>
+<label class="fld"><span>Archivo xlsx (REGLA DE ORO)</span><input id="reglaFile" type="file" accept=".xlsx"></label>
+<button class="btn-primary" id="reglaUp" type="button" style="margin-top:0">Paso 1 · Cargar regla</button></div>` : '';
+  const goForm = canW ? `<div class="skl-bar"><label class="fld"><span>Número</span><input id="reglaNum" type="number" value="1" min="0"></label>
+<label class="fld"><span>Tipo</span><input id="reglaTipo" type="number" value="1" min="0"></label>
+<label class="fld"><span>Vigencia</span><input id="reglaVig2" type="number" value="${vy}" min="2000" max="2100"></label>${tots}
+<button class="btn-primary" id="reglaGo" type="button" style="margin-top:0">Paso 2 · Asignar valores</button></div>`
+    : `<p><span class="badge">solo lectura</span></p>`;
+  return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)} <span class="badge">vigencia ${vy}</span></h2>
+<p id="reglaMsg" class="drawer-msg"></p>
+<h3 class="rail-sub">Paso 1 · Porcentajes por municipio (sin valores)</h3>${upForm}
+<table class="skl-table"><thead><tr><th>Municipio</th><th>Circunscripción</th><th>Regla</th><th>Valor</th></tr></thead><tbody>${rows || '<tr><td colspan="4">Sin regla cargada para la vigencia.</td></tr>'}</tbody></table>
+<h3 class="rail-sub">Paso 2 · Totales por circunscripción</h3>${goForm}</div>`;
+}
+
 }
 
 function loginPage(appName, kcMode, csrf, reason) {
@@ -299,7 +325,7 @@ function loginPage(appName, kcMode, csrf, reason) {
     ? `<div class="alert-err">Sesión cerrada por inactividad. Ingresa de nuevo.</div>`
     : reason === 'sesion'
       ? `<div class="alert-err">Tu sesión se renovó (reinicio o expiración). Ingresa de nuevo e intenta otra vez.</div>` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-cfg"><link rel="stylesheet" href="/css/app.css?v=20260928-cfg"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-jsfix"><link rel="stylesheet" href="/css/app.css?v=20260928-jsfix"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="card"><div class="login-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-tolima.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-sip" src="/img/logo-sip.svg" alt="SIP" height="30"></div><h1>${esc(appName)}</h1>
 <p>Sistema de Información de Proyectos — gestión e informes contables por periodos.</p>
 ${notice}
@@ -328,7 +354,7 @@ function rolesMatrix(fnc) {
 
 function errorPage(fnc, reason) {
   const msgs = { state: 'Sesión de autenticación inválida.', callback: 'No se pudo completar el acceso.', forbidden: 'Sin permiso para este módulo.' };
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928-cfg"><link rel="stylesheet" href="/css/app.css?v=20260928-cfg"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928-jsfix"><link rel="stylesheet" href="/css/app.css?v=20260928-jsfix"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="alert-err">${esc(msgs[reason] || msgs.callback)}</div>
 <a class="btn-primary" href="/">Reintentar</a></main></body></html>`;
 }
@@ -472,6 +498,7 @@ function formSlot(form, fnc) {
   }
   const { leaf, sub, mod } = form;
   const tabs = sub.tabs ? configTabs(sub, leaf, fnc?.role) : '';
+  if (leaf.reglaOro) return reglaOroView(form, fnc);
   if (leaf.crud && form.rows) return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p>${tabs}<h2>${esc(leaf.title)}</h2>${crudMaestro(leaf, form)}</div>`;
   const kinds = { maestro: skeletonMaestro, informe: skeletonInforme, proceso: skeletonProceso, consulta: skeletonConsulta };
   const render = kinds[sub.kind] || skeletonMaestro;
@@ -574,6 +601,32 @@ render();
 }catch(e){}})();</script>`;
 
 // Imprimir informe: diálogo nativo (con previsualización). Sin inline onclick (CSP nonce).
+const REGLA_JS = `<script>(function(){try{
+function csrfH(){try{var m=document.querySelector('meta[name="csrf-token"]');return m?m.getAttribute('content')||'':'';}catch(e){return '';}}
+function rmsg(t,ok){var m=document.getElementById('reglaMsg');if(m){m.textContent=t||'';m.style.color=ok?'':'var(--err-ink)';}}
+function val(id){var el=document.getElementById(id);return el?el.value.trim():'';}
+var up=document.getElementById('reglaUp');
+if(up)up.addEventListener('click',function(){
+var f=document.getElementById('reglaFile');
+if(!f||!f.files||!f.files[0]){rmsg('Selecciona el xlsx.',false);return;}
+var fd=new FormData();fd.append('archivo',f.files[0]);fd.append('vigencia',val('reglaVig'));
+rmsg('Cargando…',true);
+fetch('/api/regla-oro/cargar',{method:'POST',headers:{'x-csrf-token':csrfH(),'Accept':'application/json'},body:fd}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+if(x.d&&x.d.ok){rmsg(x.d.msg,true);setTimeout(function(){window.location.reload();},900);return;}
+rmsg((x.d&&(x.d.error))||'No se pudo cargar.',false);
+}).catch(function(){rmsg('Error de red.',false);});
+});
+var go=document.getElementById('reglaGo');
+if(go)go.addEventListener('click',function(){
+var totales={};document.querySelectorAll('[id^="reglaTot_"]').forEach(function(el){if(el.value.trim()!=='')totales[el.id.slice(9)]=el.value.trim();});
+var payload={vigencia:val('reglaVig2'),numero:val('reglaNum'),tipo:val('reglaTipo'),totales:totales};
+rmsg('Asignando…',true);
+fetch('/api/regla-oro/asignar',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':csrfH(),'Accept':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+if(x.d&&x.d.ok){rmsg(x.d.msg,true);return;}
+rmsg((x.d&&(x.d.error))||'No se pudo asignar.',false);
+}).catch(function(){rmsg('Error de red.',false);});
+});
+}catch(e){}})();</script>`;
 const PRINT_JS = `<script>(function(){try{var b=document.getElementById('btnImprimir');if(b)b.addEventListener('click',function(){window.print();});}catch(e){}})();</script>`;
 
 function fmtFechaHora(v) {

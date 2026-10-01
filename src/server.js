@@ -591,6 +591,20 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
           form.catalogs = { municipio: c.rows };
         }
       }
+      // Regla de Oro (2 pasos): precarga regla + circunscripciones para la vigencia.
+      if (hit.leaf.reglaOro) {
+        const y0 = new Date().getFullYear() + 1;
+        const qv = String(req.query.vigencia || '');
+        form.vigencia = /^\d{4}$/.test(qv) && Number(qv) >= 2000 && Number(qv) <= 2100 ? Number(qv) : y0;
+        const rr = await getPool().query(
+          `SELECT r.municipio, m.nombre AS municipio_nombre, c.nombre AS circ_nombre, r.regla
+           FROM regla_oro_anual r JOIN municipios m ON m.codigo = r.municipio
+           LEFT JOIN circunscripciones c ON c.codigo = m.circunscripcion
+           WHERE r.vigencia = $1 ORDER BY c.nombre NULLS LAST, m.nombre`, [form.vigencia]);
+        form.reglaRows = rr.rows;
+        const cc = await getPool().query('SELECT codigo, nombre FROM circunscripciones ORDER BY nombre');
+        form.circs = cc.rows;
+      }
     }
     const pool = getPool();
     const [s, a] = await Promise.all([
@@ -772,6 +786,121 @@ app.get('/api/informes/:id/xlsx', needLogin, needDb, async (req, res) => {
   } catch (e) {
     console.error('[informes:xlsx]', e.message);
     return res.status(500).json({ error: 'No se pudo exportar.' });
+  }
+});
+
+// Regla de Oro (2 pasos): cargar xlsx (paso 1) + asignar por circunscripción (paso 2).
+// Escribe solo con canWrite (consultor: lectura). Rechazo estricto, sin parciales.
+const { parseReglaOro } = require('./reglaoro');
+const uploadRegla = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    const okExt = /\.xlsx$/i.test(file.originalname || '');
+    const okMime = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/octet-stream'].includes(file.mimetype);
+    if (okExt && okMime) return cb(null, true);
+    return cb(new Error('Solo xlsx hasta 5 MB.'));
+  },
+});
+const REGLA_TOK = () => tokenFor('/distribucion/actualizaciones/regla-oro').replace('/v/', '');
+const REGLA_BACK = (qs) => `${tokenFor('/dashboard')}?f=${REGLA_TOK()}&${qs}`;
+
+app.post('/api/regla-oro/cargar', needLogin, needDb, (req, res) => {
+  uploadRegla.single('archivo')(req, res, async (err) => {
+    const wantJson = (req.headers.accept || '').includes('application/json');
+    const fail = (code, error) => wantJson
+      ? res.status(code).json({ ok: false, error })
+      : res.redirect(REGLA_BACK('msg=' + encodeURIComponent(error)));
+    const done = (msg, extra) => wantJson
+      ? res.json({ ok: true, msg, ...(extra || {}) })
+      : res.redirect(REGLA_BACK(`vigencia=${vy}&msg=` + encodeURIComponent(msg)));
+    if (err) return fail(400, 'Archivo inválido o mayor a 5 MB (solo xlsx).');
+    const fnc = req.session.fnc;
+    if (!canWrite(fnc)) return res.status(403).send(views.errorPage(fnc, 'forbidden'));
+    const vy = Number(req.body && req.body.vigencia);
+    if (!Number.isInteger(vy) || vy < 2000 || vy > 2100) return fail(400, 'Vigencia inválida (2000–2100).');
+    if (!req.file) return fail(400, 'Sin archivo.');
+    try {
+      const pool = getPool();
+      const mun = await pool.query('SELECT codigo, nombre FROM municipios');
+      const byCodigo = {};
+      const byNombre = {};
+      const { normKey } = require('./reglaoro');
+      mun.rows.forEach((m) => { byCodigo[m.codigo] = true; byNombre[normKey(m.nombre)] = m.codigo; });
+      const { rows, errors } = await parseReglaOro(req.file.buffer, { byCodigo, byNombre });
+      if (errors.length) {
+        const det = errors.slice(0, 3).join(' ') + (errors.length > 3 ? ` (+${errors.length - 3} más)` : '');
+        return fail(400, `Rechazado (0 guardados): ${det}`);
+      }
+      for (const r of rows) {
+        await pool.query(
+          `INSERT INTO regla_oro_anual (vigencia, municipio, regla) VALUES ($1,$2,$3)
+           ON CONFLICT (vigencia, municipio) DO UPDATE SET regla = EXCLUDED.regla`,
+          [vy, r.municipio, r.regla]);
+      }
+      await writeAudit(req, { action: 'regla.cargar', modulo: 'distribucion', detalle: `Regla ${vy}: ${rows.length} municipios` });
+      return done(`Regla ${vy} cargada: ${rows.length} municipios (sin valores).`, { n: rows.length });
+    } catch (e) {
+      console.error('[regla/cargar]', e.message);
+      return fail(500, 'No se pudo procesar el archivo.');
+    }
+  });
+});
+
+app.post('/api/regla-oro/asignar', needLogin, needDb, async (req, res) => {
+  const fnc = req.session.fnc;
+  if (!canWrite(fnc)) return res.status(403).send(views.errorPage(fnc, 'forbidden'));
+  const wantJson = (req.headers.accept || '').includes('application/json');
+  const fail = (code, error) => wantJson
+    ? res.status(code).json({ ok: false, error })
+    : res.redirect(REGLA_BACK('msg=' + encodeURIComponent(error)));
+  const done = (msg, extra) => wantJson
+    ? res.json({ ok: true, msg, ...(extra || {}) })
+    : res.redirect(REGLA_BACK('msg=' + encodeURIComponent(msg)));
+  try {
+    const b = req.body || {};
+    const vy = Number(b.vigencia);
+    const numero = Number(b.numero);
+    const tipo = Number(b.tipo);
+    if (!Number.isInteger(vy) || vy < 2000 || vy > 2100) return fail(400, 'Vigencia inválida (2000–2100).');
+    if (!Number.isInteger(numero) || numero < 0 || !Number.isInteger(tipo) || tipo < 0) return fail(400, 'Número y tipo deben ser enteros ≥ 0.');
+    const pool = getPool();
+    const rr = await pool.query(
+      `SELECT r.municipio, r.regla, m.circunscripcion FROM regla_oro_anual r
+       JOIN municipios m ON m.codigo = r.municipio WHERE r.vigencia = $1`, [vy]);
+    if (!rr.rows.length) return fail(400, `Sin regla cargada para ${vy} (paso 1 primero).`);
+    const totales = (b.totales && typeof b.totales === 'object') ? b.totales : {};
+    for (const [k, v] of Object.entries(b)) {
+      if (String(k).startsWith('tot_') && String(v).trim() !== '') totales[String(k).slice(4)] = v;
+    }
+    const porCirc = {};
+    for (const r of rr.rows) {
+      const c = r.circunscripcion || 'SIN';
+      (porCirc[c] = porCirc[c] || []).push(r);
+    }
+    let n = 0;
+    for (const [circ, items] of Object.entries(porCirc)) {
+      const raw = totales[circ];
+      if (raw === undefined || String(raw).trim() === '') continue; // vacío = no tocar
+      const total = Number(raw);
+      if (!Number.isFinite(total) || total < 0) return fail(400, `Total inválido para ${circ}.`);
+      const suma = items.reduce((a, x) => a + Number(x.regla), 0);
+      if (!(suma > 0)) return fail(400, `Regla en cero para ${circ}.`);
+      for (const it of items) {
+        const valor = Math.round((total * Number(it.regla) / suma) * 100) / 100;
+        await pool.query(
+          `INSERT INTO distribucion_municipio (numero, tipo, ano, ppto, municipio, valor) VALUES ($1,$2,$3,$4,$5,$6)
+           ON CONFLICT (numero, tipo, ano, municipio) DO UPDATE SET valor = EXCLUDED.valor, ppto = EXCLUDED.ppto`,
+          [numero, tipo, vy, total, it.municipio, valor]);
+        n++;
+      }
+    }
+    if (!n) return fail(400, 'Indica al menos un total por circunscripción.');
+    await writeAudit(req, { action: 'regla.asignar', modulo: 'distribucion', detalle: `Vigencia ${vy} (núm ${numero}, tipo ${tipo}): ${n} municipios` });
+    return done(`Vigencia ${vy}: ${n} municipios actualizados.`, { n });
+  } catch (e) {
+    console.error('[regla/asignar]', e.message);
+    return fail(500, 'No se pudo asignar.');
   }
 });
 
