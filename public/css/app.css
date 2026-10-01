@@ -1062,6 +1062,43 @@ a.hdr-icon:hover {
     max-width: none;
 }
 
+/* ── Pestañas de subcategoría (Configuración): navegación server-rendered ── */
+.cfg-tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 12px 0 4px;
+    border-bottom: 1px solid var(--border-light);
+    padding-bottom: 10px;
+}
+
+.cfg-tab {
+    padding: 7px 14px;
+    border-radius: 8px 8px 0 0;
+    font-size: var(--fs-table);
+    color: var(--text-muted);
+    text-decoration: none;
+    border: 1px solid transparent;
+    border-bottom: 0;
+}
+
+.cfg-tab:hover {
+    background: var(--azul-soft);
+    color: var(--text-dark);
+}
+
+.cfg-tab.active {
+    background: var(--azul-soft);
+    color: var(--azul-ink);
+    font-weight: 600;
+    border-color: var(--border-light);
+}
+
+.cfg-tab.cfg-disabled {
+    opacity: .55;
+    cursor: not-allowed;
+}
+
 .skl-bar {
     display: flex;
     gap: 10px;

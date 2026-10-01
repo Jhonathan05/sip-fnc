@@ -268,6 +268,19 @@ describe('URLs opacas + guards', () => {
     assert.equal(inf.status, 302);
     assert.match(inf.headers.get('location'), /^\/v\//);
   });
+  it('Configuración agrupa catálogos por pestañas (tokens estables)', async () => {
+    assert.equal(mods.tokenFor('/dashboard'), '/v/rs', 'token dashboard estable');
+    const tokMun = mods.tokenFor('/distribucion/actualizaciones/municipios').slice(3);
+    const f = await fetchJ(`/v/rs?f=${tokMun}`);
+    assert.equal(f.status, 200);
+    const html = await f.text();
+    assert.match(html, /Configuración/, 'breadcrumb en Configuración');
+    assert.match(html, /cfg-tab[^>]*active[^>]*>Municipios/, 'pestaña activa Municipios');
+    assert.ok(html.includes('Circunscripciones') && html.includes('Tipos de Distribuciones'), '3 pestañas');
+    assert.match(html, /crudGuardar/, 'CRUD intacto bajo pestaña');
+    const dash = await (await fetchJ('/dashboard')).text();
+    assert.match(dash, /data-navkey="[^"]*\/configuracion"/, 'nav con sub Configuración');
+  });
 });
 
 describe('tareas e2e', () => {

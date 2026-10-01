@@ -271,7 +271,7 @@ function layout(appName, fnc, active, body, csrf, nonce, extra) {
   const nVencidas = (extra && Number(extra.nVencidas)) || 0;
   const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
   const csrfMetaTag = csrf ? `<meta name="csrf-token" content="${csrf}">` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-hdr"><link rel="stylesheet" href="/css/app.css?v=20260928-hdr"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-cfg"><link rel="stylesheet" href="/css/app.css?v=20260928-cfg"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-mini.svg" alt="Comité de Cafeteros del Tolima" height="30"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="26"><span class="brand-divider" aria-hidden="true"></span><div><span class="header-brand-name"><strong>SIP</strong> Sistema de Información de Proyectos</span></div></div></div>
 <div class="header-user-profile"><a class="hdr-icon" href="/dashboard" aria-label="Notificaciones" title="Tareas vencidas: ir al dashboard">${icon('mail')}${nVencidas > 0 ? `<span class="hdr-badge tnum">${nVencidas > 9 ? '9+' : nVencidas}</span>` : ''}</a><span class="hdr-icon" aria-label="Mensajes" title="Mensajes — próximamente" aria-disabled="true">${icon('chat')}</span><div class="user-menu"><button class="user-menu-trigger" aria-haspopup="true" aria-label="Menú de usuario" title="${esc((fnc.displayName || '') + (fnc.email ? ' · ' + fnc.email : ''))}"><span class="user-name">${esc(shownName(fnc))}</span>${fnc?.photo ? `<img class="user-photo" src="${fnc.photo}" alt="${esc(shownName(fnc) || 'Usuario')}">` : `<div class="user-avatar">${esc(initial)}</div>`}</button><div class="user-menu-pop" role="menu"><button class="user-menu-item" data-open-modal="perfil" type="button" role="menuitem">Perfil</button><form method="post" action="/auth/logout" style="margin:0">${csrfField}<button class="user-menu-item" type="submit" role="menuitem">Cerrar Sesión</button></form></div></div></div>
@@ -299,7 +299,7 @@ function loginPage(appName, kcMode, csrf, reason) {
     ? `<div class="alert-err">Sesión cerrada por inactividad. Ingresa de nuevo.</div>`
     : reason === 'sesion'
       ? `<div class="alert-err">Tu sesión se renovó (reinicio o expiración). Ingresa de nuevo e intenta otra vez.</div>` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-hdr"><link rel="stylesheet" href="/css/app.css?v=20260928-hdr"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-cfg"><link rel="stylesheet" href="/css/app.css?v=20260928-cfg"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="card"><div class="login-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-tolima.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-sip" src="/img/logo-sip.svg" alt="SIP" height="30"></div><h1>${esc(appName)}</h1>
 <p>Sistema de Información de Proyectos — gestión e informes contables por periodos.</p>
 ${notice}
@@ -328,7 +328,7 @@ function rolesMatrix(fnc) {
 
 function errorPage(fnc, reason) {
   const msgs = { state: 'Sesión de autenticación inválida.', callback: 'No se pudo completar el acceso.', forbidden: 'Sin permiso para este módulo.' };
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928-hdr"><link rel="stylesheet" href="/css/app.css?v=20260928-hdr"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928-cfg"><link rel="stylesheet" href="/css/app.css?v=20260928-cfg"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="alert-err">${esc(msgs[reason] || msgs.callback)}</div>
 <a class="btn-primary" href="/">Reintentar</a></main></body></html>`;
 }
@@ -454,18 +454,31 @@ function skeletonConsulta(leaf) {
 <p><span class="badge">skeleton</span> Sin resultados.</p>`;
 }
 
-function formSlot(form) {
+// Subcategoría por pestañas (Configuración): barra server-rendered; la pestaña
+// activa es la hoja actual y las demás navegan a sus ?f=. Sin JS ni CRUD doble.
+function configTabs(sub, leaf, role) {
+  const tabs = (sub.children || []).map((l) => {
+    const tok = tokenFor(l.path).replace('/v/', '');
+    const href = `${tokenFor('/dashboard')}?f=${encodeURIComponent(tok)}`;
+    if (!canAccess(role, l)) return `<span class="cfg-tab cfg-disabled" title="Sin permiso">🔒 ${esc(l.title)}</span>`;
+    return `<a class="cfg-tab${leaf && leaf.path === l.path ? ' active' : ''}" href="${href}">${esc(l.title)}</a>`;
+  }).join('');
+  return `<div class="cfg-tabs" role="tablist" aria-label="${esc(sub.title)}">${tabs}</div>`;
+}
+
+function formSlot(form, fnc) {
   if (!form) {
     return `<div class="card form-slot"><h2>Formularios</h2><p>Selecciona una opción del nav izquierdo: los formularios pequeños se abren aquí; los informes tienen vista propia.</p></div>`;
   }
   const { leaf, sub, mod } = form;
-  if (leaf.crud && form.rows) return crudMaestro(leaf, form);
+  const tabs = sub.tabs ? configTabs(sub, leaf, fnc?.role) : '';
+  if (leaf.crud && form.rows) return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p>${tabs}<h2>${esc(leaf.title)}</h2>${crudMaestro(leaf, form)}</div>`;
   const kinds = { maestro: skeletonMaestro, informe: skeletonInforme, proceso: skeletonProceso, consulta: skeletonConsulta };
   const render = kinds[sub.kind] || skeletonMaestro;
   const body = sub.kind === 'info'
     ? `<p><a class="btn-primary" href="${tokenFor(leaf.path)}">Abrir ${esc(leaf.title)}</a></p>`
     : render(leaf, sub);
-  return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)}</h2>${body}</div>`;
+  return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p>${tabs}<h2>${esc(leaf.title)}</h2>${body}</div>`;
 }
 
 // CRUD funcional de maestros (Fase 2): tabla + alta/edición + borrado con guards.
@@ -500,10 +513,9 @@ function crudMaestro(leaf, form) {
   }).join('');
   const fields = (leaf.fields || []).map((f) => crudField(f, form.catalogs || {})).join('');
   const save = perms.w ? `<button class="btn-primary" id="crudGuardar" data-crud-id="${esc(leaf.crud)}" type="button" style="margin-top:0">Guardar</button>` : `<p><span class="badge">solo lectura</span></p>`;
-  return `<div class="card form-slot"><h2>${esc(leaf.title)}</h2>
-<p id="crudMsg" class="drawer-msg"></p>
+  return `<p id="crudMsg" class="drawer-msg"></p>
 <table class="skl-table"><thead><tr>${head}<th>Acciones</th></tr></thead><tbody>${bodyRows || `<tr><td colspan="${cols.length + 1}">Sin registros.</td></tr>`}</tbody></table>
-<div class="fld-grid">${fields}</div>${save}</div>`;
+<div class="fld-grid">${fields}</div>${save}`;
 }
 
 const CRUD_JS = `<script>(function(){try{
@@ -693,7 +705,7 @@ back.addEventListener('click',function(e){if(e.target===back)close();});
 function dashboardPage(fnc, data) {
   const nAct = (data.actividad || []).length;
   return `<div class="dash-grid">
-<div>${kpiStrip(data.saldos)}${formSlot(data.form)}</div>
+<div>${kpiStrip(data.saldos)}${formSlot(data.form, fnc)}</div>
 <div class="dash-rail"><div class="card rail-card"><div class="rail-card-head"><h2>Actividad reciente</h2><span class="rail-card-meta tnum">${nAct} movimientos</span></div><div class="rail-scroll">${activityFeed(data.actividad, data.nonce)}</div></div><div class="card rail-card"><div class="rail-card-head"><h2>Tareas</h2></div><div class="rail-scroll">${taskCards(fnc, data.tareas)}${doneList(data.hechas)}</div></div></div>
 </div>`;
 }

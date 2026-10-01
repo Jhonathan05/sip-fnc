@@ -15,11 +15,18 @@ const NAV = [
         key: 'actualizaciones', title: 'Actualizaciones', icon: 'tareas',
                 desc: 'Maestros y distribuciones por vigencia.',
         children: [
+          { path: '/distribucion/actualizaciones/distribuciones', title: 'Distribuciones', roles: BOTH, crud: 'distribuciones', fields: [{ label: 'Tipo', type: 'select', options: ['municipio_actual', 'municipio_anteriores', 'circunscripcion_actual', 'circunscripcion_anteriores'] }, { label: 'Año', type: 'number' }, { label: 'Presupuesto', type: 'number' }] },
+          { path: '/distribucion/actualizaciones/distribucion-municipio', title: 'Distribución por Municipio', roles: BOTH, crud: 'distribucion-municipio', fields: [{ label: 'Número', type: 'number' }, { label: 'Tipo', type: 'number' }, { label: 'Año', type: 'number' }, { label: 'Ppto', type: 'number' }, { label: 'Municipio', type: 'text' }, { label: 'Valor', type: 'number' }] },
+        ],
+      },
+      {
+        kind: 'maestro',
+        key: 'configuracion', title: 'Configuración', icon: 'procesos', tabs: true,
+                desc: 'Catálogos base de distribución, por pestañas.',
+        children: [
           { path: '/distribucion/actualizaciones/circunscripciones', title: 'Circunscripciones', roles: BOTH, crud: 'circunscripciones', fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }] },
           { path: '/distribucion/actualizaciones/municipios', title: 'Municipios', roles: BOTH, crud: 'municipios', fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }, { label: 'Circunscripción', type: 'select', options: ['Norte', 'Sur', 'Oriente', 'Occidente', 'Centro'] }] },
           { path: '/distribucion/actualizaciones/tipos-distribuciones', title: 'Tipos de Distribuciones', roles: BOTH, crud: 'tipos-distribuciones', fields: [{ label: 'Código', type: 'text' }, { label: 'Nombre', type: 'text' }] },
-          { path: '/distribucion/actualizaciones/distribuciones', title: 'Distribuciones', roles: BOTH, crud: 'distribuciones', fields: [{ label: 'Tipo', type: 'select', options: ['municipio_actual', 'municipio_anteriores', 'circunscripcion_actual', 'circunscripcion_anteriores'] }, { label: 'Año', type: 'number' }, { label: 'Presupuesto', type: 'number' }] },
-          { path: '/distribucion/actualizaciones/distribucion-municipio', title: 'Distribución por Municipio', roles: BOTH, crud: 'distribucion-municipio', fields: [{ label: 'Número', type: 'number' }, { label: 'Tipo', type: 'number' }, { label: 'Año', type: 'number' }, { label: 'Ppto', type: 'number' }, { label: 'Municipio', type: 'text' }, { label: 'Valor', type: 'number' }] },
         ],
       },
       {
@@ -203,24 +210,72 @@ function findLeaf(path) {
   return null;
 }
 
-// URLs opacas (opción 4): mapa ESTABLE token↔ruta (orden de declaración).
+// URLs opacas (opción 4): mapa ESTABLE token↔ruta, lista CONGELADA explícita.
 // Regla: las páginas nuevas se agregan AL FINAL para no desplazar tokens
-// (los bookmarks dependen de la estabilidad). No es control de acceso:
-// los guards server-side siguen mandando; las rutas reales siguen vivas.
-const TOKEN_PAGES = (() => {
-  const list = [];
-  for (const m of NAV) {
-    list.push(m.path);
-    for (const s of (m.children || [])) {
-      for (const l of (s.children || [])) list.push(l.path);
-    }
-  }
-  list.push('/seguridad', '/roles');
-  for (const c of CONFIG) {
-    if (c.path && c.path.startsWith('/') && !c.modal) list.push(c.path);
-  }
-  return [...new Set(list)];
-})();
+// (los bookmarks dependen de la estabilidad). El orden del NAV puede cambiar
+// libremente sin mover tokens. No es control de acceso: los guards server-side
+// siguen mandando; las rutas reales siguen vivas.
+const TOKEN_PAGES = [
+  '/dashboard',
+  '/distribucion',
+  '/distribucion/actualizaciones/circunscripciones',
+  '/distribucion/actualizaciones/municipios',
+  '/distribucion/actualizaciones/tipos-distribuciones',
+  '/distribucion/actualizaciones/distribuciones',
+  '/distribucion/actualizaciones/distribucion-municipio',
+  '/distribucion/informes/por-distribucion',
+  '/distribucion/informes/por-ano',
+  '/distribucion/informes/saldos',
+  '/distribucion/informes/cuenta-corriente',
+  '/adjudicaciones',
+  '/adjudicaciones/actualizaciones/contratistas',
+  '/adjudicaciones/actualizaciones/invitaciones',
+  '/adjudicaciones/actualizaciones/movimiento-invitaciones',
+  '/adjudicaciones/actualizaciones/adjudicaciones',
+  '/adjudicaciones/actualizaciones/clases-contratistas',
+  '/adjudicaciones/actualizaciones/tipos-suspension',
+  '/adjudicaciones/consultas/sancionados',
+  '/adjudicaciones/informes/estadistica-contratista',
+  '/adjudicaciones/procesos-especiales/sorteo',
+  '/asignaciones',
+  '/asignaciones/actualizaciones/asignaciones',
+  '/asignaciones/actualizaciones/codigos-estado',
+  '/asignaciones/informes/ejecucion-detallada',
+  '/asignaciones/informes/por-estado',
+  '/asignaciones/informes/por-supervisor',
+  '/asignaciones/informes/resumen-supervisor',
+  '/asignaciones/informes/relacion-ordenes',
+  '/ordenes-sap',
+  '/ordenes-sap/actualizaciones/cargue',
+  '/ordenes-sap/procesos/inversion-mensual',
+  '/contratos',
+  '/contratos/actualizaciones/contratos-convenios',
+  '/contratos/actualizaciones/otrosi',
+  '/contratos/actualizaciones/tipos-documentos',
+  '/contratos/actualizaciones/clase-contratos',
+  '/contratos/actualizaciones/dependencias-origen',
+  '/contratos/actualizaciones/tipos-presupuestos',
+  '/contratos/actualizaciones/tipos-otrosi',
+  '/contratos/actualizaciones/tipos-polizas',
+  '/contratos/actualizaciones/modalidades-financiacion',
+  '/contratos/actualizaciones/tipos-obras',
+  '/contratos/actualizaciones/clases-obras',
+  '/contratos/actualizaciones/bancos',
+  '/contratos/actualizaciones/supervisores',
+  '/contratos/actualizaciones/codigos-estado',
+  '/contratos/actualizaciones/maestro-terceros',
+  '/contratos/informes/por-vigencia',
+  '/contratos/informes/relacion-convenios',
+  '/contratos/informes/por-estados',
+  '/contratos/informes/por-presupuesto',
+  '/contratos/informes/a-vencerse',
+  '/contratos/informes/polizas-vencerse',
+  '/contratos/informes/exporta-maestro',
+  '/email',
+  '/seguridad',
+  '/roles',
+  '/smtp',
+];
 const TOKEN_MAP = {};
 TOKEN_PAGES.forEach((p, i) => { TOKEN_MAP[p] = '/v/' + (1000 + i).toString(36); });
 const TOKEN_REV = {};
