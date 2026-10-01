@@ -484,6 +484,52 @@ describe('regla de oro (2 pasos)', () => {
     const r2 = await fetchC('/api/regla-oro/asignar', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': mt, Accept: 'application/json' }, body: JSON.stringify({ vigencia: VY, numero: 1, tipo: 1, totales: {} }) });
     assert.equal(r2.status, 403);
   });
+  it('perímetro: admin carga año anterior, consultor no', async () => {
+    await loginAsAdmin();
+    const r = await subir(await reglaXlsx([['Chaparral', 'Chaparral', 0.6], ['Chaparral', 'Ortega', 0.4]]), 2020);
+    assert.equal(r.status, 200);
+    jarC.cookie = '';
+    const lh = await (await fetchC('/login')).text();
+    const tok = (lh.match(/name="_csrf" value="([^"]+)"/) || [])[1];
+    await fetchC('/auth/mock', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: tok }) });
+    const d = await (await fetchC('/dashboard')).text();
+    const mt = (d.match(/name="csrf-token" content="([^"]+)"/) || [])[1];
+    const fd = new FormData();
+    fd.append('vigencia', '2020');
+    const r2 = await fetchC('/api/regla-oro/cargar', { method: 'POST', headers: { 'x-csrf-token': mt, Accept: 'application/json' }, body: fd });
+    assert.equal(r2.status, 403);
+  });
+  it('paso 2 bloqueado sin regla + tabla por circunscripción', async () => {
+    await loginAsAdmin();
+    const tokLeaf = mods.tokenFor('/distribucion/actualizaciones/regla-oro').slice(3);
+    const v = await (await fetchJ(`/v/rs?f=${tokLeaf}&vigencia=${VY + 5}`)).text();
+    assert.match(v, /Completa el paso 1/, 'paso 2 bloqueado sin regla');
+    assert.ok(!v.includes('id="reglaGo"'), 'sin botón asignar');
+    const p = await (await fetchJ(`/v/rs?f=${tokLeaf}&vigencia=${VY}`)).text();
+    assert.match(p, /Porcentaje por circunscripción/, 'tabla por circunscripción');
+    assert.match(p, /Chaparral[\s\S]{0,120}80\.00%/, 'Chaparral suma 80%');
+    assert.match(p, /reglaVerGo|Imprimir|reglaCmpGo/, 'ver/visualizar/comparar presentes');
+  });
+  it('comparar 2 vigencias + exportar xlsx/pdf', async () => {
+    await loginAsAdmin();
+    const r = await subir(await reglaXlsx([['Chaparral', 'Chaparral', 0.7], ['Chaparral', 'Ortega', 0.2], ['Fresno', 'Falan', 0.1]]), VY + 3);
+    assert.equal(r.status, 200);
+    const c = await (await fetchJ(`/api/regla-oro/comparar?vigencias=${VY},${VY + 3}`)).json();
+    assert.equal(c.ok, true);
+    assert.deepEqual(c.vigencias, [VY, VY + 3]);
+    assert.ok(c.rows.some((x) => x.municipio === 'CHA'), 'incluye Chaparral');
+    const c1 = await fetchJ(`/api/regla-oro/comparar?vigencias=${VY}`);
+    assert.equal(c1.status, 400);
+    const x = await fetchJ(`/api/regla-oro/xlsx?vigencia=${VY}`);
+    assert.equal(x.status, 200);
+    assert.match(x.headers.get('content-type'), /spreadsheetml/);
+    assert.ok((await x.arrayBuffer()).byteLength > 500);
+    const f = await fetchJ(`/api/regla-oro/pdf?vigencia=${VY}`);
+    assert.equal(f.status, 200);
+    assert.match(f.headers.get('content-type'), /pdf/);
+    const head = Buffer.from(await f.arrayBuffer()).slice(0, 5).toString();
+    assert.ok(head.startsWith('%PDF'), 'magic PDF');
+  });
 });
 
 describe('rate-limit + actividad + perfil + logout', () => {

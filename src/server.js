@@ -602,6 +602,11 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
            LEFT JOIN circunscripciones c ON c.codigo = m.circunscripcion
            WHERE r.vigencia = $1 ORDER BY c.nombre NULLS LAST, m.nombre`, [form.vigencia]);
         form.reglaRows = rr.rows;
+        form.tieneRegla = rr.rows.length > 0;
+        const vv = await getPool().query(
+          `SELECT municipio, SUM(valor)::float8 AS total FROM distribucion_municipio WHERE ano = $1 GROUP BY municipio`, [form.vigencia]);
+        form.valores = {};
+        vv.rows.forEach((x) => { form.valores[x.municipio] = Number(x.total); });
         const cc = await getPool().query('SELECT codigo, nombre FROM circunscripciones ORDER BY nombre');
         form.circs = cc.rows;
       }
@@ -819,6 +824,10 @@ app.post('/api/regla-oro/cargar', needLogin, needDb, (req, res) => {
     if (!canWrite(fnc)) return res.status(403).send(views.errorPage(fnc, 'forbidden'));
     const vy = Number(req.body && req.body.vigencia);
     if (!Number.isInteger(vy) || vy < 2000 || vy > 2100) return fail(400, 'Vigencia inválida (2000–2100).');
+    // Perímetro: vigencias anteriores solo ADMIN (la actual/futura: canWrite).
+    if (vy < new Date().getFullYear() && fnc.role !== 'ADMIN') {
+      return fail(403, 'Solo ADMIN carga vigencias anteriores.');
+    }
     if (!req.file) return fail(400, 'Sin archivo.');
     try {
       const pool = getPool();
@@ -901,6 +910,91 @@ app.post('/api/regla-oro/asignar', needLogin, needDb, async (req, res) => {
   } catch (e) {
     console.error('[regla/asignar]', e.message);
     return fail(500, 'No se pudo asignar.');
+  }
+});
+
+// GET /api/regla-oro/comparar?vigencias=2026,2027[,2028] — regla % lado a lado (2 o 3).
+app.get('/api/regla-oro/comparar', needLogin, needDb, async (req, res) => {
+  try {
+    const vys = [...new Set(String(req.query.vigencias || '').split(',').map((x) => Number(String(x).trim())).filter((n) => Number.isInteger(n) && n >= 2000 && n <= 2100))].sort();
+    if (vys.length < 2 || vys.length > 3) return res.status(400).json({ ok: false, error: 'Indica 2 o 3 vigencias (2000–2100).' });
+    const { rows } = await getPool().query(
+      `SELECT r.vigencia, r.municipio, m.nombre AS nombre, c.nombre AS circ, r.regla
+       FROM regla_oro_anual r JOIN municipios m ON m.codigo = r.municipio
+       LEFT JOIN circunscripciones c ON c.codigo = m.circunscripcion
+       WHERE r.vigencia = ANY($1) ORDER BY m.nombre`, [vys]);
+    res.json({ ok: true, vigencias: vys, rows });
+  } catch (e) {
+    console.error('[regla/comparar]', e.message);
+    res.status(500).json({ ok: false, error: 'No se pudo comparar.' });
+  }
+});
+
+function reglaRowsVigencia(pool, vy) {
+  return pool.query(
+    `SELECT m.nombre AS municipio, c.nombre AS circ,
+            r.regla, COALESCE(v.total, 0) AS valor
+     FROM regla_oro_anual r JOIN municipios m ON m.codigo = r.municipio
+     LEFT JOIN circunscripciones c ON c.codigo = m.circunscripcion
+     LEFT JOIN (SELECT municipio, SUM(valor)::float8 AS total FROM distribucion_municipio WHERE ano = $1 GROUP BY municipio) v ON v.municipio = r.municipio
+     WHERE r.vigencia = $1 ORDER BY m.nombre`, [vy]);
+}
+
+function vigenciaParam(q) {
+  const vy = Number(q.vigencia);
+  return Number.isInteger(vy) && vy >= 2000 && vy <= 2100 ? vy : null;
+}
+
+// GET /api/regla-oro/xlsx?vigencia= — exporta regla + valores.
+app.get('/api/regla-oro/xlsx', needLogin, needDb, async (req, res) => {
+  const vy = vigenciaParam(req.query);
+  if (!vy) return res.status(400).json({ ok: false, error: 'Vigencia inválida.' });
+  try {
+    const { rows } = await reglaRowsVigencia(getPool(), vy);
+    if (!rows.length) return res.status(404).json({ ok: false, error: `Sin regla para ${vy}.` });
+    const buf = await buildXlsx(`Regla de Oro ${vy}`,
+      ['municipio', 'circunscripcion', 'regla_pct', 'valor'],
+      rows.map((r) => ({ municipio: r.municipio, circunscripcion: r.circ || '', regla_pct: +(Number(r.regla) * 100).toFixed(4), valor: Number(r.valor) })));
+    await writeAudit(req, { action: 'regla.exportar', modulo: 'distribucion', detalle: `Regla ${vy} xlsx (${rows.length} filas)` });
+    res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.set('Content-Disposition', `attachment; filename="sip-regla-${vy}.xlsx"`);
+    return res.send(buf);
+  } catch (e) {
+    console.error('[regla/xlsx]', e.message);
+    return res.status(500).json({ ok: false, error: 'No se pudo exportar.' });
+  }
+});
+
+// GET /api/regla-oro/pdf?vigencia= — documento simple (tabla regla + valores).
+app.get('/api/regla-oro/pdf', needLogin, needDb, async (req, res) => {
+  const vy = vigenciaParam(req.query);
+  if (!vy) return res.status(400).json({ ok: false, error: 'Vigencia inválida.' });
+  try {
+    const { rows } = await reglaRowsVigencia(getPool(), vy);
+    if (!rows.length) return res.status(404).json({ ok: false, error: `Sin regla para ${vy}.` });
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    const chunks = [];
+    doc.on('data', (c) => chunks.push(c));
+    const done = new Promise((resolve) => doc.on('end', resolve));
+    doc.fontSize(14).text(`SIP-FNC · Regla de Oro ${vy}`, { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(10).text('Municipio | Circunscripción | Regla % | Valor');
+    doc.moveDown(0.5);
+    doc.fontSize(9);
+    for (const r of rows) {
+      if (doc.y > 740) doc.addPage();
+      doc.text(`${r.municipio} | ${r.circ || '—'} | ${(Number(r.regla) * 100).toFixed(2)}% | ${Number(r.valor).toLocaleString('es-CO')}`);
+    }
+    doc.end();
+    await done;
+    await writeAudit(req, { action: 'regla.exportar', modulo: 'distribucion', detalle: `Regla ${vy} pdf (${rows.length} filas)` });
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="sip-regla-${vy}.pdf"`);
+    return res.send(Buffer.concat(chunks));
+  } catch (e) {
+    console.error('[regla/pdf]', e.message);
+    return res.status(500).json({ ok: false, error: 'No se pudo exportar.' });
   }
 });
 

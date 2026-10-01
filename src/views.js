@@ -271,7 +271,7 @@ function layout(appName, fnc, active, body, csrf, nonce, extra) {
   const nVencidas = (extra && Number(extra.nVencidas)) || 0;
   const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
   const csrfMetaTag = csrf ? `<meta name="csrf-token" content="${csrf}">` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-jsfix"><link rel="stylesheet" href="/css/app.css?v=20260928-jsfix"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-regla2"><link rel="stylesheet" href="/css/app.css?v=20260928-regla2"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-mini.svg" alt="Comité de Cafeteros del Tolima" height="30"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="26"><span class="brand-divider" aria-hidden="true"></span><div><span class="header-brand-name"><strong>SIP</strong> Sistema de Información de Proyectos</span></div></div></div>
 <div class="header-user-profile"><a class="hdr-icon" href="/dashboard" aria-label="Notificaciones" title="Tareas vencidas: ir al dashboard">${icon('mail')}${nVencidas > 0 ? `<span class="hdr-badge tnum">${nVencidas > 9 ? '9+' : nVencidas}</span>` : ''}</a><span class="hdr-icon" aria-label="Mensajes" title="Mensajes — próximamente" aria-disabled="true">${icon('chat')}</span><div class="user-menu"><button class="user-menu-trigger" aria-haspopup="true" aria-label="Menú de usuario" title="${esc((fnc.displayName || '') + (fnc.email ? ' · ' + fnc.email : ''))}"><span class="user-name">${esc(shownName(fnc))}</span>${fnc?.photo ? `<img class="user-photo" src="${fnc.photo}" alt="${esc(shownName(fnc) || 'Usuario')}">` : `<div class="user-avatar">${esc(initial)}</div>`}</button><div class="user-menu-pop" role="menu"><button class="user-menu-item" data-open-modal="perfil" type="button" role="menuitem">Perfil</button><form method="post" action="/auth/logout" style="margin:0">${csrfField}<button class="user-menu-item" type="submit" role="menuitem">Cerrar Sesión</button></form></div></div></div>
@@ -299,23 +299,46 @@ function reglaOroView(form, fnc) {
   const { leaf, sub, mod } = form;
   const vy = form.vigencia;
   const canW = form.perms && form.perms.w;
+  const valOf = (cod) => (form.valores && form.valores[cod] != null ? Number(form.valores[cod]).toLocaleString('es-CO') : '—');
   const rows = (form.reglaRows || []).map((r) =>
-    `<tr><td>${esc(r.municipio_nombre || r.municipio)}</td><td>${esc(r.circ_nombre || '—')}</td><td class="tnum">${(Number(r.regla) * 100).toFixed(2)}%</td><td class="tnum">—</td></tr>`).join('');
+    `<tr><td>${esc(r.municipio_nombre || r.municipio)}</td><td>${esc(r.circ_nombre || '—')}</td><td class="tnum">${(Number(r.regla) * 100).toFixed(2)}%</td><td class="tnum">${valOf(r.municipio)}</td></tr>`).join('');
+  const porCirc = {};
+  for (const r of (form.reglaRows || [])) {
+    const c = r.circ_nombre || '—';
+    porCirc[c] = porCirc[c] || { n: 0, suma: 0 };
+    porCirc[c].n++;
+    porCirc[c].suma += Number(r.regla);
+  }
+  const circRows = Object.entries(porCirc).map(([c, x]) =>
+    `<tr><td>${esc(c)}</td><td class="tnum">${x.n}</td><td class="tnum">${(x.suma * 100).toFixed(2)}%</td></tr>`).join('');
   const tots = (form.circs || []).map((c) =>
     `<label class="fld"><span>${esc(c.nombre)}</span><input id="reglaTot_${esc(c.codigo)}" type="number" min="0" step="0.01" placeholder="0"></label>`).join('');
+  const verCtl = `<div class="skl-bar"><label class="fld"><span>Ver vigencia</span><input id="reglaVer" type="number" value="${vy}" min="2000" max="2100"></label>
+<button class="btn-logout" id="reglaVerGo" type="button" style="padding:10px 20px">Ver</button>
+<span style="flex:1"></span><button class="btn-logout" id="reglaPrint" type="button" style="padding:10px 20px">Imprimir</button>
+<a class="btn-logout" style="text-decoration:none;display:inline-block;padding:10px 20px" href="/api/regla-oro/xlsx?vigencia=${vy}">Excel</a>
+<a class="btn-logout" style="text-decoration:none;display:inline-block;padding:10px 20px" href="/api/regla-oro/pdf?vigencia=${vy}">PDF</a></div>`;
   const upForm = canW ? `<div class="skl-bar"><label class="fld"><span>Vigencia</span><input id="reglaVig" type="number" value="${vy}" min="2000" max="2100"></label>
 <label class="fld"><span>Archivo xlsx (REGLA DE ORO)</span><input id="reglaFile" type="file" accept=".xlsx"></label>
 <button class="btn-primary" id="reglaUp" type="button" style="margin-top:0">Paso 1 · Cargar regla</button></div>` : '';
-  const goForm = canW ? `<div class="skl-bar"><label class="fld"><span>Número</span><input id="reglaNum" type="number" value="1" min="0"></label>
+  const goForm = !canW ? `<p><span class="badge">solo lectura</span></p>`
+    : !(form.reglaRows || []).length ? `<p><span class="badge badge-warn">Completa el paso 1 para la vigencia ${vy}.</span></p>`
+    : `<div class="skl-bar"><label class="fld"><span>Número</span><input id="reglaNum" type="number" value="1" min="0"></label>
 <label class="fld"><span>Tipo</span><input id="reglaTipo" type="number" value="1" min="0"></label>
 <label class="fld"><span>Vigencia</span><input id="reglaVig2" type="number" value="${vy}" min="2000" max="2100"></label>${tots}
-<button class="btn-primary" id="reglaGo" type="button" style="margin-top:0">Paso 2 · Asignar valores</button></div>`
-    : `<p><span class="badge">solo lectura</span></p>`;
+<button class="btn-primary" id="reglaGo" type="button" style="margin-top:0">Paso 2 · Asignar valores</button></div>`;
+  const cmpForm = `<div class="skl-bar"><label class="fld"><span>Vigencia A</span><input id="reglaCmpA" type="number" value="${vy}" min="2000" max="2100"></label>
+<label class="fld"><span>Vigencia B</span><input id="reglaCmpB" type="number" value="${vy + 1}" min="2000" max="2100"></label>
+<label class="fld"><span>Vigencia C (opcional)</span><input id="reglaCmpC" type="number" placeholder="—" min="2000" max="2100"></label>
+<button class="btn-logout" id="reglaCmpGo" type="button" style="padding:10px 20px">Comparar</button></div><div id="reglaCmpOut"></div>`;
   return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)} <span class="badge">vigencia ${vy}</span></h2>
-<p id="reglaMsg" class="drawer-msg"></p>
+<p id="reglaMsg" class="drawer-msg"></p>${verCtl}
 <h3 class="rail-sub">Paso 1 · Porcentajes por municipio (sin valores)</h3>${upForm}
-<table class="skl-table"><thead><tr><th>Municipio</th><th>Circunscripción</th><th>Regla</th><th>Valor</th></tr></thead><tbody>${rows || '<tr><td colspan="4">Sin regla cargada para la vigencia.</td></tr>'}</tbody></table>
-<h3 class="rail-sub">Paso 2 · Totales por circunscripción</h3>${goForm}</div>`;
+<table class="skl-table"><thead><tr><th>Municipio</th><th>Circunscripción</th><th>Regla</th><th>Valor ${vy}</th></tr></thead><tbody>${rows || '<tr><td colspan="4">Sin regla cargada para la vigencia.</td></tr>'}</tbody></table>
+<h3 class="rail-sub">Porcentaje por circunscripción</h3>
+<table class="skl-table"><thead><tr><th>Circunscripción</th><th>Municipios</th><th>% total</th></tr></thead><tbody>${circRows || '<tr><td colspan="3">Sin datos.</td></tr>'}</tbody></table>
+<h3 class="rail-sub">Paso 2 · Totales por circunscripción</h3>${goForm}
+<h3 class="rail-sub">Comparar vigencias (2 o 3)</h3>${cmpForm}</div>`;
 }
 
 function loginPage(appName, kcMode, csrf, reason) {
@@ -324,7 +347,7 @@ function loginPage(appName, kcMode, csrf, reason) {
     ? `<div class="alert-err">Sesión cerrada por inactividad. Ingresa de nuevo.</div>`
     : reason === 'sesion'
       ? `<div class="alert-err">Tu sesión se renovó (reinicio o expiración). Ingresa de nuevo e intenta otra vez.</div>` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-jsfix"><link rel="stylesheet" href="/css/app.css?v=20260928-jsfix"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-regla2"><link rel="stylesheet" href="/css/app.css?v=20260928-regla2"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="card"><div class="login-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-tolima.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-sip" src="/img/logo-sip.svg" alt="SIP" height="30"></div><h1>${esc(appName)}</h1>
 <p>Sistema de Información de Proyectos — gestión e informes contables por periodos.</p>
 ${notice}
@@ -353,7 +376,7 @@ function rolesMatrix(fnc) {
 
 function errorPage(fnc, reason) {
   const msgs = { state: 'Sesión de autenticación inválida.', callback: 'No se pudo completar el acceso.', forbidden: 'Sin permiso para este módulo.' };
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928-jsfix"><link rel="stylesheet" href="/css/app.css?v=20260928-jsfix"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928-regla2"><link rel="stylesheet" href="/css/app.css?v=20260928-regla2"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="alert-err">${esc(msgs[reason] || msgs.callback)}</div>
 <a class="btn-primary" href="/">Reintentar</a></main></body></html>`;
 }
@@ -624,6 +647,33 @@ fetch('/api/regla-oro/asignar',{method:'POST',headers:{'Content-Type':'applicati
 if(x.d&&x.d.ok){rmsg(x.d.msg,true);return;}
 rmsg((x.d&&(x.d.error))||'No se pudo asignar.',false);
 }).catch(function(){rmsg('Error de red.',false);});
+});
+var vg=document.getElementById('reglaVerGo');
+if(vg)vg.addEventListener('click',function(){
+var v=document.getElementById('reglaVer');var yv=v?v.value.trim():'';
+var m=window.location.search.match(/[?&]f=([^&]+)/);
+var tok=m?m[1]:'';
+if(!tok||!yv){rmsg('Indica vigencia para ver.',false);return;}
+window.location.href=window.location.pathname+'?f='+encodeURIComponent(tok)+'&vigencia='+encodeURIComponent(yv);
+});
+var pr=document.getElementById('reglaPrint');
+if(pr)pr.addEventListener('click',function(){window.print();});
+var cg=document.getElementById('reglaCmpGo');
+if(cg)cg.addEventListener('click',function(){
+function escH(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+var a=val('reglaCmpA'),b=val('reglaCmpB'),c=val('reglaCmpC');
+var qs=[a,b,c].filter(function(x){return x!=='';}).join(',');
+var out=document.getElementById('reglaCmpOut');
+if(!out)return;
+out.innerHTML='<p>Cargando comparación…</p>';
+fetch('/api/regla-oro/comparar?vigencias='+encodeURIComponent(qs)).then(function(r){return r.json();}).then(function(d){
+if(!d||!d.ok){out.innerHTML='<p>No se pudo comparar.</p>';return;}
+var vys=d.vigencias,rows=d.rows,byM={},order=[];
+rows.forEach(function(x){(byM[x.municipio]=byM[x.municipio]||{nombre:x.nombre,circ:x.circ,vals:{}}).vals[x.vigencia]=Number(x.regla);if(order.indexOf(x.municipio)<0)order.push(x.municipio);});
+var h='<table class="skl-table"><thead><tr><th>Municipio</th><th>Circunscripción</th>'+vys.map(function(y){return '<th>'+y+' %</th>';}).join('')+'</tr></thead><tbody>';
+order.forEach(function(k){var e=byM[k];h+='<tr><td>'+escH(e.nombre)+'</td><td>'+escH(e.circ||'—')+'</td>'+vys.map(function(y){return '<td class="tnum">'+(e.vals[y]!=null?(e.vals[y]*100).toFixed(2)+'%':'—')+'</td>';}).join('')+'</tr>';});
+out.innerHTML=h+'</tbody></table>';
+}).catch(function(){out.innerHTML='<p>Error de red.</p>';});
 });
 }catch(e){}})();</script>`;
 const PRINT_JS = `<script>(function(){try{var b=document.getElementById('btnImprimir');if(b)b.addEventListener('click',function(){window.print();});}catch(e){}})();</script>`;
