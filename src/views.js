@@ -31,6 +31,7 @@ const P = {
   procesos: '<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" /> <circle cx="12" cy="12" r="3" />',
   perfil: '<path d="M17.925 20.056a6 6 0 0 0-11.851.001" /> <circle cx="12" cy="11" r="4" /> <circle cx="12" cy="12" r="10" />',
   mail: '<rect width="20" height="16" x="2" y="4" rx="2" /> <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />',
+  chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />',
 };
 
 function icon(name) {
@@ -98,8 +99,14 @@ function inactivityModal() {
 }
 
 const INACTIVITY_JS = `<script>(function(){try{
-// Flujos fetch ante sesión muerta: 401 INACTIVE redirige al login con motivo.
-if(!window.__fncFetch&&window.fetch){window.__fncFetch=window.fetch;window.fetch=function(u,o){return window.__fncFetch(u,o).then(function(r){if(r&&r.status===401){try{r.clone().json().then(function(d){if(d&&d.code==='INACTIVE')window.location.href='/login?reason=inactivity';}).catch(function(){});}catch(e){}}return r;});};}
+// Blindaje fetch v2: todo 401 de /api → login con motivo.
+if(!window.__fncFetch&&window.fetch){window.__fncFetch=window.fetch;window.fetch=function(u,o){function attempt(){return window.__fncFetch(u,o).then(function(r){if(r&&r.status===401){try{r.clone().json().then(function(d){window.location.href='/login?reason=inactivity';}return r;}).catch(function(e){connShow();return new Promise(function(res){function again(){window.__fncFetch(u,o).then(function(r){connHide();res(r);}).catch(function(){setTimeout(again,5000);});}setTimeout(again,5000);});});}return attempt();};}
+function connShow(){var o=document.getElementById('connOverlay');if(o)o.hidden=false;}
+function connHide(){var o=document.getElementById('connOverlay');if(o)o.hidden=true;}
+// Pre-check de sesión para acciones críticas (validar/crear/guardar/enviar).
+window.fncAlive=function(){return window.__fncFetch('/api/me',{method:'GET'}).then(function(r){return r.status===200;}).catch(function(){return false;});};
+var cr=document.getElementById('connRetry');if(cr)cr.addEventListener('click',function(){window.location.reload();});
+document.querySelectorAll('form[data-precheck]').forEach(function(f){f.addEventListener('submit',function(e){if(f.__checking)return;e.preventDefault();f.__checking=true;window.fncAlive().then(function(ok){f.__checking=false;if(ok){f.submit();}else{window.location.href='/login?reason=inactivity';}});});});
 var WARN_AT=4*60*1000, LIMIT=5*60*1000, deadline=Date.now()+LIMIT, timer=null, shown=false;
 var modal=document.getElementById('inactModal'), secs=document.getElementById('inactSecs');
 function csrfH(){try{var m=document.querySelector('meta[name="csrf-token"]');return m?m.getAttribute('content')||'':'';}catch(e){return '';}}
@@ -208,12 +215,15 @@ var msg=document.getElementById('tcMsg');
 function val(id){var el=document.getElementById(id);return el?el.value.trim():'';}
 var payload={titulo:val('tcTitulo'),rol:val('tcRol'),responsable:val('tcResp'),area:val('tcArea'),proceso:val('tcProc'),fecha_limite:val('tcFecha'),detalle:val('tcDetalle'),automatica:val('tcAuto')==='si'};
 g.disabled=true;if(msg)msg.textContent='Guardando…';
+function go(){
 var tk='';try{var mm=document.querySelector('meta[name="csrf-token"]');tk=mm?mm.getAttribute('content')||'':'';}catch(e){}
 fetch('/api/tareas',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':tk},body:JSON.stringify(payload)}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
 if(x.d&&x.d.ok){window.location.reload();return;}
 if(msg)msg.textContent=(x.d&&(x.d.error||x.d.msg))||'No se pudo crear.';
 g.disabled=false;
 }).catch(function(){if(msg)msg.textContent='Error de red.';g.disabled=false;});
+}
+if(window.fncAlive){window.fncAlive().then(function(ok){if(ok){go();}else{g.disabled=false;window.location.href='/login?reason=inactivity';}});}else{go();}
 });
 }catch(e){}})();</script>`;
 
@@ -254,16 +264,17 @@ var navBtn=document.getElementById('navCollapseBtn');
 if(navBtn){if(document.documentElement.classList.contains('nav-collapsed'))navBtn.setAttribute('aria-label','Expandir menú');navBtn.addEventListener('click',function(){var on=!document.documentElement.classList.contains('nav-collapsed');document.documentElement.classList.toggle('nav-collapsed',on);navBtn.setAttribute('aria-label',on?'Expandir menú':'Contraer menú');try{localStorage.setItem('sip-nav-collapsed',on?'1':'0');}catch(e){}if(on){var sb=document.querySelector('.app-sidebar');if(sb&&sb.matches&&sb.matches(':hover')){document.documentElement.classList.add('nav-lock');var un=function(){document.documentElement.classList.remove('nav-lock');};sb.addEventListener('mouseleave',un);sb.addEventListener('mouseenter',un);}}else{document.documentElement.classList.remove('nav-lock');}});}
 }catch(e){}})();</script>`;
 
-function layout(appName, fnc, active, body, csrf, nonce) {
+function layout(appName, fnc, active, body, csrf, nonce, extra) {
   const email = fnc?.email || '';
   const role = fnc?.role || '';
   const initial = email.trim().charAt(0).toUpperCase() || 'U';
+  const nVencidas = (extra && Number(extra.nVencidas)) || 0;
   const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
   const csrfMetaTag = csrf ? `<meta name="csrf-token" content="${csrf}">` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-usermenu2"><link rel="stylesheet" href="/css/app.css?v=20260928-usermenu2"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-hdr"><link rel="stylesheet" href="/css/app.css?v=20260928-hdr"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-mini.svg" alt="Comité de Cafeteros del Tolima" height="30"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="26"><span class="brand-divider" aria-hidden="true"></span><div><span class="header-brand-name"><strong>SIP</strong> Sistema de Información de Proyectos</span></div></div></div>
-<div class="header-user-profile"><div class="user-menu"><button class="user-menu-trigger" aria-haspopup="true" aria-label="Menú de usuario" title="${esc((fnc.displayName || '') + (fnc.email ? ' · ' + fnc.email : ''))}">${fnc?.photo ? `<img class="user-photo" src="${fnc.photo}" alt="${esc(shownName(fnc) || 'Usuario')}">` : `<div class="user-avatar">${esc(initial)}</div>`}<span class="user-name">${esc(shownName(fnc))}</span></button><div class="user-menu-pop" role="menu"><button class="user-menu-item" data-open-modal="perfil" type="button" role="menuitem">Perfil</button><form method="post" action="/auth/logout" style="margin:0">${csrfField}<button class="user-menu-item" type="submit" role="menuitem">Cerrar Sesión</button></form></div></div></div>
+<div class="header-user-profile"><a class="hdr-icon" href="/dashboard" aria-label="Notificaciones" title="Tareas vencidas: ir al dashboard">${icon('mail')}${nVencidas > 0 ? `<span class="hdr-badge tnum">${nVencidas > 9 ? '9+' : nVencidas}</span>` : ''}</a><span class="hdr-icon" aria-label="Mensajes" title="Mensajes — próximamente" aria-disabled="true">${icon('chat')}</span><div class="user-menu"><button class="user-menu-trigger" aria-haspopup="true" aria-label="Menú de usuario" title="${esc((fnc.displayName || '') + (fnc.email ? ' · ' + fnc.email : ''))}"><span class="user-name">${esc(shownName(fnc))}</span>${fnc?.photo ? `<img class="user-photo" src="${fnc.photo}" alt="${esc(shownName(fnc) || 'Usuario')}">` : `<div class="user-avatar">${esc(initial)}</div>`}</button><div class="user-menu-pop" role="menu"><button class="user-menu-item" data-open-modal="perfil" type="button" role="menuitem">Perfil</button><form method="post" action="/auth/logout" style="margin:0">${csrfField}<button class="user-menu-item" type="submit" role="menuitem">Cerrar Sesión</button></form></div></div></div>
 </div></header>
 <aside class="app-sidebar" aria-label="Navegacion principal">
 <nav class="sidebar-nav">
@@ -278,6 +289,7 @@ ${profileModal(csrf)}
 ${inactivityModal()}
 ${taskCreateModal()}
 ${detailDrawer()}
+<div class="conn-overlay" id="connOverlay" hidden><div class="modal-card" role="alert"><h2>Sin conexión</h2><p>Se perdió la conexión con el servidor. Reintentando automáticamente…</p><button class="btn-primary" id="connRetry" type="button" style="margin-top:0">Reintentar ahora</button></div></div>
 ${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}${withNonce(PRINT_JS, nonce)}</body></html>`;
 }
 
@@ -287,7 +299,7 @@ function loginPage(appName, kcMode, csrf, reason) {
     ? `<div class="alert-err">Sesión cerrada por inactividad. Ingresa de nuevo.</div>`
     : reason === 'sesion'
       ? `<div class="alert-err">Tu sesión se renovó (reinicio o expiración). Ingresa de nuevo e intenta otra vez.</div>` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-usermenu2"><link rel="stylesheet" href="/css/app.css?v=20260928-usermenu2"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-hdr"><link rel="stylesheet" href="/css/app.css?v=20260928-hdr"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="card"><div class="login-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-tolima.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-sip" src="/img/logo-sip.svg" alt="SIP" height="30"></div><h1>${esc(appName)}</h1>
 <p>Sistema de Información de Proyectos — gestión e informes contables por periodos.</p>
 ${notice}
@@ -316,7 +328,7 @@ function rolesMatrix(fnc) {
 
 function errorPage(fnc, reason) {
   const msgs = { state: 'Sesión de autenticación inválida.', callback: 'No se pudo completar el acceso.', forbidden: 'Sin permiso para este módulo.' };
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928-usermenu2"><link rel="stylesheet" href="/css/app.css?v=20260928-usermenu2"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928-hdr"><link rel="stylesheet" href="/css/app.css?v=20260928-hdr"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="alert-err">${esc(msgs[reason] || msgs.callback)}</div>
 <a class="btn-primary" href="/">Reintentar</a></main></body></html>`;
 }
@@ -645,6 +657,7 @@ var b=document.createElement('button');b.textContent='Validar tarea';b.className
 b.addEventListener('click',function(){
 if(!t.automatica&&!window.confirm('¿Confirmas completar "'+(t.titulo||'')+'"?'))return;
 b.disabled=true;
+function go(){
 function csrfHeader() {
   try {
     var m = document.querySelector('meta[name="csrf-token"]');
@@ -656,6 +669,8 @@ if(x.d&&x.d.ok){window.location.reload();return;}
 var m=document.getElementById('drawerMsg');if(m)m.textContent=(x.d&&(x.d.msg||x.d.error))||'No se pudo validar.';
 b.disabled=false;
 }).catch(function(){var m=document.getElementById('drawerMsg');if(m)m.textContent='Error de red.';b.disabled=false;});
+}
+if(window.fncAlive){window.fncAlive().then(function(ok){if(ok){go();}else{b.disabled=false;window.location.href='/login?reason=inactivity';}});}else{go();}
 });
 box.appendChild(b);
 if(t.formUrl){var a=document.createElement('a');a.textContent='Ir al formulario';a.className='btn-logout';a.style.textDecoration='none';a.style.display='inline-block';a.style.padding='10px 20px';a.href=t.formUrl;box.appendChild(a);}

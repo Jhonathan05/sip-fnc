@@ -168,6 +168,25 @@ describe('auth + CSRF + contrato', () => {
     assert.ok(head.includes('class="user-menu"'), 'menú flotante presente');
     assert.ok(head.includes('data-open-modal="perfil"') && head.includes('>Perfil<'), 'item Perfil abre modal');
     assert.ok(head.includes('/auth/logout') && head.includes('>Cerrar Sesión<'), 'item Cerrar Sesión con POST');
+    const iName = head.indexOf('class="user-name"');
+    const iImg = Math.min(...['class="user-photo"', 'class="user-avatar"'].map((c) => { const i = head.indexOf(c); return i < 0 ? Infinity : i; }));
+    assert.ok(iName > 0 && iName < iImg, 'nombre antes que imagen en header');
+  });
+  it('header con iconos mail/chat y badge de vencidas', async () => {
+    const { Pool } = require('pg');
+    const p = new Pool({ connectionString: TEST_DB });
+    try {
+      await p.query(`INSERT INTO tasks (rol, titulo, fecha_limite, estado) VALUES ('analista','E2E-vencida-x', CURRENT_DATE - 1, 'pendiente')`);
+      const html = await (await fetchJ('/dashboard')).text();
+      const iHead = html.indexOf('header-user-profile');
+      const head = html.slice(iHead, iHead + 3000);
+      assert.ok(head.includes('aria-label="Notificaciones"'), 'icono mail');
+      assert.ok(head.includes('aria-label="Mensajes"'), 'icono chat');
+      assert.match(head, /hdr-badge[^>]*>1</, 'badge con 1 vencida');
+    } finally {
+      await p.query(`DELETE FROM tasks WHERE titulo LIKE 'E2E-vencida-%'`);
+      await p.end();
+    }
   });
   it('dashboard con CSP + nonce coincidente', async () => {
     const r = await fetchJ('/dashboard');
@@ -192,6 +211,31 @@ describe('auth + CSRF + contrato', () => {
     assert.ok(iHead > 0 && !html.slice(iHead, iHead + 2000).includes('fontDown'), 'header sin accesibilidad');
     assert.match(html, /nav-lock/, 'lógica nav-lock presente');
     assert.match(html, /is-default/, 'color a 100% presente');
+  });
+});
+
+describe('blindaje pre-acción + overlay', () => {
+  it('overlay + fncAlive + precheck presentes', async () => {
+    await loginAsAdmin();
+    const html = await (await fetchJ('/dashboard')).text();
+    assert.ok(html.includes('id="connOverlay"') && html.includes('id="connRetry"'), 'overlay sin conexión');
+    assert.ok(html.includes('window.fncAlive'), 'helper pre-check');
+    const s = await (await fetchJ(mods.tokenFor('/smtp'))).text();
+    assert.ok(s.includes('data-precheck'), 'smtp con pre-check');
+    const e = await (await fetchJ(mods.tokenFor('/email'))).text();
+    assert.ok(e.includes('data-precheck'), 'email con pre-check');
+  });
+  it('validar sin sesión no ejecuta (sigue pendiente)', async () => {
+    await loginAsAdmin();
+    const tareas = await (await fetchJ('/api/tareas')).json();
+    const t = tareas[0];
+    assert.ok(t, 'hay pendiente');
+    jar.cookie = ''; // sesión muerta
+    const r = await fetchJ(`/api/tareas/${t.id}/validar`, { method: 'POST', headers: { 'x-csrf-token': 'x' } });
+    assert.equal(r.status, 403);
+    await loginAsAdmin();
+    const after = await (await fetchJ('/api/tareas')).json();
+    assert.ok(after.some((x) => x.id === t.id), 'no se ejecutó sin sesión');
   });
 });
 

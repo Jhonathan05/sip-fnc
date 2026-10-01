@@ -180,6 +180,25 @@ const needRole = (role) => (req, res, next) => {
   return res.status(403).send(views.errorPage(req.session?.fnc, 'forbidden'));
 };
 
+// Badge notificaciones: vencidas visibles según rol (0 sin sesión).
+// Una COUNT por request; best-effort, nunca tumba.
+app.use(async (req, res, next) => {
+  res.locals.nVencidas = 0;
+  try {
+    const fnc = req.session?.fnc;
+    const pool = getPool();
+    if (isFncValid(fnc) && pool) {
+      const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
+      let q = `SELECT COUNT(*)::int AS n FROM tasks WHERE estado='pendiente' AND fecha_limite < CURRENT_DATE`;
+      const p = [];
+      if (fnc.role !== 'ADMIN' && !roles.includes('coordinador')) { q += ` AND rol = ANY($1)`; p.push(roles); }
+      const { rows } = await pool.query(q, p);
+      res.locals.nVencidas = (rows[0] && rows[0].n) || 0;
+    }
+  } catch { /* badge en 0 */ }
+  next();
+});
+
 
 function setFnc(req, fnc, idToken) {
   req.session.fnc = fnc;
@@ -541,7 +560,7 @@ app.delete('/api/maestros/:id/:codigo', needLogin, needDb, async (req, res) => {
     return res.status(500).json({ ok: false, error: 'Error interno.' });
   }
 });
-const page = (req, fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body, ensureToken(req), req.nonce);
+const page = (req, fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body, ensureToken(req), req.nonce, { nVencidas: (req.res && req.res.locals.nVencidas) || 0 });
 
 app.get('/dashboard', needLogin, needDb, async (req, res) => {
   const fnc = req.session.fnc;
@@ -802,7 +821,7 @@ app.get('/smtp', needLogin, needRole('ADMIN'), async (req, res) => {
     : req.query.msg ? `<div class="alert-err">${views.esc(String(req.query.msg))}</div>` : '';
   res.send(page(req, fnc, { path: '/smtp', title: 'SMTP' }, `${msg}<div class="card"><h1>SMTP · Resend</h1>
 <p>API key actual: <strong class="tnum">${views.esc(masked)}</strong> ${hasKey ? '<span class="badge">configurada</span>' : '<span class="badge badge-warn">pendiente</span>'}</p>
-<form method="post" action="/api/smtp/guardar" style="margin:12px 0 0"><input type="hidden" name="_csrf" value="${ensureToken(req)}">
+<form method="post" action="/api/smtp/guardar" data-precheck style="margin:12px 0 0"><input type="hidden" name="_csrf" value="${ensureToken(req)}">
 <label class="fld"><span>API key Resend (vacío = conservar)</span><input name="resend_api_key" type="password" autocomplete="off"></label>
 <label class="fld"><span>Remitente (Nombre &lt;correo@dominio&gt;)</span><input name="mail_from" type="text" value="${views.esc(from)}" maxlength="160"></label>
 <button class="btn-primary" type="submit">Guardar</button></form>
@@ -848,7 +867,7 @@ app.get('/email', needLogin, needRole('ADMIN'), (req, res) => {
     : req.query.msg ? `<div class="alert-err">${views.esc(String(req.query.msg))}</div>` : '';
   res.send(page(req, fnc, { path: '/email', title: 'Email' }, `${msg}<div class="card"><h1>Probar correo</h1>
 <p>Envía un correo de prueba con la configuración del módulo SMTP.</p>
-<form method="post" action="/api/email/probar" style="margin:12px 0 0"><input type="hidden" name="_csrf" value="${ensureToken(req)}">
+<form method="post" action="/api/email/probar" data-precheck style="margin:12px 0 0"><input type="hidden" name="_csrf" value="${ensureToken(req)}">
 <label class="fld"><span>Correo destino</span><input name="to" type="email" required maxlength="160" placeholder="destino@dominio.com"></label>
 <button class="btn-primary" type="submit">Enviar prueba</button></form></div>`));
 });

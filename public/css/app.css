@@ -200,6 +200,44 @@ code {
     display: block;
 }
 
+/* ── Iconos header (notificaciones + mensajes) ── */
+.hdr-icon {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-card);
+    color: var(--text-dark);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    flex-shrink: 0;
+}
+
+a.hdr-icon:hover {
+    background: var(--azul-soft);
+    color: var(--azul-ink);
+}
+
+.hdr-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9999px;
+    background: var(--err-ink);
+    color: #fff;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+}
+
 /* ── Menú de usuario flotante (hover/foco, sin JS) ── */
 .user-menu {
     position: relative;
@@ -976,6 +1014,22 @@ code {
 }
 
 .modal-overlay[hidden] {
+    display: none;
+}
+
+/* ── Overlay sin conexión (blindaje fetch, con reintento) ── */
+.conn-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 400;
+    padding: 16px;
+}
+
+.conn-overlay[hidden] {
     display: none;
 }
 
