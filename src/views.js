@@ -291,6 +291,7 @@ ${taskCreateModal()}
 ${detailDrawer()}
 <div class="conn-overlay" id="connOverlay" hidden><div class="modal-card" role="alert"><h2>Sin conexión</h2><p>Se perdió la conexión con el servidor. Reintentando automáticamente…</p><button class="btn-primary" id="connRetry" type="button" style="margin-top:0">Reintentar ahora</button></div></div>
 ${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}${withNonce(PRINT_JS, nonce)}${withNonce(REGLA_JS, nonce)}</body></html>`;
+}
 
 // Regla de Oro en 2 pasos: paso 1 carga xlsx (tabla % sin valores),
 // paso 2 totales por circunscripción → valores por municipio.
@@ -315,8 +316,6 @@ function reglaOroView(form, fnc) {
 <h3 class="rail-sub">Paso 1 · Porcentajes por municipio (sin valores)</h3>${upForm}
 <table class="skl-table"><thead><tr><th>Municipio</th><th>Circunscripción</th><th>Regla</th><th>Valor</th></tr></thead><tbody>${rows || '<tr><td colspan="4">Sin regla cargada para la vigencia.</td></tr>'}</tbody></table>
 <h3 class="rail-sub">Paso 2 · Totales por circunscripción</h3>${goForm}</div>`;
-}
-
 }
 
 function loginPage(appName, kcMode, csrf, reason) {
