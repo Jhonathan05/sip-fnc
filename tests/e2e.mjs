@@ -184,6 +184,13 @@ describe('auth + CSRF + contrato', () => {
       assert.ok(head.includes('aria-label="Notificaciones"'), 'icono mail');
       assert.ok(head.includes('aria-label="Mensajes"'), 'icono chat');
       assert.match(head, /hdr-badge[^>]*>1</, 'badge con 1 vencida');
+      assert.match(head, /href="\/dashboard#tarea-\d+"/, 'dropdown enlaza a la tarea');
+      assert.ok(head.includes('E2E-vencida-x') && head.includes('Ver todas'), 'dropdown lista tarea + ver todas');
+      const html2 = await (await fetchJ('/dashboard')).text();
+      const mid = (head.match(/href="\/dashboard#tarea-(\d+)"/) || [])[1];
+      assert.ok(mid && html2.includes(`id="tarea-${mid}"`), 'ancla existe en la lista');
+      const css = await (await fetchJ('/css/app.css')).text();
+      assert.ok(css.includes('.hdr-mail') && css.includes('padding-bottom: 8px'), 'puente hover del padre (sobrevive al scroll del pop)');
     } finally {
       await p.query(`DELETE FROM tasks WHERE titulo LIKE 'E2E-vencida-%'`);
       await p.end();
@@ -214,6 +221,7 @@ describe('auth + CSRF + contrato', () => {
     assert.match(html, /is-default/, 'color a 100% presente');
   });
   it('JS inline compila en dashboard plano y con formulario (gate anti-SyntaxError)', async () => {
+
     await loginAsAdmin();
     for (const q of ['', `?f=${mods.tokenFor('/distribucion/actualizaciones/municipios').slice(3)}`]) {
       const html = await (await fetchJ(`/dashboard${q}`)).text();
@@ -223,6 +231,15 @@ describe('auth + CSRF + contrato', () => {
         assert.doesNotThrow(() => new vm.Script(body), `script roto en /dashboard${q}`);
       }
     }
+  });
+  it('cierre cooperativo multi-tab (checkAlive antes de destruir)', async () => {
+    await loginAsAdmin();
+    const html = await (await fetchJ('/dashboard')).text();
+    assert.match(html, /checkAlive/, 'checkAlive presente');
+    assert.ok(html.includes('/api/me') && html.includes('reset();timer=setInterval(tick,1000)'), 'renueva si vive, destruye si muere');
+    // Segundo tab con la misma cookie ve la sesión viva (precondición del gate).
+    const r = await fetch(BASE + '/api/me', { headers: { Cookie: jar.cookie } });
+    assert.equal(r.status, 200);
   });
 });
 
@@ -511,6 +528,7 @@ describe('regla de oro (2 pasos)', () => {
     assert.match(p, /reglaVerGo|Imprimir|reglaCmpGo/, 'ver/visualizar/comparar presentes');
   });
   it('comparar 2 vigencias + exportar xlsx/pdf', async () => {
+
     await loginAsAdmin();
     const r = await subir(await reglaXlsx([['Chaparral', 'Chaparral', 0.7], ['Chaparral', 'Ortega', 0.2], ['Fresno', 'Falan', 0.1]]), VY + 3);
     assert.equal(r.status, 200);
@@ -529,6 +547,46 @@ describe('regla de oro (2 pasos)', () => {
     assert.match(f.headers.get('content-type'), /pdf/);
     const head = Buffer.from(await f.arrayBuffer()).slice(0, 5).toString();
     assert.ok(head.startsWith('%PDF'), 'magic PDF');
+  });
+});
+
+describe('distribuciones: 3 escenarios por vigencia', () => {
+  const YN = new Date().getFullYear();
+  const tokDist = () => mods.tokenFor('/distribucion/actualizaciones/distribuciones').slice(3);
+  it('anteriores: histórico con sobrante año + acumulado', async () => {
+    await loginAsAdmin();
+    const y = YN - 1; // migrate seed: municipio_anteriores 480M/410M + circ 295M/260M
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&vigencia=${y}`)).text();
+    assert.match(html, /Histórico \+ sobrante acumulado/, 'bloque histórico');
+    assert.match(html, /Sobrante acumulado/, 'columna acumulado');
+    assert.ok(html.includes('$105.000.000'), 'acumulado 70M+35M=105M');
+    assert.ok(html.includes('Sin histórico') === false, 'hay histórico');
+  });
+  it('actual: checklist + tabla documento', async () => {
+    await loginAsAdmin();
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&vigencia=${YN}`)).text();
+    assert.match(html, /Estado vigencia actual/, 'checklist presente');
+    assert.ok(html.includes('Montos globales') && html.includes('Valores por municipio'), 'checklist completa');
+    assert.match(html, /Circunscripción/, 'bloques por circunscripción');
+    assert.match(html, /TOTAL/, 'fila TOTAL');
+  });
+  it('siguiente: % por municipio + CTA sin valores', async () => {
+    await loginAsAdmin();
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&vigencia=${YN + 1}`)).text();
+    assert.match(html, /Porcentajes vigencia siguiente/, 'bloque siguiente');
+    assert.ok(html.includes('Ir a Regla de Oro'), 'CTA carga');
+  });
+  it('mpio: mismo formato documento por municipio', async () => {
+    await loginAsAdmin();
+    const tok = mods.tokenFor('/distribucion/actualizaciones/distribucion-municipio').slice(3);
+    const html = await (await fetchJ(`/v/rs?f=${tok}&vigencia=${YN}`)).text();
+    assert.match(html, /MUNICIPIOS ICA 2005/, 'membrete documento');
+    assert.match(html, /<th>Municipio<\/th><th>%<\/th><th>Asignado<\/th><th>Ejecutado<\/th><th>Saldo<\/th>/, 'columnas documento');
+  });
+  it('vigencia vacía: marco de incompletos', async () => {
+    await loginAsAdmin();
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&vigencia=2099`)).text();
+    assert.match(html, /Sin regla para 2099/, 'marco sin datos');
   });
 });
 

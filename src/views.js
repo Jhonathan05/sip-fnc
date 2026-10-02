@@ -112,9 +112,12 @@ var modal=document.getElementById('inactModal'), secs=document.getElementById('i
 function csrfH(){try{var m=document.querySelector('meta[name="csrf-token"]');return m?m.getAttribute('content')||'':'';}catch(e){return '';}}
 function reset(){deadline=Date.now()+LIMIT;if(shown&&modal){modal.hidden=true;shown=false;}}
 function logout(){fetch('/auth/logout',{method:'POST',headers:{'x-csrf-token':csrfH()}}).finally(function(){window.location.href='/login?reason=inactivity';});}
+// Cierre cooperativo multi-tab: solo destruye si el servidor dice muerta.
+// Si otro tab renovó la sesión, se adopta su vida y se sigue (sin doble login).
+function checkAlive(){window.__fncFetch('/api/me',{method:'GET'}).then(function(r){if(r.status===200){reset();timer=setInterval(tick,1000);}else{logout();}}).catch(function(){logout();});}
 function tick(){
 var left=deadline-Date.now();
-if(left<=0){clearInterval(timer);logout();return;}
+if(left<=0){clearInterval(timer);checkAlive();return;}
 if(left<=60000&&!shown&&modal){shown=true;modal.hidden=false;}
 if(shown&&secs)secs.textContent=Math.ceil(left/1000);
 }
@@ -269,12 +272,15 @@ function layout(appName, fnc, active, body, csrf, nonce, extra) {
   const role = fnc?.role || '';
   const initial = email.trim().charAt(0).toUpperCase() || 'U';
   const nVencidas = (extra && Number(extra.nVencidas)) || 0;
+  const vencidas = (extra && extra.vencidasList) || [];
+  const vencItems = vencidas.map((t) =>
+    `<a class="hdr-pop-item" href="/dashboard#tarea-${t.id}"><strong>${esc(t.titulo)}</strong><span class="hdr-pop-meta">Límite ${esc(fmtFechaCorta(t.fecha_limite))} · <span class="badge">${esc(t.rol || '')}</span></span></a>`).join('');
   const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
   const csrfMetaTag = csrf ? `<meta name="csrf-token" content="${csrf}">` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-regla2"><link rel="stylesheet" href="/css/app.css?v=20260928-regla2"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-doc"><link rel="stylesheet" href="/css/app.css?v=20260928-doc"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-100.png" alt="Comité de Cafeteros del Tolima" height="30"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="26"><span class="brand-divider" aria-hidden="true"></span><div><span class="header-brand-name"><strong>SIP</strong> Sistema de Información de Proyectos</span></div></div></div>
-<div class="header-user-profile"><a class="hdr-icon" href="/dashboard" aria-label="Notificaciones" title="Tareas vencidas: ir al dashboard">${icon('mail')}${nVencidas > 0 ? `<span class="hdr-badge tnum">${nVencidas > 9 ? '9+' : nVencidas}</span>` : ''}</a><span class="hdr-icon" aria-label="Mensajes" title="Mensajes — próximamente" aria-disabled="true">${icon('chat')}</span><div class="user-menu"><button class="user-menu-trigger" aria-haspopup="true" aria-label="Menú de usuario" title="${esc((fnc.displayName || '') + (fnc.email ? ' · ' + fnc.email : ''))}"><span class="user-name">${esc(shownName(fnc))}</span>${fnc?.photo ? `<img class="user-photo" src="${fnc.photo}" alt="${esc(shownName(fnc) || 'Usuario')}">` : `<div class="user-avatar">${esc(initial)}</div>`}</button><div class="user-menu-pop" role="menu"><button class="user-menu-item" data-open-modal="perfil" type="button" role="menuitem">Perfil</button><form method="post" action="/auth/logout" style="margin:0">${csrfField}<button class="user-menu-item" type="submit" role="menuitem">Cerrar Sesión</button></form></div></div></div>
+<div class="header-user-profile"><div class="hdr-mail"><a class="hdr-icon" href="/dashboard" aria-label="Notificaciones" title="Tareas vencidas: ir al dashboard">${icon('mail')}${nVencidas > 0 ? `<span class="hdr-badge tnum">${nVencidas > 9 ? '9+' : nVencidas}</span>` : ''}</a><div class="hdr-pop" role="menu" aria-label="Tareas vencidas">${vencItems || '<span class="hdr-pop-empty">Sin vencidas.</span>'}<a class="hdr-pop-all" href="/dashboard">Ver todas</a></div></div><span class="hdr-icon" aria-label="Mensajes" title="Mensajes — próximamente" aria-disabled="true">${icon('chat')}</span><div class="user-menu"><button class="user-menu-trigger" aria-haspopup="true" aria-label="Menú de usuario" title="${esc((fnc.displayName || '') + (fnc.email ? ' · ' + fnc.email : ''))}"><span class="user-name">${esc(shownName(fnc))}</span>${fnc?.photo ? `<img class="user-photo" src="${fnc.photo}" alt="${esc(shownName(fnc) || 'Usuario')}">` : `<div class="user-avatar">${esc(initial)}</div>`}</button><div class="user-menu-pop" role="menu"><button class="user-menu-item" data-open-modal="perfil" type="button" role="menuitem">Perfil</button><form method="post" action="/auth/logout" style="margin:0">${csrfField}<button class="user-menu-item" type="submit" role="menuitem">Cerrar Sesión</button></form></div></div></div>
 </div></header>
 <aside class="app-sidebar" aria-label="Navegacion principal">
 <nav class="sidebar-nav">
@@ -347,7 +353,7 @@ function loginPage(appName, kcMode, csrf, reason) {
     ? `<div class="alert-err">Sesión cerrada por inactividad. Ingresa de nuevo.</div>`
     : reason === 'sesion'
       ? `<div class="alert-err">Tu sesión se renovó (reinicio o expiración). Ingresa de nuevo e intenta otra vez.</div>` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-regla2"><link rel="stylesheet" href="/css/app.css?v=20260928-regla2"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-doc"><link rel="stylesheet" href="/css/app.css?v=20260928-doc"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="card"><div class="login-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-tolima.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-sip" src="/img/logo-sip.svg" alt="SIP" height="30"></div><h1>${esc(appName)}</h1>
 <p>Sistema de Información de Proyectos — gestión e informes contables por periodos.</p>
 ${notice}
@@ -376,7 +382,7 @@ function rolesMatrix(fnc) {
 
 function errorPage(fnc, reason) {
   const msgs = { state: 'Sesión de autenticación inválida.', callback: 'No se pudo completar el acceso.', forbidden: 'Sin permiso para este módulo.' };
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928-regla2"><link rel="stylesheet" href="/css/app.css?v=20260928-regla2"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Error</title><link rel="stylesheet" href="/css/layout.css?v=20260928-doc"><link rel="stylesheet" href="/css/app.css?v=20260928-doc"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="alert-err">${esc(msgs[reason] || msgs.callback)}</div>
 <a class="btn-primary" href="/">Reintentar</a></main></body></html>`;
 }
@@ -422,7 +428,7 @@ function taskCards(fnc, tareas) {
   const today = new Date().toISOString().slice(0, 10);
   const cards = (tareas || []).map((t, i) => {
     const vencida = t.fecha_limite && String(t.fecha_limite).slice(0, 10) < today;
-    return `<li class="task-item"><span class="task-num tnum drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${i + 1}</span><span class="task-body"><strong class="drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${esc(t.titulo)}${vencida ? ' <span class="badge badge-warn">Vencida</span>' : ''}</strong></span></li>`;
+    return `<li class="task-item" id="tarea-${t.id}"><span class="task-num tnum drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${i + 1}</span><span class="task-body"><strong class="drawer-trigger" data-drawer="tarea" data-id="${t.id}" role="button" tabindex="0" title="Ver detalle">${esc(t.titulo)}${vencida ? ' <span class="badge badge-warn">Vencida</span>' : ''}</strong></span></li>`;
   }).join('');
   const btn = canCreate(fnc) ? `<button class="btn-circle" data-open-modal="tarea-crear" type="button" aria-label="Nueva tarea" title="Nueva tarea">＋</button>` : '';
   return `<div class="tareas-head"><h3 class="rail-sub">Pendientes (${(tareas || []).length})</h3>${btn}</div><ul class="task-list">${cards || '<li class="done-empty">Sin pendientes.</li>'}</ul>`;
@@ -514,12 +520,93 @@ function configTabs(sub, leaf, role) {
   return `<div class="cfg-tabs" role="tablist" aria-label="${esc(sub.title)}">${tabs}</div>`;
 }
 
+// Tablas documento Distribución (formato .xps) + 3 escenarios por vigencia.
+// anterior: histórico año+tipo con sobrante y acumulado · actual: checklist +
+// tabla · siguiente: % por municipio. Sin ejecutado por circunscripción en BD:
+// Ejecutado = —, Saldo = Asignado.
+function docDistribucion(form, fnc) {
+  const { leaf, sub, mod } = form;
+  const vy = form.vigSel;
+  const yNow = new Date().getFullYear();
+  const escN = (n) => esc(fmtCOP(n));
+  const leafTok = tokenFor(leaf.path).replace('/v/', '');
+  const goUrl = `${tokenFor('/dashboard')}?f=${encodeURIComponent(leafTok)}`;
+  const opts = (form.vigencias || [vy]).map((y) =>
+    `<option value="${y}"${y === vy ? ' selected' : ''}>${y}</option>`).join('');
+  const sel = `<form method="get" action="${goUrl}"><div class="skl-bar"><label class="fld"><span>Vigencia</span><select name="vigencia">${opts}</select></label><button class="btn-primary" type="submit" style="margin-top:0">Ver</button></div></form>`;
+  const membrete = `<div class="doc-head"><strong>MUNICIPIOS ICA 2005 · SALDO DISPONIBLE</strong><br>DISTRIBUCIÓN · ASIGNACIONES CREADAS · LEY 863 DE 2003<br>FEDERACIÓN NACIONAL DE CAFETEROS · COMITÉ TOLIMA · TRANSFERENCIA ${vy} · OBRAS DE INFRAESTRUCTURA</div>`;
+  const head = `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)} <span class="badge">vigencia ${vy}</span></h2>${membrete}${sel}`;
+  const tail = `</div>`;
+  const incompleto = (msg) => `${head}<table class="skl-table"><thead><tr><th>Municipio</th><th>%</th><th>Asignado</th><th>Ejecutado</th><th>Saldo</th></tr></thead><tbody><tr><td colspan="5">${esc(msg)}</td></tr></tbody></table>${tail}`;
+  // Une regla (%) + valores por municipio, agrupado por circunscripción.
+  const byMun = {};
+  for (const r of (form.doc.regla || [])) {
+    byMun[r.municipio] = { nombre: r.municipio_nombre || r.municipio, circ: r.circ_nombre || '—', pct: Number(r.regla), asig: 0 };
+  }
+  for (const v of (form.doc.valores || [])) {
+    byMun[v.municipio] = byMun[v.municipio] || { nombre: v.municipio_nombre || v.municipio, circ: v.circ_nombre || '—', pct: null };
+    byMun[v.municipio].asig = Number(v.total);
+  }
+  const circs = {};
+  for (const [cod, m] of Object.entries(byMun)) {
+    (circs[m.circ] = circs[m.circ] || []).push({ cod, ...m });
+  }
+  const docTabla = () => {
+    let body = '', tPct = 0, tAsig = 0;
+    for (const [c, items] of Object.entries(circs)) {
+      const sp = items.reduce((a, x) => a + (x.pct || 0), 0);
+      const sa = items.reduce((a, x) => a + x.asig, 0);
+      tPct += sp; tAsig += sa;
+      body += `<tr><td colspan="5"><strong>Circunscripción ${esc(c)} · ${(sp * 100).toFixed(2)}%</strong></td></tr>`;
+      for (const x of items) {
+        body += `<tr><td>${esc(x.nombre)}</td><td class="tnum">${x.pct == null ? '—' : (x.pct * 100).toFixed(2) + '%'}</td><td class="tnum">${escN(x.asig)}</td><td class="tnum">—</td><td class="tnum">${escN(x.asig)}</td></tr>`;
+      }
+      body += `<tr><td><strong>Subtotal</strong></td><td class="tnum"><strong>${(sp * 100).toFixed(2)}%</strong></td><td class="tnum"><strong>${escN(sa)}</strong></td><td class="tnum">—</td><td class="tnum"><strong>${escN(sa)}</strong></td></tr>`;
+    }
+    body += `<tr><td><strong>TOTAL</strong></td><td class="tnum"><strong>${(tPct * 100).toFixed(2)}%</strong></td><td class="tnum"><strong>${escN(tAsig)}</strong></td><td class="tnum">—</td><td class="tnum"><strong>${escN(tAsig)}</strong></td></tr>`;
+    return `<table class="skl-table"><thead><tr><th>Municipio</th><th>%</th><th>Asignado</th><th>Ejecutado</th><th>Saldo</th></tr></thead><tbody>${body}</tbody></table>`;
+  };
+  // Escenario: anterior (histórico), actual (checklist + tabla), siguiente (%).
+  if (vy < yNow) {
+    let acc = 0, hbody = '';
+    for (const h of (form.doc.historial || []).filter((x) => Number(x.vigencia) < yNow)) {
+      const as = Number(h.asignado), ej = Number(h.ejecutado), sob = as - ej;
+      acc += sob;
+      hbody += `<tr><td class="tnum">${esc(h.vigencia)}</td><td>${esc(h.tipo)}</td><td class="tnum">${escN(as)}</td><td class="tnum">${escN(ej)}</td><td class="tnum">${escN(sob)}</td><td class="tnum"><strong>${escN(acc)}</strong></td></tr>`;
+    }
+    const hist = hbody
+      ? `<table class="skl-table"><thead><tr><th>Año</th><th>Tipo</th><th>Asignado</th><th>Ejecutado</th><th>Sobrante año</th><th>Sobrante acumulado</th></tr></thead><tbody>${hbody}</tbody></table><p><span class="badge">Sobrante por circunscripción no disponible (sin ejecutado por circunscripción)</span></p>`
+      : `<table class="skl-table"><thead><tr><th>Año</th><th>Tipo</th><th>Asignado</th><th>Ejecutado</th><th>Sobrante año</th><th>Sobrante acumulado</th></tr></thead><tbody><tr><td colspan="6">Sin histórico de vigencias anteriores.</td></tr></tbody></table>`;
+    return `${head}<h3 class="rail-sub">Histórico + sobrante acumulado</h3>${hist}${tail}`;
+  }
+  if (vy > yNow) {
+    const hay = (form.doc.regla || []).length > 0;
+    const pct = hay ? docTabla() : `<table class="skl-table"><thead><tr><th>Municipio</th><th>%</th><th>Asignado</th><th>Ejecutado</th><th>Saldo</th></tr></thead><tbody><tr><td colspan="5">Sin regla para ${vy}: cárgala en Regla de Oro.</td></tr></tbody></table>`;
+    const link = `<p><a class="btn-primary" href="${tokenFor('/dashboard')}?f=${encodeURIComponent(tokenFor('/distribucion/actualizaciones/regla-oro').replace('/v/', ''))}&vigencia=${vy}">Ir a Regla de Oro ${vy}</a></p>`;
+    return `${head}<h3 class="rail-sub">Porcentajes vigencia siguiente</h3>${link}${pct}${tail}`;
+  }
+  // Actual: checklist + tabla (o marco de incompletos).
+  const d = form.doc;
+  const reglaTok = tokenFor('/distribucion/actualizaciones/regla-oro').replace('/v/', '');
+  const reglaUrl = tokenFor('/dashboard') + '?f=' + encodeURIComponent(reglaTok) + '&vigencia=' + vy;
+  const chk = (ok, txt) => `<li>${ok ? '✓' : '✗'} ${txt}</li>`;
+  const check = `<ul class="check-list">${chk(d.hayRegla, 'Regla cargada' + (d.hayRegla ? '' : ' — <a href="' + reglaUrl + '">cargarla</a>'))}${chk(d.hayMontos, 'Montos globales (distribuciones)')}${chk(d.hayValores, 'Valores por municipio')}</ul>`;
+  if (!d.hayRegla && !d.hayMontos && !d.hayValores) {
+    return `${head}<h3 class="rail-sub">Estado vigencia actual</h3>${check}${incompleto(`Datos incompletos para la vigencia actual (${vy}).`)}${tail}`;
+  }
+  return `${head}<h3 class="rail-sub">Estado vigencia actual</h3>${check}${docTabla()}${tail}`;
+}
+
 function formSlot(form, fnc) {
   if (!form) {
     return `<div class="card form-slot"><h2>Formularios</h2><p>Selecciona una opción del nav izquierdo: los formularios pequeños se abren aquí; los informes tienen vista propia.</p></div>`;
   }
   const { leaf, sub, mod } = form;
   const tabs = sub.tabs ? configTabs(sub, leaf, fnc?.role) : '';
+  if (leaf.crud === 'distribuciones' || leaf.crud === 'distribucion-municipio') {
+    if (!form.rows) return '';
+    return `${docDistribucion(form, fnc)}<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p>${tabs}<h2>${esc(leaf.title)}</h2>${crudMaestro(leaf, form)}</div>`;
+  }
   if (leaf.reglaOro) return reglaOroView(form, fnc);
   if (leaf.crud && form.rows) return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p>${tabs}<h2>${esc(leaf.title)}</h2>${crudMaestro(leaf, form)}</div>`;
   const kinds = { maestro: skeletonMaestro, informe: skeletonInforme, proceso: skeletonProceso, consulta: skeletonConsulta };

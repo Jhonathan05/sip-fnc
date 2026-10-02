@@ -238,6 +238,88 @@ a.hdr-icon:hover {
     padding: 0 4px;
 }
 
+/* ── Dropdown de vencidas (hover/foco, sin JS) ── */
+.hdr-mail {
+    position: relative;
+    flex-shrink: 0;
+    /* El propio padre extiende su zona hover bajo el icono: así el puente
+       sobrevive al overflow-y del pop (un ::before quedaría recortado). */
+    padding-bottom: 8px;
+    margin-bottom: -8px;
+}
+
+.hdr-pop {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    width: 280px;
+    max-height: 320px;
+    overflow-y: auto;
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    box-shadow: var(--shadow-subtle);
+    padding: 6px;
+    z-index: 200;
+    display: none;
+}
+
+.hdr-mail:hover .hdr-pop,
+.hdr-mail:focus-within .hdr-pop {
+    display: block;
+}
+
+.hdr-pop-item {
+    display: block;
+    border-radius: 8px;
+    padding: 8px 10px;
+    text-decoration: none;
+    color: var(--text-dark);
+}
+
+.hdr-pop-item:hover {
+    background: var(--azul-soft);
+}
+
+.hdr-pop-item strong {
+    display: block;
+    font-size: var(--fs-table);
+    font-weight: 600;
+}
+
+.hdr-pop-meta {
+    font-size: var(--fs-meta);
+    color: var(--text-muted);
+}
+
+.hdr-pop-empty {
+    display: block;
+    padding: 8px 10px;
+    font-size: var(--fs-table);
+    color: var(--text-muted);
+}
+
+.hdr-pop-all {
+    display: block;
+    text-align: center;
+    border-top: 1px solid var(--border-light);
+    margin-top: 4px;
+    padding: 8px 10px 4px;
+    font-size: var(--fs-meta);
+    color: var(--azul-ink);
+    text-decoration: none;
+}
+
+/* Ancla de tarea: compensa header fijo + resaltado al llegar */
+.task-item {
+    scroll-margin-top: 110px;
+}
+
+.task-item:target {
+    border-color: var(--azul-ink);
+    box-shadow: 0 0 0 2px var(--azul-soft);
+}
+
 /* ── Menú de usuario flotante (hover/foco, sin JS) ── */
 .user-menu {
     position: relative;
@@ -1097,6 +1179,24 @@ a.hdr-icon:hover {
 .cfg-tab.cfg-disabled {
     opacity: .55;
     cursor: not-allowed;
+}
+
+/* ── Tablas documento Distribución (formato .xps) ── */
+.doc-head {
+    font-size: var(--fs-meta);
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 8px 0 4px;
+}
+
+.check-list {
+    list-style: none;
+    margin: 0 0 12px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: var(--fs-table);
 }
 
 .skl-bar {

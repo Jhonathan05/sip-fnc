@@ -181,19 +181,25 @@ const needRole = (role) => (req, res, next) => {
 };
 
 // Badge notificaciones: vencidas visibles según rol (0 sin sesión).
-// Una COUNT por request; best-effort, nunca tumba.
+// Badge + lista de vencidas (mismo filtro de rol). Best-effort, nunca tumba.
 app.use(async (req, res, next) => {
   res.locals.nVencidas = 0;
+  res.locals.vencidasList = [];
   try {
     const fnc = req.session?.fnc;
     const pool = getPool();
     if (isFncValid(fnc) && pool) {
       const roles = (fnc.roles || []).map((r) => String(r).toLowerCase());
-      let q = `SELECT COUNT(*)::int AS n FROM tasks WHERE estado='pendiente' AND fecha_limite < CURRENT_DATE`;
+      let filt = '';
       const p = [];
-      if (fnc.role !== 'ADMIN' && !roles.includes('coordinador')) { q += ` AND rol = ANY($1)`; p.push(roles); }
-      const { rows } = await pool.query(q, p);
-      res.locals.nVencidas = (rows[0] && rows[0].n) || 0;
+      if (fnc.role !== 'ADMIN' && !roles.includes('coordinador')) { filt = ` AND rol = ANY($1)`; p.push(roles); }
+      const c = await pool.query(`SELECT COUNT(*)::int AS n FROM tasks WHERE estado='pendiente' AND fecha_limite < CURRENT_DATE${filt}`, p);
+      res.locals.nVencidas = (c.rows[0] && c.rows[0].n) || 0;
+      if (res.locals.nVencidas) {
+        const { rows } = await pool.query(
+          `SELECT id, titulo, rol, fecha_limite FROM tasks WHERE estado='pendiente' AND fecha_limite < CURRENT_DATE${filt} ORDER BY fecha_limite, id LIMIT 5`, p);
+        res.locals.vencidasList = rows;
+      }
     }
   } catch { /* badge en 0 */ }
   next();
@@ -560,7 +566,7 @@ app.delete('/api/maestros/:id/:codigo', needLogin, needDb, async (req, res) => {
     return res.status(500).json({ ok: false, error: 'Error interno.' });
   }
 });
-const page = (req, fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body, ensureToken(req), req.nonce, { nVencidas: (req.res && req.res.locals.nVencidas) || 0 });
+const page = (req, fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body, ensureToken(req), req.nonce, { nVencidas: (req.res && req.res.locals.nVencidas) || 0, vencidasList: (req.res && req.res.locals.vencidasList) || [] });
 
 app.get('/dashboard', needLogin, needDb, async (req, res) => {
   const fnc = req.session.fnc;
@@ -590,6 +596,38 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
           const c = await getPool().query('SELECT codigo, nombre FROM municipios ORDER BY codigo');
           form.catalogs = { municipio: c.rows };
         }
+      }
+      // Tablas documento + 3 escenarios (Distribuciones y Distribución por Municipio).
+      if (hit.leaf.crud === 'distribuciones' || hit.leaf.crud === 'distribucion-municipio') {
+        const yNow = new Date().getFullYear();
+        const qv = String(req.query.vigencia || '');
+        form.vigSel = /^\d{4}$/.test(qv) ? Number(qv) : yNow;
+        if (form.vigSel < 2000 || form.vigSel > 2100) form.vigSel = yNow;
+        const pool2 = getPool();
+        const yy = await pool2.query(
+          `SELECT vigencia AS y FROM distribuciones UNION SELECT ano FROM distribucion_municipio UNION SELECT vigencia FROM regla_oro_anual ORDER BY 1 DESC`);
+        form.vigencias = [...new Set([yNow, ...yy.rows.map((r) => Number(r.y))])].filter((n) => Number.isInteger(n)).sort((a, b) => b - a);
+        const rr = await pool2.query(
+          `SELECT r.municipio, m.nombre AS municipio_nombre, m.circunscripcion AS circ_cod, c.nombre AS circ_nombre, r.regla
+           FROM regla_oro_anual r JOIN municipios m ON m.codigo = r.municipio
+           LEFT JOIN circunscripciones c ON c.codigo = m.circunscripcion
+           WHERE r.vigencia = $1 ORDER BY c.nombre NULLS LAST, m.nombre`, [form.vigSel]);
+        const vv = await pool2.query(
+          `SELECT m.circunscripcion AS circ_cod, c.nombre AS circ_nombre, d.municipio,
+                  m.nombre AS municipio_nombre, SUM(d.valor)::float8 AS total
+           FROM distribucion_municipio d JOIN municipios m ON m.codigo = d.municipio
+           LEFT JOIN circunscripciones c ON c.codigo = m.circunscripcion
+           WHERE d.ano = $1 GROUP BY 1, 2, 3, 4 ORDER BY c.nombre NULLS LAST, m.nombre`, [form.vigSel]);
+        const mm = await pool2.query(
+          `SELECT tipo, vigencia, asignado, ejecutado FROM distribuciones WHERE vigencia = $1 ORDER BY tipo`, [form.vigSel]);
+        const hh = await pool2.query(
+          `SELECT tipo, vigencia, asignado, ejecutado FROM distribuciones ORDER BY vigencia, tipo`);
+        form.doc = {
+          regla: rr.rows, valores: vv.rows, montos: mm.rows, historial: hh.rows,
+          hayRegla: rr.rows.length > 0,
+          hayMontos: mm.rows.length > 0,
+          hayValores: vv.rows.length > 0,
+        };
       }
       // Regla de Oro (2 pasos): precarga regla + circunscripciones para la vigencia.
       if (hit.leaf.reglaOro) {
