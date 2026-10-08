@@ -356,7 +356,8 @@ ${notice}
 ${kcMode
       ? `<a class="btn-primary" href="/auth/app">Continuar con Comit\u00e9 Tolima</a>`
       : `<form method="post" action="/auth/mock" style="margin:0">${csrfField}<button class="btn-primary" type="submit">Continuar con Comit\u00e9 Tolima</button></form><p><span class="badge">mock offline</span> sin Keycloak.</p>`}
-</div></main></body></html>`;
+<p><a href="#habeasModal">Tratamiento de datos personales</a></p>
+</div></main><div class="modal-overlay" id="habeasModal" role="dialog" aria-modal="true" aria-label="Tratamiento de datos"><div class="modal-card"><h2>Tratamiento de datos personales</h2><p>La Federación Nacional de Cafeteros — Comité Departamental del Tolima trata tus datos de identificación y contacto exclusivamente para operar el Sistema de Información de Proyectos (autenticación, auditoría y notificaciones operativas). No se comparten con terceros. Puedes ejercer tus derechos de conocer, actualizar y rectificar ante el Comité.</p><p><a class="btn-primary" href="#">Entendido</a></p></div></div></body></html>`;
 }
 
 function rolesMatrix(fnc) {

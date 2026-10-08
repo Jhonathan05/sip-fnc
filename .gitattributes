@@ -1,3 +1,7 @@
-*.sh eol=lf
-*.env eol=lf
+# Higiene CRLF→LF (skill fnc-workflow): normaliza a LF en el repo.
 * text=auto
+*.png binary
+*.webp binary
+*.jpg binary
+*.xlsx binary
+*.xps binary

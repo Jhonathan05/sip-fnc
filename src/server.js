@@ -153,6 +153,19 @@ function rateLimitMax() {
   return hotMax == null ? ENV_MAX : hotMax;
 }
 
+// Antifuerza en autenticación (skill fnc-login): /auth/* con límite propio.
+// Sin credenciales locales (mock de un botón + KC) no hay lockout de clave;
+// Keycloak gobierna brute-force en staging/prod (realm failureFactor 5).
+const AUTH_MAX = parseInt(process.env.RATE_LIMIT_AUTH_PER_MIN || '60', 10);
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: AUTH_MAX,
+  standardHeaders: false,
+  legacyHeaders: false,
+  handler: (req, res) => res.status(429).json({ error: 'Demasiados intentos. Espera un minuto.' }),
+});
+app.use('/auth/', authLimiter);
+
 // Sondas de monitoreo (públicas, sin sesión): Kuma → /api/ready.
 // /health no toca BD; /ready verifica SELECT 1 (503 si la BD cae).
 app.get('/api/health', (req, res) => res.json({ ok: true, version: APP_VERSION }));

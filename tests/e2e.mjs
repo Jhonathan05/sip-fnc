@@ -76,6 +76,7 @@ before(async () => {
       AUTH_PROVIDER: 'mock', MOCK_ROLES: 'admin',
       CLIENT_ROLES: 'admin,coordinador,consultor,analista,auxiliar',
       APP_BASE: BASE, RATE_LIMIT_API_PER_MIN: '1000',
+      RATE_LIMIT_AUTH_PER_MIN: '1000',
       NOTIFY_MS: '400', NOTIFY_MAX_INTENTOS: '2', NOTIFY_RETRY_MIN: '0',
       RESEND_API_KEY: '', MAIL_FROM: '', DISCORD_WEBHOOK_URL: '',
       KEYCLOAK_URL: 'http://fnc-keycloak:8080/auth', KEYCLOAK_PUBLIC_URL: 'http://localhost:8080/auth',
@@ -96,6 +97,7 @@ before(async () => {
       AUTH_PROVIDER: 'mock', MOCK_ROLES: 'consultor',
       CLIENT_ROLES: 'admin,coordinador,consultor,analista,auxiliar',
       APP_BASE: BASE_C, RATE_LIMIT_API_PER_MIN: '1000',
+      RATE_LIMIT_AUTH_PER_MIN: '1000',
       NOTIFY_MS: '400', NOTIFY_MAX_INTENTOS: '2', NOTIFY_RETRY_MIN: '0',
       RESEND_API_KEY: '', MAIL_FROM: '', DISCORD_WEBHOOK_URL: '',
       KEYCLOAK_URL: 'http://fnc-keycloak:8080/auth', KEYCLOAK_PUBLIC_URL: 'http://localhost:8080/auth',
@@ -1001,6 +1003,22 @@ describe('pwa + webpush', () => {
       await p.query(`DELETE FROM outbox WHERE titulo = 'E2E-push-x'`);
       await p.query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [SUB.endpoint]);
     } finally { await p.end(); }
+  });
+});
+
+describe('fase 4: licencias + habeas + auth-limit', () => {
+  it('license-audit limpio (sin copyleft fuerte)', async () => {
+    const log = execSync('node scripts/license-audit.cjs', { cwd: ROOT, stdio: 'pipe', timeout: 60000 }).toString();
+    assert.ok(log.includes('limpio'), 'auditoría en verde');
+    assert.ok(log.includes('sin copyleft fuerte'));
+  });
+  it('login con modal Habeas (CSS :target, sin JS)', async () => {
+    const html = await (await fetch(`${BASE}/login`)).text();
+    assert.ok(html.includes('href="#habeasModal"'), 'enlace habeas');
+    assert.ok(html.includes('id="habeasModal"'), 'modal presente');
+    assert.ok(html.includes('conocer, actualizar y rectificar'), 'texto habeas');
+    const css = await (await fetchJ('/css/app.css')).text();
+    assert.ok(css.includes('#habeasModal:target'), 'apertura por :target');
   });
 });
 

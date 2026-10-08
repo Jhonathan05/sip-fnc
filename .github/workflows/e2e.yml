@@ -1,0 +1,43 @@
+# CI sip-fnc (skill fnc-devops): suite E2E contra Postgres de servicio.
+# El contenedor se nombra sip-fnc-dev-db para el test de backup (docker exec).
+name: e2e
+on:
+  push:
+    branches: [dev, master]
+  pull_request:
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sip
+          POSTGRES_PASSWORD: sip-dev-sololocal
+          POSTGRES_DB: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --name sip-fnc-dev-db
+          --health-cmd "pg_isready -U sip"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run audit:licenses
+      - run: npm run test:e2e
+        env:
+          RATE_LIMIT_API_PER_MIN: '1000'
+          RATE_LIMIT_AUTH_PER_MIN: '1000'
+          NOTIFY_MS: '400'
+          NOTIFY_MAX_INTENTOS: '2'
+          NOTIFY_RETRY_MIN: '0'
+          RESEND_API_KEY: ''
+          MAIL_FROM: ''
+          DISCORD_WEBHOOK_URL: ''

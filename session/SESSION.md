@@ -1,4 +1,4 @@
-# Sesión SIP-FNC — contexto de trabajo (2026-10-08, v1.9.0)
+# Sesión SIP-FNC — contexto de trabajo (2026-10-08, v1.10.0)
 
 > Archivo vivo: resume el estado para retomar en cualquier momento.
 > Flujo de ramas: `dev` (trabajo) → `master` (releases) → GitHub.
@@ -9,7 +9,7 @@ informes contables por periodos — Comité de Cafeteros del Tolima.
 
 ## Stack (PERFIL rendimiento, acta v2 en docs/analisis.md)
 Node 22 + Express 4 + Vanilla + Postgres 16 + `pg` + `multer` + `sharp` + `exceljs`.
-Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (65 tests, 10 suites).
+Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (74 tests, 13 suites).
 
 ## Puesta en marcha
 ```powershell
@@ -64,13 +64,21 @@ Fuente: `G:\Open\infra-fnc/skills` (`INDEX.md`). Fuera: `fnc-url-masking`
 - **Fase 1** ✅ 2026-10-08 — Notificaciones: `006_outbox.sql` + `src/notify.js` (encolar transaccional,
 worker `setInterval` con `SKIP LOCKED`, scheduler vencimientos 3-1-0, campana por rol
 `GET|PUT /api/notificaciones`, email Resend, Discord helper fire-and-forget).
-- **Fase 2** — Monitoreo (`fnc-monitoring`): `/api/health|/ready`, eventos `audit_log`→Discord,
-`pg_dump -Fc`→R2 (30d) + cron, Uptime Kuma → `/api/ready`.
-- **Fase 3** — PWA+push (`fnc-pwa-webpush` v2.1.7, `fnc-pwa`, `fnc-app-icon-badge`):
-manifest dinámico, `sw.js`, consent, `007_push.sql` + endpoints subscribe, `web-push`
-(VAPID + HTTPS vía túnel).
-- **Fase 4** — Transversales: license audit, lockout login+Habeas, CI e2e, flip KC staging,
-design-system al final. `fnc-keycloak-events` solo si se migra a KC.
+- **Fase 2** ✅ 2026-10-08 — Monitoreo (`fnc-monitoring`): `/api/health|/ready` públicos,
+`maestro.borrar`→Discord, `infra/backup-r2.ps1` (pg_dump|gzip|AES-256-CBC .NET nativo,
+formato `openssl enc` compatible, round-trip hash) + retención R2 30d. Kuma apunta a
+`/api/ready` (externo, pendiente instalar). Harness: `Connection: close` (keep-alive
+Node 5s vs brechas largas → RST).
+- **Fase 3** ✅ 2026-10-08 — PWA+push (`fnc-pwa-webpush`, `fnc-pwa`, `fnc-app-icon-badge`):
+`007_push.sql`, `src/push.js` (VAPID), endpoints subscribe, manifest dual-UA,
+`sw.js`, iconos generados (`scripts/gen-app-icon.cjs`), consent en perfil, canal push
+en worker. Falta para producción: claves VAPID + HTTPS (túnel) + envío real.
+- **Fase 4** ✅ 2026-10-08 — Transversales: `scripts/license-audit.cjs` + `npm run audit:licenses`,
+limitador `/auth/*` 60/min (sin lockout de clave: no hay credenciales locales; KC
+gobierna brute-force en staging/prod), modal Habeas CSS `:target` en login,
+`.github/workflows/e2e.yml` (Postgres servicio en 5433 + `sip-fnc-dev-db` nombrado),
+`.gitattributes`. Bloqueado externo: flip KC staging (sin staging disponible).
+Diferido: `fnc-design-system` completo (overhaul visual).
 
 ## Skills aplicables del ecosistema
 `test-hygiene` (obligatoria), `fnc-url-masking` (revertida: ver release 1.3.1),

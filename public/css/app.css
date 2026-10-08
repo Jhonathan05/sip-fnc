@@ -238,8 +238,7 @@ a.hdr-icon:hover {
     padding: 0 4px;
 }
 
-/* ── Dropdown de vencidas (hover/foco, sin JS) ── */
-.hdr-mail,
+/* ── Dropdown de vencidas (hover/foco, sin JS) ── */.hdr-mail,
 .hdr-bell {
     position: relative;
     flex-shrink: 0;
@@ -1109,6 +1108,15 @@ button.hdr-pop-all {
 
 .modal-overlay[hidden] {
     display: none;
+}
+
+/* Habeas en login: modal puro CSS vía :target (sin JS). */
+#habeasModal {
+    display: none;
+}
+
+#habeasModal:target {
+    display: flex;
 }
 
 /* ── Overlay sin conexión (blindaje fetch, con reintento) ── */
