@@ -515,6 +515,8 @@ describe('regla de oro (2 pasos)', () => {
     assert.equal(r.status, 403);
     const r2 = await fetchC('/api/regla-oro/asignar', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': mt, Accept: 'application/json' }, body: JSON.stringify({ vigencia: VY, numero: 1, tipo: 1, totales: {} }) });
     assert.equal(r2.status, 403);
+    const r3 = await fetchC('/api/regla-oro/asignar-total', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': mt, Accept: 'application/json' }, body: JSON.stringify({ vigencia: VY, total: 1 }) });
+    assert.equal(r3.status, 403);
   });
   it('perímetro: admin carga año anterior, consultor no', async () => {
     await loginAsAdmin();
@@ -625,7 +627,8 @@ describe('distribuciones: 3 escenarios por vigencia', () => {
       assert.ok(html.includes(`tab=mpio&vigencia=${y}">${y}<`), `atajo ${y} preserva tab`);
     }
     assert.match(html, /<input name="vigencia"[^>]*aria-label="Año de vigencia"/, 'input año');
-    assert.match(html, /<input type="hidden" name="tab" value="mpio">/, 'tab preservado en input');
+    assert.match(html, /<form method="get" action="\/v\/rs"><input type="hidden" name="f" value="[^"]+"><input type="hidden" name="tab" value="mpio">/, 'Ver con f oculto (no redirige)');
+    assert.match(html, /<div class="dist-title"><h2>Distribuciones/, 'título con controles a la derecha');
     const carga = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=carga&vigencia=${yNow}`)).text();
     assert.ok(carga.includes('id="reglaVig" type="hidden"'), 'paso 1 con vigencia implícita');
     assert.ok(!carga.includes('Consulta histórica'), 'histórico vive en su pestaña');
@@ -639,15 +642,43 @@ describe('distribuciones: 3 escenarios por vigencia', () => {
     assert.ok(html.includes('id="reglaVig2" type="hidden"'), 'paso 2 con vigencia implícita');
     assert.ok(html.includes('Valores 2031: 3 municipios.'), 'resumen de valores asignados');
     assert.ok(html.includes('Ver en Por municipio'), 'CTA a la tabla');
-    assert.ok(html.includes('id="reglaTot_CHAP"') && html.includes('id="reglaTot_FRES"'), 'totales por circunscripción presentes');
+    assert.ok(html.includes('id="reglaTotalMun"'), 'un solo input de total');
+    assert.ok(!html.includes('id="reglaNum"') && !html.includes('reglaTot_'), 'sin inputs por lote/circunscripción');
+    assert.ok(html.includes('id="reglaConfirmModal" hidden'), 'modal doble validación oculto');
+    assert.ok(html.includes('distribuida por todos los municipios automáticamente'), 'explicación de reparto');
   });
-  it('stepper pasos con estado real y CTA (vigencia actual)', async () => {
+  it('asignar-total: reparte exacto por regla + validación', async () => {
     await loginAsAdmin();
-    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=mpio&vigencia=${YN}`)).text();
-    assert.match(html, /Pasos vigencia \d+/, 'stepper presente');
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt, Accept: 'application/json' };
+    const post = (b) => fetchJ('/api/regla-oro/asignar-total', { method: 'POST', headers: h, body: JSON.stringify(b) });
+    assert.equal((await post({ vigencia: 2031, total: -5 })).status, 400, 'total negativo 400');
+    assert.equal((await post({ vigencia: 'xx', total: 1 })).status, 400, 'vigencia inválida 400');
+    assert.equal((await post({ vigencia: 2099, total: 1 })).status, 400, 'sin regla 400');
+    const r = await post({ vigencia: 2031, numero: 77, tipo: 77, total: 1500 });
+    assert.equal(r.status, 200);
+    assert.equal((await r.json()).n, 3);
+    const { Pool } = require('pg');
+    const p = new Pool({ connectionString: TEST_DB });
+    try {
+      const { rows } = await p.query(`SELECT municipio, valor FROM distribucion_municipio WHERE ano = 2031 AND numero = 77 AND tipo = 77 ORDER BY municipio`);
+      assert.deepEqual(rows.map((x) => [x.municipio, Number(x.valor)]), [['CHA', 750], ['FAL', 300], ['ORT', 450]]);
+      const s = await p.query(`SELECT SUM(valor)::float8 AS t FROM distribucion_municipio WHERE ano = 2031 AND numero = 77 AND tipo = 77`);
+      assert.equal(s.rows[0].t, 1500, 'suma exacta al total');
+      await p.query(`DELETE FROM distribucion_municipio WHERE ano = 2031 AND numero = 77 AND tipo = 77`);
+    } finally { await p.end(); }
+  });
+  it('stepper pasos con estado real y CTA (solo en Carga)', async () => {
+    await loginAsAdmin();
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=carga&vigencia=${YN}`)).text();
+    assert.match(html, /Pasos vigencia \d+/, 'stepper presente en Carga');
     assert.ok(html.includes('Faltan 2 de 3 pasos'), 'YN: regla y valores pendientes');
     assert.ok(html.includes('1 · Regla de Oro') && html.includes('tab=carga'), 'paso 1 con CTA a Carga');
     assert.ok(html.includes('<li class="ok">✓ 2 · Monto global</li>'), 'paso 2 completo sin CTA');
+    const mpio = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=mpio&vigencia=${YN}`)).text();
+    assert.ok(!mpio.includes('doc-pasos'), 'pasos solo en Carga');
+    const circ = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=circ&vigencia=${YN}`)).text();
+    assert.ok(!circ.includes('doc-pasos'), 'pasos solo en Carga (circ tampoco)');
   });
   it('mpio: tabla documento sin paginación ni CRUD, con edición en línea', async () => {
     await loginAsAdmin();

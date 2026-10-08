@@ -1202,13 +1202,24 @@ button.hdr-pop-all {
 }
 
 /* ── Vista unificada Distribuciones ── */
-.vig-row {
+.dist-title {
     display: flex;
     justify-content: space-between;
     align-items: end;
     gap: 12px;
     flex-wrap: wrap;
-    margin: 8px 0 4px;
+}
+
+.dist-title h2 {
+    margin: 0;
+}
+
+.vig-row {
+    display: flex;
+    align-items: end;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 0;
 }
 
 .vig-row form {

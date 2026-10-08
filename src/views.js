@@ -544,17 +544,16 @@ function docHead(form) {
   const vy = form.vigSel;
   const yNow = new Date().getFullYear();
   const leafTok = tokenFor('/distribucion/actualizaciones/distribuciones').replace('/v/', '');
-  const goUrl = `${tokenFor('/dashboard')}?f=${encodeURIComponent(leafTok)}`;
   const curTab = form.tab || 'mpio';
   const shorts = [yNow - 2, yNow - 1, yNow + 1].map((y) => (y === vy
     ? `<span class="cfg-tab active">${y}</span>`
-    : `<a class="cfg-tab" href="${goUrl}&tab=${curTab}&vigencia=${y}">${y}</a>`)).join('');
-  const sel = `<div class="vig-row"><div class="vig-shortcuts" role="group" aria-label="Vigencias">${shorts}</div><form method="get" action="${goUrl}"><input type="hidden" name="tab" value="${curTab}"><label class="fld"><span>Año</span><input name="vigencia" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="${vy}" aria-label="Año de vigencia"></label><button class="btn-primary" type="submit" style="margin-top:0">Ver</button></form></div>`;
+    : `<a class="cfg-tab" href="${distTabUrl(y, curTab)}">${y}</a>`)).join('');
+  const sel = `<div class="vig-row"><div class="vig-shortcuts" role="group" aria-label="Vigencias">${shorts}</div><form method="get" action="${tokenFor('/dashboard')}"><input type="hidden" name="f" value="${leafTok}"><input type="hidden" name="tab" value="${curTab}"><label class="fld"><span>Año</span><input name="vigencia" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="${vy}" aria-label="Año de vigencia"></label><button class="btn-primary" type="submit" style="margin-top:0">Ver</button></form></div>`;
   const membrete = `<details class="doc-membrete"><summary>FEDERACION NACIONAL DE CAFETEROS DE COLOMBIA - COMITE TOLIMA</summary><div class="doc-head"><strong>FEDERACION NACIONAL DE CAFETEROS DE COLOMBIA - COMITE TOLIMA</strong><br>LEY 863 DE 2003 TRANSFERENCIA ${vy}<br>OBRAS DE INFRAESTRUCTURA<br>DISTRIBUCION No. <span class="doc-blank">______</span> SEGÚN ACTA <span class="doc-blank">______</span> DE <span class="doc-blank">______</span></div></details>`;
   const msg = form.msg ? (form.msgOk
     ? `<p><span class="badge">${esc(form.msg)}</span></p>`
     : `<div class="alert-err">${esc(form.msg)}</div>`) : '';
-  return `<div class="card form-slot"><h2>Distribuciones <span class="badge">vigencia ${vy}</span></h2>${membrete}${sel}${msg}${distTabs(form)}`;
+  return `<div class="card form-slot"><div class="dist-title"><h2>Distribuciones <span class="badge">vigencia ${vy}</span></h2>${sel}</div>${membrete}${msg}${distTabs(form)}`;
 }
 
 // Une regla (%) + valores por municipio, agrupado por circunscripción.
@@ -674,17 +673,15 @@ function reglaCargaForms(form) {
   const nRegla = (d.regla || []).length;
   const vals = d.valores || [];
   const mpioUrl = distTabUrl(vy, 'mpio');
-  const tots = (form.circs || []).map((c) =>
-    `<label class="fld"><span>${esc(c.nombre)}</span><input id="reglaTot_${esc(c.codigo)}" type="number" min="0" step="0.01" placeholder="0"></label>`).join('');
   const upForm = !canW ? '' : `${d.hayRegla ? `<p><span class="badge">Regla ${vy} cargada: ${nRegla} municipios.</span> Para reemplazarla vuelve a subir el archivo.</p>` : ''}<div class="skl-bar"><input id="reglaVig" type="hidden" value="${vy}">
 <label class="fld"><span>Archivo xlsx (REGLA DE ORO)</span><input id="reglaFile" type="file" accept=".xlsx"></label>
 <button class="btn-primary" id="reglaUp" type="button" style="margin-top:0">Paso 1 · ${d.hayRegla ? 'Reemplazar regla' : 'Cargar regla'}</button></div>`;
   const goForm = !canW ? `<p><span class="badge">solo lectura</span></p>`
     : !d.hayRegla ? `<p><span class="badge badge-warn">Completa el paso 1 para la vigencia ${vy}.</span></p>`
-    : `${d.hayValores ? `<p><span class="badge">Valores ${vy}: ${vals.length} municipios.</span> <a href="${mpioUrl}">Ver en Por municipio</a></p>` : ''}<div class="skl-bar"><label class="fld"><span>Número</span><input id="reglaNum" type="number" value="1" min="0"></label>
-<label class="fld"><span>Tipo</span><input id="reglaTipo" type="number" value="1" min="0"></label>
-<input id="reglaVig2" type="hidden" value="${vy}">${tots}
-<button class="btn-primary" id="reglaGo" type="button" style="margin-top:0">Paso 2 · Asignar valores</button></div>`;
+    : `${d.hayValores ? `<p><span class="badge">Valores ${vy}: ${vals.length} municipios.</span> <a href="${mpioUrl}">Ver en Por municipio</a></p>` : ''}<div class="skl-bar"><label class="fld"><span>Valor total sumatoria de vigencia para Municipios</span><input id="reglaTotalMun" type="number" min="0" step="0.01" placeholder="0"></label>
+<input id="reglaVig2" type="hidden" value="${vy}">
+<button class="btn-primary" id="reglaGoAsk" type="button" style="margin-top:0">Paso 2 · Asignar valores</button></div>
+<div class="modal-overlay" id="reglaConfirmModal" hidden><div class="modal-card" role="dialog" aria-modal="true" aria-label="Confirmar asignación automática"><h2>Confirmar asignación automática</h2><p>Se distribuirán <strong class="tnum" id="reglaConfirmTotal">—</strong> entre <strong>${nRegla} municipios</strong> de la vigencia ${vy} según la Regla de Oro.</p><p>Esta va a ser distribuida por todos los municipios automáticamente, municipio por municipio.</p><button class="btn-primary" id="reglaGo" type="button">Confirmar y asignar</button> <button type="button" id="reglaGoNo">Cancelar</button></div></div>`;
   return { upForm, goForm };
 }
 
@@ -741,17 +738,17 @@ function distribucionesView(form, fnc) {
   const head = docHead(form);
   if (tab === 'carga') {
     const { upForm, goForm } = reglaCargaForms(form);
-    return `${head}<h3 class="rail-sub">Carga por vigencia</h3><p id="reglaMsg" class="drawer-msg"></p>${upForm}${goForm}</div>`;
+    return `${head}<h3 class="rail-sub">Carga por vigencia</h3>${docPasos(form)}<p id="reglaMsg" class="drawer-msg"></p>${upForm}${goForm}</div>`;
   }
   if (tab === 'hist') {
     return `${head}${docHistorial(form)}</div>`;
   }
   if (tab === 'mpio') {
     const dOpts = { total: docTotalFor(form, 'municipio'), circ: false, edit: canW, ano: vy };
-    return `${head}${docPasos(form)}${docMontoLine(form, 'municipio')}<h3 class="rail-sub">Por municipio</h3>${docTablaFrom(docDatos(form), dOpts)}${docFoot()}</div>`;
+    return `${head}${docMontoLine(form, 'municipio')}<h3 class="rail-sub">Por municipio</h3>${docTablaFrom(docDatos(form), dOpts)}${docFoot()}</div>`;
   }
   const cOpts = { total: docTotalFor(form, 'circunscripcion'), circ: true, edit: false, ano: vy };
-  return `${head}${docPasos(form)}${docMontoLine(form, 'circunscripcion')}${docEscenarios(form, cOpts)}${docFoot()}</div>`;
+  return `${head}${docMontoLine(form, 'circunscripcion')}${docEscenarios(form, cOpts)}${docFoot()}</div>`;
 }
 
 // Escenarios de la vista unificada: anterior (histórico), actual (checklist +
@@ -1021,13 +1018,26 @@ if(x.d&&x.d.ok){rmsg(x.d.msg,true);setTimeout(function(){window.location.reload(
 rmsg((x.d&&(x.d.error))||'No se pudo cargar.',false);
 }).catch(function(){rmsg('Error de red.',false);});
 });
+var ask=document.getElementById('reglaGoAsk');
+var modal=document.getElementById('reglaConfirmModal');
+var no=document.getElementById('reglaGoNo');
+function closeReglaModal(){if(modal)modal.hidden=true;}
+if(ask)ask.addEventListener('click',function(){
+var t=document.getElementById('reglaTotalMun');
+var v=t?t.value.trim():'';
+if(!/^\d+(\.\d{1,2})?$/.test(v)||Number(v)<=0){rmsg('Indica el valor total (> 0, máx. 2 decimales).',false);return;}
+var pv=document.getElementById('reglaConfirmTotal');if(pv)pv.textContent=Number(v).toLocaleString('en-US',{maximumFractionDigits:2});
+if(modal)modal.hidden=false;
+});
+if(no)no.addEventListener('click',function(){closeReglaModal();});
 var go=document.getElementById('reglaGo');
 if(go)go.addEventListener('click',function(){
-var totales={};document.querySelectorAll('[id^="reglaTot_"]').forEach(function(el){if(el.value.trim()!=='')totales[el.id.slice(9)]=el.value.trim();});
-var payload={vigencia:val('reglaVig2'),numero:val('reglaNum'),tipo:val('reglaTipo'),totales:totales};
+var t=document.getElementById('reglaTotalMun');
+var v=t?t.value.trim():'';
+var payload={vigencia:val('reglaVig2'),numero:1,tipo:1,total:v};
 rmsg('Asignando…',true);
-fetch('/api/regla-oro/asignar',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':csrfH(),'Accept':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
-if(x.d&&x.d.ok){rmsg(x.d.msg,true);return;}
+fetch('/api/regla-oro/asignar-total',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':csrfH(),'Accept':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+if(x.d&&x.d.ok){closeReglaModal();rmsg(x.d.msg,true);setTimeout(function(){window.location.reload();},900);return;}
 rmsg((x.d&&(x.d.error))||'No se pudo asignar.',false);
 }).catch(function(){rmsg('Error de red.',false);});
 });

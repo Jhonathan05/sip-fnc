@@ -856,11 +856,6 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
           hayMontos: mm.rows.length > 0,
           hayValores: vv.rows.length > 0,
         };
-        // Tab Carga (paso 2): totales por circunscripción para asignar valores.
-        if (hit.leaf.crud === 'distribuciones' && form.tab === 'carga') {
-          const cc = await pool2.query('SELECT codigo, nombre FROM circunscripciones ORDER BY nombre');
-          form.circs = cc.rows;
-        }
       }
       // Regla de Oro (2 pasos): precarga regla + circunscripciones para la vigencia.
       if (hit.leaf.reglaOro) {
@@ -1181,6 +1176,53 @@ app.post('/api/regla-oro/asignar', needLogin, needDb, async (req, res) => {
     return done(`Vigencia ${vy}: ${n} municipios actualizados.`, { n });
   } catch (e) {
     console.error('[regla/asignar]', e.message);
+    return fail(500, 'No se pudo asignar.');
+  }
+});
+
+// POST /api/regla-oro/asignar-total — paso 2 con UN solo total: se reparte
+// entre todos los municipios según la regla (Σ exacta en centavos; el residual
+// del redondeo va al último). numero/tipo opcionales (default 1).
+app.post('/api/regla-oro/asignar-total', needLogin, needDb, async (req, res) => {
+  const fnc = req.session.fnc;
+  if (!canWrite(fnc)) return res.status(403).send(views.errorPage(fnc, 'forbidden'));
+  const wantJson = (req.headers.accept || '').includes('application/json');
+  const fail = (code, error) => wantJson
+    ? res.status(code).json({ ok: false, error })
+    : res.redirect(REGLA_BACK('msg=' + encodeURIComponent(error)));
+  const done = (msg, extra) => wantJson
+    ? res.json({ ok: true, msg, ...(extra || {}) })
+    : res.redirect(REGLA_BACK(`vigencia=${vy}&ok=1&msg=` + encodeURIComponent(msg)));
+  try {
+    const b = req.body || {};
+    const vy = Number(b.vigencia);
+    const numero = b.numero === undefined ? 1 : Number(b.numero);
+    const tipo = b.tipo === undefined ? 1 : Number(b.tipo);
+    const total = Number(b.total);
+    if (!Number.isInteger(vy) || vy < 2000 || vy > 2100) return fail(400, 'Vigencia inválida (2000–2100).');
+    if (!Number.isInteger(numero) || numero < 0 || !Number.isInteger(tipo) || tipo < 0) return fail(400, 'Número y tipo deben ser enteros ≥ 0.');
+    if (!Number.isFinite(total) || total <= 0) return fail(400, 'Total inválido (> 0).');
+    const pool = getPool();
+    const rr = await pool.query(
+      `SELECT r.municipio, r.regla FROM regla_oro_anual r WHERE r.vigencia = $1 ORDER BY r.municipio`, [vy]);
+    if (!rr.rows.length) return fail(400, `Sin regla cargada para ${vy} (paso 1 primero).`);
+    const suma = rr.rows.reduce((a, x) => a + Number(x.regla), 0);
+    if (!(suma > 0)) return fail(400, `Regla en cero para ${vy}.`);
+    const totalC = Math.round(total * 100);
+    const items = rr.rows.map((r) => ({ municipio: r.municipio, c: Math.round((totalC * Number(r.regla)) / suma) }));
+    const diff = totalC - items.reduce((a, x) => a + x.c, 0);
+    items[items.length - 1].c += diff;
+    if (items.some((x) => x.c < 0)) return fail(400, 'Total muy bajo para repartir entre los municipios.');
+    for (const it of items) {
+      await pool.query(
+        `INSERT INTO distribucion_municipio (numero, tipo, ano, ppto, municipio, valor) VALUES ($1,$2,$3,$4,$5,$6)
+         ON CONFLICT (numero, tipo, ano, municipio) DO UPDATE SET valor = EXCLUDED.valor, ppto = EXCLUDED.ppto`,
+        [numero, tipo, vy, total, it.municipio, it.c / 100]);
+    }
+    await writeAudit(req, { action: 'regla.asignar', modulo: 'distribucion', detalle: `Vigencia ${vy} (núm ${numero}, tipo ${tipo}, total ${total}): ${items.length} municipios` });
+    return done(`Vigencia ${vy}: ${items.length} municipios actualizados.`, { n: items.length });
+  } catch (e) {
+    console.error('[regla/asignar-total]', e.message);
     return fail(500, 'No se pudo asignar.');
   }
 });

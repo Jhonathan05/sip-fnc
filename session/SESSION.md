@@ -9,7 +9,7 @@ informes contables por periodos — Comité de Cafeteros del Tolima.
 
 ## Stack (PERFIL rendimiento, acta v2 en docs/analisis.md)
 Node 22 + Express 4 + Vanilla + Postgres 16 + `pg` + `multer` + `sharp` + `exceljs`.
-Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (78 tests, 13 suites).
+Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (79 tests, 13 suites).
 
 ## Puesta en marcha
 ```powershell
@@ -48,6 +48,10 @@ vigencia con 3 atajos (YN-2/YN-1/YN+1) + input año; stepper de pasos por vigenc
 CTA; tab Histórico nuevo (circ-anterior apunta allí; Carga sin sección histórica);
 Carga con vigencia implícita (hidden) + condicionales por etapa (usa `form.doc`,
 `circs` cargados para el tab); `distTabUrl(vy,tab)`.
+- Distribuciones pulido (dev, sin versionar): título con controles a la derecha
+(`.dist-title`); Ver con `f` oculto + action limpio; pasos solo en Carga;
+paso 2 con 1 input (total municipios) + modal doble validación +
+`POST /api/regla-oro/asignar-total` (reparto exacto en centavos, Σ = total).
 - Distribuciones unificada (`?tab=` carga/mpio/circ, default mpio; hoja mpio fuera del nav, legacy → 302 a `tab=mpio`); tokens `/v/` congelados (nuevas páginas AL FINAL).
 - Tablas documento calcadas de `docs/formatos/distribucion por {municipio,circunscripcion}.xlsx`: columnas MUNICIPIO|SICA 2005|DISTRIBUCIÓN (%×monto)|ASIGNACIONES CREADAS|SALDO (dist−creadas); fila `Circunscripción X` tras cada bloque + TOTAL; sin `$` (comas); centavos exactos (aritmética en enteros); en tab circ, DISTRIBUCIÓN/SALDO en blanco por municipio. Membrete 4 líneas + huecos `______` para N° distribución/acta (sin fuente en BD aún).
 - Tablas documento SIN paginación (`PAGER_JS` exime `.doc-table`) y editables en línea (botón ✎): CREADAS por fila (tab mpio) + línea de monto global por tab (PUT/POST `distribuciones`); tarjetas CRUD eliminadas. Nuevo `PUT /api/distribucion-municipio/valor` (1 fila→UPDATE, 0→INSERT 1/1, N→409 ir a Carga). Consultor sin botones (server-rendered).
