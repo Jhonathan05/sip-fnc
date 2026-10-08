@@ -1,4 +1,4 @@
-# Sesión SIP-FNC — contexto de trabajo (2026-10-08, v1.10.0)
+# Sesión SIP-FNC — contexto de trabajo (2026-10-08, v1.11.0)
 
 > Archivo vivo: resume el estado para retomar en cualquier momento.
 > Flujo de ramas: `dev` (trabajo) → `master` (releases) → GitHub.
@@ -9,7 +9,7 @@ informes contables por periodos — Comité de Cafeteros del Tolima.
 
 ## Stack (PERFIL rendimiento, acta v2 en docs/analisis.md)
 Node 22 + Express 4 + Vanilla + Postgres 16 + `pg` + `multer` + `sharp` + `exceljs`.
-Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (74 tests, 13 suites).
+Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (85 tests, 13 suites).
 
 ## Puesta en marcha
 ```powershell
@@ -43,6 +43,19 @@ Flip KC staging: registrar `sip-fnc-client` en `fnc-realm` + `AUTH_PROVIDER=keyc
 - SMTP: solo Resend, API key cifrada en BD, módulo Email solo admin.
 - Skills en `G:\Open\infra-fnc/skills` (sede canónica; `appweb-skills-fnc` congelado), nunca por proyecto. Catálogo: `skills/INDEX.md`.
 - Principios Modo B en cada cierre: 1) nada KC a medias, 2) sesión por contrato, 3) re-correr e2e al flipear.
+- Distribuciones UX (v1.11.0): sin breadcrumb; membrete `<details>` colapsado;
+vigencia con 3 atajos (YN-2/YN-1/YN+1) + input año; stepper de pasos por vigencia con
+CTA; tab Histórico nuevo (circ-anterior apunta allí; Carga sin sección histórica);
+Carga con vigencia implícita (hidden) + condicionales por etapa (usa `form.doc`,
+`circs` cargados para el tab); `distTabUrl(vy,tab)`.
+- Distribuciones pulido (v1.11.0): título con controles a la derecha
+(`.dist-title`); Ver con `f` oculto + action limpio; pasos solo en Carga;
+paso 2 con 1 input (total municipios) + modal doble validación +
+`POST /api/regla-oro/asignar-total` (reparto exacto en centavos, Σ = total).
+- Distribuciones diseño (v1.11.0): tabs conectadas, pills de vigencia
+con primario, membrete summary pill, stepper en panel, tabla con thead
+enfatizado + hover + subtotales/TOTAL separados, monto en barra, secciones
+con acento y formularios en panel (clase `dist-view`; formato xlsx intacto).
 - Distribuciones unificada (`?tab=` carga/mpio/circ, default mpio; hoja mpio fuera del nav, legacy → 302 a `tab=mpio`); tokens `/v/` congelados (nuevas páginas AL FINAL).
 - Tablas documento calcadas de `docs/formatos/distribucion por {municipio,circunscripcion}.xlsx`: columnas MUNICIPIO|SICA 2005|DISTRIBUCIÓN (%×monto)|ASIGNACIONES CREADAS|SALDO (dist−creadas); fila `Circunscripción X` tras cada bloque + TOTAL; sin `$` (comas); centavos exactos (aritmética en enteros); en tab circ, DISTRIBUCIÓN/SALDO en blanco por municipio. Membrete 4 líneas + huecos `______` para N° distribución/acta (sin fuente en BD aún).
 - Tablas documento SIN paginación (`PAGER_JS` exime `.doc-table`) y editables en línea (botón ✎): CREADAS por fila (tab mpio) + línea de monto global por tab (PUT/POST `distribuciones`); tarjetas CRUD eliminadas. Nuevo `PUT /api/distribucion-municipio/valor` (1 fila→UPDATE, 0→INSERT 1/1, N→409 ir a Carga). Consultor sin botones (server-rendered).
@@ -64,6 +77,15 @@ Fuente: `G:\Open\infra-fnc/skills` (`INDEX.md`). Fuera: `fnc-url-masking`
 - **Fase 1** ✅ 2026-10-08 — Notificaciones: `006_outbox.sql` + `src/notify.js` (encolar transaccional,
 worker `setInterval` con `SKIP LOCKED`, scheduler vencimientos 3-1-0, campana por rol
 `GET|PUT /api/notificaciones`, email Resend, Discord helper fire-and-forget).
+- Datos reales (dev): `db/seed_datos_reales.js` (idempotente) inyecta 2026 desde los xlsx
+oficiales — montos 1,000,000,003/967,151,728 y 500,000,000/471,018,310 + 38 CREADAS
+(Σ exacta); vacía 2027; migrate.js sembró los mismos valores. Cifras: valor EXACTO
+guardado, centavos solo si existen, sin `.00` de relleno ni redondeo (E2E punta a punta).
+- Documento oficial exportable (v1.11.0): `src/docdist.js` (datos compartidos)
++ `GET /api/distribucion/documento/{xlsx,pdf}?tab=mpio|circ&vigencia=` calcados al
+formato xlsx (membrete R1–R4 con huecos, encabezados, bloques Circunscripción, TOTAL,
+pie fecha+página; circ con dist/saldo en blanco por municipio) + toolbar
+Imprimir/Excel/PDF en tabs mpio/circ.
 - **Fase 2** ✅ 2026-10-08 — Monitoreo (`fnc-monitoring`): `/api/health|/ready` públicos,
 `maestro.borrar`→Discord, `infra/backup-r2.ps1` (pg_dump|gzip|AES-256-CBC .NET nativo,
 formato `openssl enc` compatible, round-trip hash) + retención R2 30d. Kuma apunta a

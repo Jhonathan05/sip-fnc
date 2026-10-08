@@ -30,12 +30,13 @@ async function main() {
   await pool.query(sql7);
   console.log('[migrate] 007_push ok');
 
-  // Seed: 4 distribuciones vigencia actual
+  // Seed distribuciones: 2026 con los valores reales de los documentos xlsx
+  // de referencia (docs/formatos); 2025 alimenta el Histórico.
   const y = new Date().getFullYear();
   const seeds = [
-    ['municipio_actual', y, 1250000000, 320000000],
+    ['municipio_actual', y, 1000000003, 967151728],
     ['municipio_anteriores', y - 1, 480000000, 410000000],
-    ['circunscripcion_actual', y, 860000000, 120000000],
+    ['circunscripcion_actual', y, 500000000, 471018310],
     ['circunscripcion_anteriores', y - 1, 295000000, 260000000],
   ];
   for (const [tipo, vigencia, asignado, ejecutado] of seeds) {

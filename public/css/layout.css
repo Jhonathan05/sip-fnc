@@ -1,10 +1,18 @@
-/* Inter Variable autohospedado (OFL) — estilo Gemini con métricas propias */
+/* Inter Variable autohospedado (OFL) — estilo Gemini con métricas propias.
+   optional (no swap): evita el reflujo/sacudida al navegar; en intranet
+   la fuente carga al instante y queda cacheada. */
 @font-face {
   font-family: 'Inter';
   font-style: normal;
   font-weight: 100 900;
-  font-display: swap;
+  font-display: optional;
   src: url('/fonts/Inter-Variable.woff2') format('woff2');
+}
+
+html {
+  /* Reserva el espacio del scroll siempre: sin salto horizontal al cambiar
+     de vista (con/sin barra de desplazamiento). */
+  scrollbar-gutter: stable;
 }
 
 :root {

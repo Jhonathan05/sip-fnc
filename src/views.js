@@ -235,14 +235,19 @@ if(window.fncAlive){window.fncAlive().then(function(ok){if(ok){go();}else{g.disa
 });
 }catch(e){}})();</script>`;
 
-const NAV_MEMORY_JS = `<script>(function(){try{var k='sip-nav-open';var open=JSON.parse(localStorage.getItem(k)||'[]');function save(id,on){try{var cur=JSON.parse(localStorage.getItem(k)||'[]');if(on&&cur.indexOf(id)<0)cur.push(id);if(!on)cur=cur.filter(function(x){return x!==id});localStorage.setItem(k,JSON.stringify(cur));}catch(e){}}document.querySelectorAll('details.tree-sub, details.tree-mod').forEach(function(d){var id=d.getAttribute('data-navkey');if(open.indexOf(id)>=0)d.open=true;d.addEventListener('toggle',function(){save(id,d.open)});});
+// Memoria del árbol: restaura ramas abiertas ANTES del primer pintado.
+// Se emite justo tras </aside> (parser-blocking): sin salto de elementos al
+// navegar con el árbol desplegado. En dashboard plano solo limpia la memoria.
+const NAV_OPEN_JS = `<script>(function(){try{var open=JSON.parse(localStorage.getItem('sip-nav-open')||'[]');var all=document.querySelectorAll('details.tree-sub, details.tree-mod');for(var i=0;i<all.length;i++){var d=all[i];if(open.indexOf(d.getAttribute('data-navkey'))>=0)d.open=true;d.addEventListener('toggle',function(){var k='sip-nav-open';try{var cur=JSON.parse(localStorage.getItem(k)||'[]');var my=this.getAttribute('data-navkey');if(this.open&&cur.indexOf(my)<0)cur.push(my);if(!this.open)cur=cur.filter(function(x){return x!==my;});localStorage.setItem(k,JSON.stringify(cur));}catch(e){}});}}catch(e){}})();</script>`;
+
+const NAV_MEMORY_JS = `<script>(function(){try{
 var scrollAreas=Array.prototype.slice.call(document.querySelectorAll('.sidebar-nav, .rail-scroll'));
 scrollAreas.forEach(function(el){var scrollT=null;el.addEventListener('scroll',function(){el.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){el.classList.remove('is-scrolling');},800);},{passive:true});});
 document.addEventListener('error',function(e){var t=e.target;if(t&&t.classList&&t.classList.contains('user-photo')){var d=document.createElement('div');d.className='user-avatar';d.textContent=(t.getAttribute('alt')||'U').trim().charAt(0).toUpperCase()||'U';t.replaceWith(d);}},true);}catch(e){}})();</script>`;
 
 // Reset al seleccionar Dashboard: el dashboard sin formulario inline se renderiza con
-// active '/dashboard'. Limpiar la memoria de ramas para que el árbol cargue colapsado.
-// Se emite ANTES de NAV_MEMORY_JS para que no reabra nada guardado.
+// active '/dashboard'. Se emite tras </aside> (y ya no al final): limpia la memoria
+// de ramas para que el árbol cargue colapsado sin reabrir nada guardado.
 const NAV_RESET_JS = `<script>(function(){try{localStorage.removeItem('sip-nav-open');}catch(e){}})();</script>`;
 
 const A11Y_HEAD_JS = `<script>(function(){try{var t=localStorage.getItem('sip-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);var s=parseInt(localStorage.getItem('sip-font')||'100',10);if(s>=80&&s<=120&&s!==100)document.documentElement.style.fontSize=(s/100*16)+'px';if(localStorage.getItem('sip-nav-collapsed')==='1')document.documentElement.classList.add('nav-collapsed');}catch(e){}})();</script>`;
@@ -299,13 +304,14 @@ ${navConfig(active, role)}
 </nav>
 <div class="nav-collapse-bar"><button class="nav-collapse-btn" id="navCollapseBtn" aria-label="Contraer menú" title="Contraer / expandir menú"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9.5 3v18"/></svg></button>${a11yControls()}</div>
 </aside>
+${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : withNonce(NAV_OPEN_JS, nonce)}
 <main class="main-container">${body}</main>
 ${profileModal(csrf)}
 ${inactivityModal()}
 ${taskCreateModal()}
 ${detailDrawer()}
 <div class="conn-overlay" id="connOverlay" hidden><div class="modal-card" role="alert"><h2>Sin conexión</h2><p>Se perdió la conexión con el servidor. Reintentando automáticamente…</p><button class="btn-primary" id="connRetry" type="button" style="margin-top:0">Reintentar ahora</button></div></div>
-${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}${withNonce(PRINT_JS, nonce)}${withNonce(REGLA_JS, nonce)}${withNonce(DOCEDIT_JS, nonce)}${withNonce(NOTIF_JS, nonce)}${withNonce(PUSH_JS, nonce)}</body></html>`;
+${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}${withNonce(PRINT_JS, nonce)}${withNonce(REGLA_JS, nonce)}${withNonce(DOCEDIT_JS, nonce)}${withNonce(NOTIF_JS, nonce)}${withNonce(PUSH_JS, nonce)}</body></html>`;
 }
 
 // Regla de Oro en 2 pasos: paso 1 carga xlsx (tabla % sin valores),
@@ -326,14 +332,14 @@ function reglaOroView(form, fnc) {
   const circRows = Object.entries(porCirc).map(([c, x]) =>
     `<tr><td>${esc(c)}</td><td class="tnum">${x.n}</td><td class="tnum">${(x.suma * 100).toFixed(2)}%</td></tr>`).join('');
   const verCtl = `<div class="skl-bar"><label class="fld"><span>Ver vigencia</span><input id="reglaVer" type="number" value="${vy}" min="2000" max="2100"></label>
-<button class="btn-logout" id="reglaVerGo" type="button" style="padding:10px 20px">Ver</button>
-<span style="flex:1"></span><button class="btn-logout" id="reglaPrint" type="button" style="padding:10px 20px">Imprimir</button>
-<a class="btn-logout" style="text-decoration:none;display:inline-block;padding:10px 20px" href="/api/regla-oro/xlsx?vigencia=${vy}">Excel</a>
-<a class="btn-logout" style="text-decoration:none;display:inline-block;padding:10px 20px" href="/api/regla-oro/pdf?vigencia=${vy}">PDF</a></div>`;
+    <button class="btn-logout" id="reglaVerGo" type="button">Ver</button>
+<span style="flex:1"></span><button class="btn-logout" id="reglaPrint" type="button">Imprimir</button>
+<a class="btn-logout" href="/api/regla-oro/xlsx?vigencia=${vy}">Excel</a>
+<a class="btn-logout" href="/api/regla-oro/pdf?vigencia=${vy}">PDF</a></div>`;
   const cmpForm = `<div class="skl-bar"><label class="fld"><span>Vigencia A</span><input id="reglaCmpA" type="number" value="${vy}" min="2000" max="2100"></label>
 <label class="fld"><span>Vigencia B</span><input id="reglaCmpB" type="number" value="${vy + 1}" min="2000" max="2100"></label>
 <label class="fld"><span>Vigencia C (opcional)</span><input id="reglaCmpC" type="number" placeholder="—" min="2000" max="2100"></label>
-<button class="btn-logout" id="reglaCmpGo" type="button" style="padding:10px 20px">Comparar</button></div><div id="reglaCmpOut"></div>`;
+<button class="btn-logout" id="reglaCmpGo" type="button">Comparar</button></div><div id="reglaCmpOut"></div>`;
   return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)} <span class="badge">vigencia ${vy}</span></h2>
 <p><span class="badge">solo histórico</span></p>${verCtl}
 <h3 class="rail-sub">Porcentajes por municipio (histórico)</h3>
@@ -482,7 +488,7 @@ function informePage(hit, query, data, inf) {
   if (query.municipio) fTxt.push(`Municipio: ${query.municipio}`);
   return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)}</h2>
 <div class="print-only"><strong>SIP-FNC · Sistema de Información de Proyectos</strong><br>${esc(leaf.title)} · ${esc(fTxt.length ? fTxt.join(' · ') : 'Sin filtros')} · ${esc(fmtFechaHora(new Date()))} · ${data.rows.length} filas</div>
-<form method="get" action=""><div class="skl-bar">${flds}<button class="btn-primary" type="submit" style="margin-top:0">Filtrar</button><a class="btn-logout" style="text-decoration:none;display:inline-block;padding:10px 20px" href="${exp}">Exportar Excel</a><button class="btn-logout" id="btnImprimir" type="button" style="padding:10px 20px">Imprimir</button></div></form>
+<form method="get" action=""><div class="skl-bar">${flds}<button class="btn-primary" type="submit" style="margin-top:0">Filtrar</button><a class="btn-logout" href="${exp}">Exportar Excel</a><button class="btn-logout" id="btnImprimir" type="button">Imprimir</button></div></form>
 <table class="skl-table"><thead><tr>${head}</tr></thead><tbody>${bodyRows || `<tr><td colspan="${data.cols.length}">Sin resultados.</td></tr>`}</tbody></table>
 <p><span class="badge tnum">${data.rows.length} filas</span></p></div>`;
 }
@@ -518,11 +524,15 @@ function configTabs(sub, leaf, role) {
 }
 
 // Tabs de la vista unificada Distribuciones (server-rendered, como configTabs).
+function distTabUrl(vy, tab) {
+  const tok = tokenFor('/distribucion/actualizaciones/distribuciones').replace('/v/', '');
+  return `${tokenFor('/dashboard')}?f=${encodeURIComponent(tok)}&tab=${tab}&vigencia=${vy}`;
+}
 function distTabs(form) {
   const tab = form.tab || 'mpio';
   const tok = tokenFor('/distribucion/actualizaciones/distribuciones').replace('/v/', '');
   const base = `${tokenFor('/dashboard')}?f=${encodeURIComponent(tok)}&vigencia=${form.vigSel}`;
-  const defs = [['carga', 'Carga'], ['mpio', 'Por municipio'], ['circ', 'Por circunscripción']];
+  const defs = [['carga', 'Carga'], ['mpio', 'Por municipio'], ['circ', 'Por circunscripción'], ['hist', 'Histórico']];
   const items = defs.map(([k, t]) => (tab === k
     ? `<span class="cfg-tab active">${t}</span>`
     : `<a class="cfg-tab" href="${base}&tab=${k}">${t}</a>`)).join('');
@@ -533,21 +543,23 @@ function distTabs(form) {
 // anterior: histórico año+tipo con sobrante y acumulado · actual: checklist +
 // tabla · siguiente: % por municipio. DISTRIBUCIÓN = % × monto global,
 // CREADAS = valores cargados, SALDO = DISTRIBUCIÓN − CREADAS, en centavos exactos.
-// Encabezado compartido de la vista unificada: breadcrumb + h2 + membrete +
-// selector de vigencia + banner msg + tab bar. Abre la card (cierra el llamador).
+// Encabezado compartido de la vista unificada: h2 + membrete colapsable +
+// vigencia (3 atajos + input) + banner msg + tab bar. Abre la card (cierra el llamador).
+// Sin breadcrumb a rutas superiores.
 function docHead(form) {
-  const { sub, mod } = form;
   const vy = form.vigSel;
+  const yNow = new Date().getFullYear();
   const leafTok = tokenFor('/distribucion/actualizaciones/distribuciones').replace('/v/', '');
-  const goUrl = `${tokenFor('/dashboard')}?f=${encodeURIComponent(leafTok)}`;
-  const opts = (form.vigencias || [vy]).map((y) =>
-    `<option value="${y}"${y === vy ? ' selected' : ''}>${y}</option>`).join('');
-  const sel = `<form method="get" action="${goUrl}"><input type="hidden" name="tab" value="${form.tab || 'mpio'}"><div class="skl-bar"><label class="fld"><span>Vigencia</span><select name="vigencia">${opts}</select></label><button class="btn-primary" type="submit" style="margin-top:0">Ver</button></div></form>`;
-  const membrete = `<div class="doc-head"><strong>FEDERACION NACIONAL DE CAFETEROS DE COLOMBIA - COMITE TOLIMA</strong><br>LEY 863 DE 2003 TRANSFERENCIA ${vy}<br>OBRAS DE INFRAESTRUCTURA<br>DISTRIBUCION No. <span class="doc-blank">______</span> SEGÚN ACTA <span class="doc-blank">______</span> DE <span class="doc-blank">______</span></div>`;
+  const curTab = form.tab || 'mpio';
+  const shorts = [yNow - 2, yNow - 1, yNow + 1].map((y) => (y === vy
+    ? `<span class="cfg-tab active">${y}</span>`
+    : `<a class="cfg-tab" href="${distTabUrl(y, curTab)}">${y}</a>`)).join('');
+  const sel = `<div class="vig-row"><div class="vig-shortcuts" role="group" aria-label="Vigencias">${shorts}</div><form method="get" action="${tokenFor('/dashboard')}"><input type="hidden" name="f" value="${leafTok}"><input type="hidden" name="tab" value="${curTab}"><label class="fld"><span>Año</span><input name="vigencia" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="${vy}" aria-label="Año de vigencia"></label><button class="btn-primary" type="submit" style="margin-top:0">Ver</button></form></div>`;
+  const membrete = `<details class="doc-membrete"><summary>FEDERACION NACIONAL DE CAFETEROS DE COLOMBIA - COMITE TOLIMA</summary><div class="doc-head"><strong>FEDERACION NACIONAL DE CAFETEROS DE COLOMBIA - COMITE TOLIMA</strong><br>LEY 863 DE 2003 TRANSFERENCIA ${vy}<br>OBRAS DE INFRAESTRUCTURA<br>DISTRIBUCION No. <span class="doc-blank">______</span> SEGÚN ACTA <span class="doc-blank">______</span> DE <span class="doc-blank">______</span></div></details>`;
   const msg = form.msg ? (form.msgOk
     ? `<p><span class="badge">${esc(form.msg)}</span></p>`
     : `<div class="alert-err">${esc(form.msg)}</div>`) : '';
-  return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>Distribuciones <span class="badge">vigencia ${vy}</span></h2>${membrete}${sel}${msg}${distTabs(form)}`;
+  return `<div class="card form-slot dist-view"><div class="dist-title"><h2>Distribuciones <span class="badge">vigencia ${vy}</span></h2>${sel}</div>${membrete}${msg}${distTabs(form)}`;
 }
 
 // Une regla (%) + valores por municipio, agrupado por circunscripción.
@@ -579,6 +591,8 @@ function docTotalFor(form, kind) {
 // cada valor se redondea una sola vez a centavos y las sumas son Σ exactas.
 const CENTS = (n) => Math.round((Number(n) || 0) * 100);
 const fmtCents = (c) => (c / 100).toLocaleString('en-US', { maximumFractionDigits: 2 });
+// Montos y cifras: valor EXACTO guardado — centavos visibles solo si existen
+// (124999996250 → "1,249,999,962.5"; entero → sin ".00" de relleno).
 
 // Tablas documento Distribución (formato .xlsx): columnas MUNICIPIO | SICA 2005 |
 // DISTRIBUCIÓN (% × monto global) | ASIGNACIONES CREADAS (valores cargados) |
@@ -657,21 +671,25 @@ function cargaUrl(vy) {
 }
 
 // Formularios de carga (paso 1 + paso 2) reutilizados en el tab Carga.
-// (En la hoja Regla de Oro solo queda la vista histórica.)
+// La vigencia es la seleccionada arriba (inputs ocultos, sin re-selección).
+// Condicionales por etapa con datos reales: paso 1 muestra estado + reemplazo;
+// paso 2 requiere regla y resume los valores ya asignados.
 function reglaCargaForms(form) {
   const vy = form.vigSel;
   const canW = form.perms && form.perms.w;
-  const tots = (form.circs || []).map((c) =>
-    `<label class="fld"><span>${esc(c.nombre)}</span><input id="reglaTot_${esc(c.codigo)}" type="number" min="0" step="0.01" placeholder="0"></label>`).join('');
-  const upForm = canW ? `<div class="skl-bar"><label class="fld"><span>Vigencia</span><input id="reglaVig" type="number" value="${vy}" min="2000" max="2100"></label>
+  const d = form.doc || {};
+  const nRegla = (d.regla || []).length;
+  const vals = d.valores || [];
+  const mpioUrl = distTabUrl(vy, 'mpio');
+  const upForm = !canW ? '' : `${d.hayRegla ? `<p><span class="badge">Regla ${vy} cargada: ${nRegla} municipios.</span> Para reemplazarla vuelve a subir el archivo.</p>` : ''}<div class="skl-bar"><input id="reglaVig" type="hidden" value="${vy}">
 <label class="fld"><span>Archivo xlsx (REGLA DE ORO)</span><input id="reglaFile" type="file" accept=".xlsx"></label>
-<button class="btn-primary" id="reglaUp" type="button" style="margin-top:0">Paso 1 · Cargar regla</button></div>` : '';
+<button class="btn-primary" id="reglaUp" type="button" style="margin-top:0">Paso 1 · ${d.hayRegla ? 'Reemplazar regla' : 'Cargar regla'}</button></div>`;
   const goForm = !canW ? `<p><span class="badge">solo lectura</span></p>`
-    : !(form.reglaRows || []).length ? `<p><span class="badge badge-warn">Completa el paso 1 para la vigencia ${vy}.</span></p>`
-    : `<div class="skl-bar"><label class="fld"><span>Número</span><input id="reglaNum" type="number" value="1" min="0"></label>
-<label class="fld"><span>Tipo</span><input id="reglaTipo" type="number" value="1" min="0"></label>
-<label class="fld"><span>Vigencia</span><input id="reglaVig2" type="number" value="${vy}" min="2000" max="2100"></label>${tots}
-<button class="btn-primary" id="reglaGo" type="button" style="margin-top:0">Paso 2 · Asignar valores</button></div>`;
+    : !d.hayRegla ? `<p><span class="badge badge-warn">Completa el paso 1 para la vigencia ${vy}.</span></p>`
+    : `${d.hayValores ? `<p><span class="badge">Valores ${vy}: ${vals.length} municipios.</span> <a href="${mpioUrl}">Ver en Por municipio</a></p>` : ''}<div class="skl-bar"><label class="fld"><span>Valor total sumatoria de vigencia para Municipios</span><input id="reglaTotalMun" type="number" min="0" step="0.01" placeholder="0"></label>
+<input id="reglaVig2" type="hidden" value="${vy}">
+<button class="btn-primary" id="reglaGoAsk" type="button" style="margin-top:0">Paso 2 · Asignar valores</button></div>
+<div class="modal-overlay" id="reglaConfirmModal" hidden><div class="modal-card" role="dialog" aria-modal="true" aria-label="Confirmar asignación automática"><h2>Confirmar asignación automática</h2><p>Se distribuirán <strong class="tnum" id="reglaConfirmTotal">—</strong> entre <strong>${nRegla} municipios</strong> de la vigencia ${vy} según la Regla de Oro.</p><p>Esta va a ser distribuida por todos los municipios automáticamente, municipio por municipio.</p><button class="btn-primary" id="reglaGo" type="button">Confirmar y asignar</button> <button type="button" id="reglaGoNo">Cancelar</button></div></div>`;
   return { upForm, goForm };
 }
 
@@ -698,7 +716,32 @@ function docMontoLine(form, kind) {
   return `<p class="doc-monto" id="${cellId}-line">Monto global · ${label} ${vy}: <strong id="${cellId}"><span class="doc-val">${valHtml}</span></strong>${btn}</p><p id="docEditMsg" class="drawer-msg"></p>`;
 }
 
-// Vista unificada Distribuciones: tabs carga/mpio/circ en una sola card.
+// Pasos para completar la vigencia (1 regla → 2 monto → 3 valores),
+// con estado real y CTA al pendiente. Se muestra en los tabs de datos.
+function docPasos(form) {
+  const vy = form.vigSel;
+  const d = form.doc || {};
+  const nRegla = (d.regla || []).length;
+  const nVal = (d.valores || []).length;
+  const steps = [
+    { ok: !!d.hayRegla, t: `1 · Regla de Oro ${vy}${d.hayRegla ? ` (${nRegla} municipios)` : ''}`, href: distTabUrl(vy, 'carga') },
+    { ok: !!d.hayMontos, t: '2 · Monto global', href: `${distTabUrl(vy, 'mpio')}#docmonto-municipio-${vy}-line` },
+    { ok: !!d.hayValores, t: `3 · Valores individuales${d.hayValores ? ` (${nVal} municipios)` : ''}`, href: distTabUrl(vy, 'carga') },
+  ];
+  const done = steps.filter((s) => s.ok).length;
+  const items = steps.map((s) => `<li class="${s.ok ? 'ok' : 'todo'}">${s.ok ? '✓' : '○'} ${esc(s.t)}${s.ok ? '' : ` — <a href="${s.href}">completar</a>`}</li>`).join('');
+  const badge = done === steps.length
+    ? '<span class="badge">Vigencia completa ✓</span>'
+    : `<span class="badge badge-warn">Faltan ${steps.length - done} de ${steps.length} pasos</span>`;
+  return `<h3 class="rail-sub">Pasos vigencia ${vy} ${badge}</h3><ol class="doc-pasos">${items}</ol>`;
+}
+
+// Toolbar del documento oficial (Imprimir/Excel/PDF) en los tabs de datos.
+function docTools(vy, tab) {
+  return `<div class="skl-bar doc-tools"><button class="btn-logout" id="btnImprimir" type="button">Imprimir</button><a class="btn-logout" href="/api/distribucion/documento/xlsx?tab=${tab}&vigencia=${vy}">Excel</a><a class="btn-logout" href="/api/distribucion/documento/pdf?tab=${tab}&vigencia=${vy}">PDF</a></div>`;
+}
+
+// Vista unificada Distribuciones: tabs carga/mpio/circ/hist en una sola card.
 // Sin paginación en las tablas documento; valores editables en línea
 // (botón ✎ por fila de municipio y en la línea de monto global).
 function distribucionesView(form, fnc) {
@@ -708,14 +751,27 @@ function distribucionesView(form, fnc) {
   const head = docHead(form);
   if (tab === 'carga') {
     const { upForm, goForm } = reglaCargaForms(form);
-    return `${head}<h3 class="rail-sub">Carga por vigencia</h3><p id="reglaMsg" class="drawer-msg"></p>${upForm}${goForm}<h3 class="rail-sub">Consulta histórica</h3>${docHistorial(form)}</div>`;
+    const d = form.doc || {};
+    const hasData = d.hayRegla || d.hayValores || d.hayMontos;
+    const canDel = form.perms && form.perms.d;
+    const nRegla = (d.regla || []).length;
+    const nVal = (d.valores || []).length;
+    const nMon = (d.montos || []).length;
+    const reset = canDel && hasData
+      ? `<div class="vig-reset"><button class="btn-danger" id="vigResetAsk" type="button" data-vig="${vy}">⟲ Reiniciar vigencia ${vy}</button></div>
+<div class="modal-overlay" id="vigResetModal" hidden><div class="modal-card" role="dialog" aria-modal="true" aria-label="Confirmar reinicio de vigencia"><h2>Reiniciar vigencia ${vy}</h2><p>Se eliminará todo el ejercicio:</p><ul class="check-list"><li>✗ Regla de Oro (${nRegla} municipios)</li><li>✗ Valores individuales (${nVal} municipios)</li><li>✗ Montos globales (${nMon})</li></ul><p>La vigencia queda vacía para configurarla de nuevo desde el paso 1. <strong>Esta acción es irreversible.</strong></p><button class="btn-danger" id="vigResetGo" type="button" data-vig="${vy}">Confirmar reinicio</button> <button class="btn-logout" id="vigResetNo" type="button">Cancelar</button></div></div>`
+      : '';
+    return `${head}<h3 class="rail-sub">Carga por vigencia</h3>${docPasos(form)}<p id="reglaMsg" class="drawer-msg"></p>${upForm}${goForm}${reset}</div>`;
+  }
+  if (tab === 'hist') {
+    return `${head}${docHistorial(form)}</div>`;
   }
   if (tab === 'mpio') {
     const dOpts = { total: docTotalFor(form, 'municipio'), circ: false, edit: canW, ano: vy };
-    return `${head}${docMontoLine(form, 'municipio')}<h3 class="rail-sub">Por municipio</h3>${docTablaFrom(docDatos(form), dOpts)}${docFoot()}</div>`;
+    return `${head}${docMontoLine(form, 'municipio')}${docTools(vy, 'mpio')}<h3 class="rail-sub">Por municipio</h3>${docTablaFrom(docDatos(form), dOpts)}${docFoot()}</div>`;
   }
   const cOpts = { total: docTotalFor(form, 'circunscripcion'), circ: true, edit: false, ano: vy };
-  return `${head}${docMontoLine(form, 'circunscripcion')}${docEscenarios(form, cOpts)}${docFoot()}</div>`;
+  return `${head}${docMontoLine(form, 'circunscripcion')}${docTools(vy, 'circ')}${docEscenarios(form, cOpts)}${docFoot()}</div>`;
 }
 
 // Escenarios de la vista unificada: anterior (histórico), actual (checklist +
@@ -726,7 +782,7 @@ function docEscenarios(form, opts) {
   const yNow = new Date().getFullYear();
   const d = form.doc;
   if (vy < yNow) {
-    return docHistorial(form);
+    return `<h3 class="rail-sub">Vigencias anteriores</h3><p>Consulta el <a href="${distTabUrl(vy, 'hist')}">Histórico + sobrante acumulado</a>.</p>`;
   }
   if (vy > yNow) {
     const hay = (d.regla || []).length > 0;
@@ -905,6 +961,20 @@ return fetch('/api/push/subscribe',{method:'DELETE',headers:{'Content-Type':'app
 }).then(function(){paint(false,false);}).catch(function(){pmsg('No se pudo desactivar.');});
 });
 refresh();
+var ra=document.getElementById('vigResetAsk');
+var rm=document.getElementById('vigResetModal');
+var rn=document.getElementById('vigResetNo');
+if(ra&&rm)ra.addEventListener('click',function(){rm.hidden=false;});
+if(rn&&rm)rn.addEventListener('click',function(){rm.hidden=true;});
+var rg=document.getElementById('vigResetGo');
+if(rg)rg.addEventListener('click',function(){
+var vy=rg.getAttribute('data-vig');
+rmsg('Reiniciando…',true);
+fetch('/api/distribucion/vigencia/limpiar',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':csrfH(),'Accept':'application/json'},body:JSON.stringify({vigencia:vy})}).then(function(r){return r.json();}).then(function(d){
+if(d&&d.ok){rmsg('Vigencia '+vy+' reiniciada.',true);setTimeout(function(){window.location.reload();},900);return;}
+rmsg((d&&(d.error))||'No se pudo reiniciar.',false);
+}).catch(function(){rmsg('Error de red.',false);});
+});
 }catch(e){}})();</script>`;
 
 // Campana: marcar notificación leída al abrirla + marcar todas leídas.
@@ -985,13 +1055,26 @@ if(x.d&&x.d.ok){rmsg(x.d.msg,true);setTimeout(function(){window.location.reload(
 rmsg((x.d&&(x.d.error))||'No se pudo cargar.',false);
 }).catch(function(){rmsg('Error de red.',false);});
 });
+var ask=document.getElementById('reglaGoAsk');
+var modal=document.getElementById('reglaConfirmModal');
+var no=document.getElementById('reglaGoNo');
+function closeReglaModal(){if(modal)modal.hidden=true;}
+if(ask)ask.addEventListener('click',function(){
+var t=document.getElementById('reglaTotalMun');
+var v=t?t.value.trim():'';
+if(!/^\d+(\.\d{1,2})?$/.test(v)||Number(v)<=0){rmsg('Indica el valor total (> 0, máx. 2 decimales).',false);return;}
+var pv=document.getElementById('reglaConfirmTotal');if(pv)pv.textContent=Number(v).toLocaleString('en-US',{maximumFractionDigits:2});
+if(modal)modal.hidden=false;
+});
+if(no)no.addEventListener('click',function(){closeReglaModal();});
 var go=document.getElementById('reglaGo');
 if(go)go.addEventListener('click',function(){
-var totales={};document.querySelectorAll('[id^="reglaTot_"]').forEach(function(el){if(el.value.trim()!=='')totales[el.id.slice(9)]=el.value.trim();});
-var payload={vigencia:val('reglaVig2'),numero:val('reglaNum'),tipo:val('reglaTipo'),totales:totales};
+var t=document.getElementById('reglaTotalMun');
+var v=t?t.value.trim():'';
+var payload={vigencia:val('reglaVig2'),numero:1,tipo:1,total:v};
 rmsg('Asignando…',true);
-fetch('/api/regla-oro/asignar',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':csrfH(),'Accept':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
-if(x.d&&x.d.ok){rmsg(x.d.msg,true);return;}
+fetch('/api/regla-oro/asignar-total',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':csrfH(),'Accept':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+if(x.d&&x.d.ok){closeReglaModal();rmsg(x.d.msg,true);setTimeout(function(){window.location.reload();},900);return;}
 rmsg((x.d&&(x.d.error))||'No se pudo asignar.',false);
 }).catch(function(){rmsg('Error de red.',false);});
 });
@@ -1134,7 +1217,7 @@ b.disabled=false;
 if(window.fncAlive){window.fncAlive().then(function(ok){if(ok){go();}else{b.disabled=false;window.location.href='/login?reason=inactivity';}});}else{go();}
 });
 box.appendChild(b);
-if(t.formUrl){var a=document.createElement('a');a.textContent='Ir al formulario';a.className='btn-logout';a.style.textDecoration='none';a.style.display='inline-block';a.style.padding='10px 20px';a.href=t.formUrl;box.appendChild(a);}
+if(t.formUrl){var a=document.createElement('a');a.textContent='Ir al formulario';a.className='btn-logout';a.href=t.formUrl;box.appendChild(a);}
 }
 function load(kind,id){
 body.innerHTML='<p>Cargando…</p>';open();
