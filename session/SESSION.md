@@ -77,6 +77,10 @@ Fuente: `G:\Open\infra-fnc/skills` (`INDEX.md`). Fuera: `fnc-url-masking`
 - **Fase 1** ✅ 2026-10-08 — Notificaciones: `006_outbox.sql` + `src/notify.js` (encolar transaccional,
 worker `setInterval` con `SKIP LOCKED`, scheduler vencimientos 3-1-0, campana por rol
 `GET|PUT /api/notificaciones`, email Resend, Discord helper fire-and-forget).
+- Datos reales (dev): `db/seed_datos_reales.js` (idempotente) inyecta 2026 desde los xlsx
+oficiales — montos 1,000,000,003/967,151,728 y 500,000,000/471,018,310 + 38 CREADAS
+(Σ exacta); vacía 2027; migrate.js sembró los mismos valores. Cifras: valor EXACTO
+guardado, centavos solo si existen, sin `.00` de relleno ni redondeo (E2E punta a punta).
 - **Fase 2** ✅ 2026-10-08 — Monitoreo (`fnc-monitoring`): `/api/health|/ready` públicos,
 `maestro.borrar`→Discord, `infra/backup-r2.ps1` (pg_dump|gzip|AES-256-CBC .NET nativo,
 formato `openssl enc` compatible, round-trip hash) + retención R2 30d. Kuma apunta a
