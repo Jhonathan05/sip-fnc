@@ -1104,6 +1104,18 @@ describe('fase 4: licencias + habeas + auth-limit', () => {
     assert.ok(css.includes('scrollbar-gutter: stable'), 'sin salto por scrollbar');
     assert.ok(css.includes('font-display: optional'), 'Inter sin intercambio tardío');
   });
+  it('botones modernos: sistema coherente sin estilos duplicados', async () => {
+    const css = await (await fetchJ('/css/app.css')).text();
+    assert.ok(css.includes('.btn-primary:hover'), 'hover primario');
+    assert.ok(css.includes('button:focus-visible'), 'anillo de foco visible');
+    assert.ok(css.includes('.btn-primary:disabled'), 'estado deshabilitado');
+    assert.ok(css.includes('.stepper-button[data-crud-del]:hover'), 'borrar con acento peligro');
+    await loginAsAdmin();
+    const tok = mods.tokenFor('/distribucion/actualizaciones/distribuciones').slice(3);
+    const yn = new Date().getFullYear();
+    const html = await (await fetchJ(`/v/rs?f=${tok}&tab=mpio&vigencia=${yn}`)).text();
+    assert.ok(!html.includes('padding:10px 20px'), 'sin paddings inline duplicados');
+  });
 });
 
 describe('rate-limit + actividad + perfil + logout', () => {

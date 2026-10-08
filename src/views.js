@@ -332,14 +332,14 @@ function reglaOroView(form, fnc) {
   const circRows = Object.entries(porCirc).map(([c, x]) =>
     `<tr><td>${esc(c)}</td><td class="tnum">${x.n}</td><td class="tnum">${(x.suma * 100).toFixed(2)}%</td></tr>`).join('');
   const verCtl = `<div class="skl-bar"><label class="fld"><span>Ver vigencia</span><input id="reglaVer" type="number" value="${vy}" min="2000" max="2100"></label>
-<button class="btn-logout" id="reglaVerGo" type="button" style="padding:10px 20px">Ver</button>
-<span style="flex:1"></span><button class="btn-logout" id="reglaPrint" type="button" style="padding:10px 20px">Imprimir</button>
-<a class="btn-logout" style="text-decoration:none;display:inline-block;padding:10px 20px" href="/api/regla-oro/xlsx?vigencia=${vy}">Excel</a>
-<a class="btn-logout" style="text-decoration:none;display:inline-block;padding:10px 20px" href="/api/regla-oro/pdf?vigencia=${vy}">PDF</a></div>`;
+    <button class="btn-logout" id="reglaVerGo" type="button">Ver</button>
+<span style="flex:1"></span><button class="btn-logout" id="reglaPrint" type="button">Imprimir</button>
+<a class="btn-logout" href="/api/regla-oro/xlsx?vigencia=${vy}">Excel</a>
+<a class="btn-logout" href="/api/regla-oro/pdf?vigencia=${vy}">PDF</a></div>`;
   const cmpForm = `<div class="skl-bar"><label class="fld"><span>Vigencia A</span><input id="reglaCmpA" type="number" value="${vy}" min="2000" max="2100"></label>
 <label class="fld"><span>Vigencia B</span><input id="reglaCmpB" type="number" value="${vy + 1}" min="2000" max="2100"></label>
 <label class="fld"><span>Vigencia C (opcional)</span><input id="reglaCmpC" type="number" placeholder="—" min="2000" max="2100"></label>
-<button class="btn-logout" id="reglaCmpGo" type="button" style="padding:10px 20px">Comparar</button></div><div id="reglaCmpOut"></div>`;
+<button class="btn-logout" id="reglaCmpGo" type="button">Comparar</button></div><div id="reglaCmpOut"></div>`;
   return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)} <span class="badge">vigencia ${vy}</span></h2>
 <p><span class="badge">solo histórico</span></p>${verCtl}
 <h3 class="rail-sub">Porcentajes por municipio (histórico)</h3>
@@ -488,7 +488,7 @@ function informePage(hit, query, data, inf) {
   if (query.municipio) fTxt.push(`Municipio: ${query.municipio}`);
   return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)}</h2>
 <div class="print-only"><strong>SIP-FNC · Sistema de Información de Proyectos</strong><br>${esc(leaf.title)} · ${esc(fTxt.length ? fTxt.join(' · ') : 'Sin filtros')} · ${esc(fmtFechaHora(new Date()))} · ${data.rows.length} filas</div>
-<form method="get" action=""><div class="skl-bar">${flds}<button class="btn-primary" type="submit" style="margin-top:0">Filtrar</button><a class="btn-logout" style="text-decoration:none;display:inline-block;padding:10px 20px" href="${exp}">Exportar Excel</a><button class="btn-logout" id="btnImprimir" type="button" style="padding:10px 20px">Imprimir</button></div></form>
+<form method="get" action=""><div class="skl-bar">${flds}<button class="btn-primary" type="submit" style="margin-top:0">Filtrar</button><a class="btn-logout" href="${exp}">Exportar Excel</a><button class="btn-logout" id="btnImprimir" type="button">Imprimir</button></div></form>
 <table class="skl-table"><thead><tr>${head}</tr></thead><tbody>${bodyRows || `<tr><td colspan="${data.cols.length}">Sin resultados.</td></tr>`}</tbody></table>
 <p><span class="badge tnum">${data.rows.length} filas</span></p></div>`;
 }
@@ -1186,7 +1186,7 @@ b.disabled=false;
 if(window.fncAlive){window.fncAlive().then(function(ok){if(ok){go();}else{b.disabled=false;window.location.href='/login?reason=inactivity';}});}else{go();}
 });
 box.appendChild(b);
-if(t.formUrl){var a=document.createElement('a');a.textContent='Ir al formulario';a.className='btn-logout';a.style.textDecoration='none';a.style.display='inline-block';a.style.padding='10px 20px';a.href=t.formUrl;box.appendChild(a);}
+if(t.formUrl){var a=document.createElement('a');a.textContent='Ir al formulario';a.className='btn-logout';a.href=t.formUrl;box.appendChild(a);}
 }
 function load(kind,id){
 body.innerHTML='<p>Cargando…</p>';open();
