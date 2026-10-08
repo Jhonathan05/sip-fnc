@@ -52,6 +52,10 @@ Carga con vigencia implícita (hidden) + condicionales por etapa (usa `form.doc`
 (`.dist-title`); Ver con `f` oculto + action limpio; pasos solo en Carga;
 paso 2 con 1 input (total municipios) + modal doble validación +
 `POST /api/regla-oro/asignar-total` (reparto exacto en centavos, Σ = total).
+- Distribuciones diseño (dev, sin versionar): tabs conectadas, pills de vigencia
+con primario, membrete summary pill, stepper en panel, tabla con thead
+enfatizado + hover + subtotales/TOTAL separados, monto en barra, secciones
+con acento y formularios en panel (clase `dist-view`; formato xlsx intacto).
 - Distribuciones unificada (`?tab=` carga/mpio/circ, default mpio; hoja mpio fuera del nav, legacy → 302 a `tab=mpio`); tokens `/v/` congelados (nuevas páginas AL FINAL).
 - Tablas documento calcadas de `docs/formatos/distribucion por {municipio,circunscripcion}.xlsx`: columnas MUNICIPIO|SICA 2005|DISTRIBUCIÓN (%×monto)|ASIGNACIONES CREADAS|SALDO (dist−creadas); fila `Circunscripción X` tras cada bloque + TOTAL; sin `$` (comas); centavos exactos (aritmética en enteros); en tab circ, DISTRIBUCIÓN/SALDO en blanco por municipio. Membrete 4 líneas + huecos `______` para N° distribución/acta (sin fuente en BD aún).
 - Tablas documento SIN paginación (`PAGER_JS` exime `.doc-table`) y editables en línea (botón ✎): CREADAS por fila (tab mpio) + línea de monto global por tab (PUT/POST `distribuciones`); tarjetas CRUD eliminadas. Nuevo `PUT /api/distribucion-municipio/valor` (1 fila→UPDATE, 0→INSERT 1/1, N→409 ir a Carga). Consultor sin botones (server-rendered).

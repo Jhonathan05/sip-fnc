@@ -553,7 +553,7 @@ function docHead(form) {
   const msg = form.msg ? (form.msgOk
     ? `<p><span class="badge">${esc(form.msg)}</span></p>`
     : `<div class="alert-err">${esc(form.msg)}</div>`) : '';
-  return `<div class="card form-slot"><div class="dist-title"><h2>Distribuciones <span class="badge">vigencia ${vy}</span></h2>${sel}</div>${membrete}${msg}${distTabs(form)}`;
+  return `<div class="card form-slot dist-view"><div class="dist-title"><h2>Distribuciones <span class="badge">vigencia ${vy}</span></h2>${sel}</div>${membrete}${msg}${distTabs(form)}`;
 }
 
 // Une regla (%) + valores por municipio, agrupado por circunscripción.

@@ -1190,10 +1190,12 @@ button.hdr-pop-all {
 }
 
 .cfg-tab.active {
-    background: var(--azul-soft);
-    color: var(--azul-ink);
+    background: var(--bg-card);
+    color: var(--text-dark);
     font-weight: 600;
     border-color: var(--border-light);
+    margin-bottom: -11px;
+    padding-bottom: 18px;
 }
 
 .cfg-tab.cfg-disabled {
@@ -1235,23 +1237,97 @@ button.hdr-pop-all {
     padding-bottom: 2px;
 }
 
+.vig-shortcuts .cfg-tab {
+    border: 1px solid var(--border-light);
+    border-radius: 9999px;
+    padding: 4px 14px;
+    margin: 0;
+    background: var(--bg-card);
+    text-decoration: none;
+}
+
+.vig-shortcuts a.cfg-tab:hover {
+    background: var(--azul-soft);
+    color: var(--text-dark);
+}
+
+.vig-shortcuts .cfg-tab.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+    margin: 0;
+    padding: 4px 14px;
+}
+
+.vig-row input[name="vigencia"] {
+    width: 9ch;
+}
+
 .doc-membrete {
-    margin: 8px 0 4px;
+    margin: 10px 0 4px;
 }
 
 .doc-membrete > summary {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     cursor: pointer;
-    font-size: var(--fs-table);
+    font-size: var(--fs-label);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
     font-weight: 600;
+    color: var(--text-muted);
+    padding: 6px 14px;
+    border: 1px solid var(--border-light);
+    border-radius: 9999px;
+    background: var(--bg-card);
+}
+
+.doc-membrete > summary::-webkit-details-marker {
+    display: none;
+}
+
+.doc-membrete > summary::after {
+    content: '▾';
+    font-size: .85em;
+    transition: transform 150ms ease;
+}
+
+.doc-membrete[open] > summary::after {
+    transform: rotate(180deg);
+}
+
+.doc-membrete > summary:hover {
+    background: var(--azul-soft);
+    color: var(--text-dark);
+}
+
+.doc-membrete .doc-head {
+    margin-top: 10px;
+    padding: 12px 16px;
+    background: var(--bg-main);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
 }
 
 .doc-pasos {
-    margin: 4px 0 12px 20px;
-    padding: 0;
+    list-style: none;
+    margin: 12px 0;
+    padding: 12px 16px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
     font-size: var(--fs-table);
+    background: var(--bg-main);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+}
+
+.doc-pasos li {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
 }
 
 .doc-pasos li.ok {
@@ -1260,6 +1336,10 @@ button.hdr-pop-all {
 
 .doc-pasos li.todo {
     color: var(--text-muted);
+}
+
+.doc-pasos li.todo a {
+    font-weight: 600;
 }
 
 /* ── Tablas documento Distribución (formato .xps) ── */
@@ -1288,13 +1368,15 @@ button.hdr-pop-all {
 .doc-table th,
 .doc-table td {
     border: 1px solid var(--text-muted);
-    padding: 4px 8px;
+    padding: 6px 10px;
     vertical-align: top;
 }
 
 .doc-table thead th {
-    font-weight: 400;
+    font-weight: 600;
     text-align: left;
+    background: var(--bg-main);
+    white-space: nowrap;
 }
 
 .doc-table td.n,
@@ -1302,12 +1384,21 @@ button.hdr-pop-all {
     text-align: right;
 }
 
+.doc-table tbody tr:hover td {
+    background: var(--azul-soft);
+}
+
 .doc-table .doc-sub td {
     font-size: 1.06em;
+    background: var(--bg-main);
+    border-top: 2px solid var(--text-muted);
 }
 
 .doc-table .doc-tot td {
     font-size: 1.12em;
+    background: var(--bg-main);
+    border-top: 2px solid var(--text-muted);
+    border-bottom: 2px solid var(--text-muted);
 }
 
 .doc-blank {
@@ -1321,6 +1412,16 @@ button.hdr-pop-all {
     padding: 1px 6px;
     margin-left: 6px;
     cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    color: var(--text-muted);
+}
+
+.doc-edit:hover {
+    color: var(--azul-ink);
+    border-color: var(--text-muted);
+    background: var(--azul-soft);
 }
 
 .doc-input {
@@ -1330,8 +1431,46 @@ button.hdr-pop-all {
 }
 
 .doc-monto {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
     font-size: var(--fs-table);
-    margin: 8px 0 4px;
+    margin: 12px 0;
+    padding: 10px 16px;
+    background: rgba(126, 90, 54, .08);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+}
+
+.doc-monto strong {
+    font-size: 1.1em;
+}
+
+[data-theme="dark"] .doc-monto {
+    background: rgba(216, 164, 124, .16);
+}
+
+/* Secciones de la vista unificada: encabezados con acento y paneles. */
+.dist-view .rail-sub {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.dist-view .rail-sub::before {
+    content: '';
+    width: 4px;
+    align-self: stretch;
+    background: var(--primary);
+    border-radius: 2px;
+}
+
+.dist-view .skl-bar {
+    background: var(--bg-main);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    padding: 14px 16px;
 }
 
 @media print {
