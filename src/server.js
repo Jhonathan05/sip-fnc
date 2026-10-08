@@ -807,7 +807,7 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
       if (hit.sub.kind === 'informe') return res.redirect(tokenFor(hit.leaf.path));
       form = hit;
       form.perms = { w: canWrite(fnc), d: canDelete(fnc) };
-      form.tab = ['carga', 'mpio', 'circ'].includes(req.query.tab) ? req.query.tab : 'mpio';
+      form.tab = ['carga', 'mpio', 'circ', 'hist'].includes(req.query.tab) ? req.query.tab : 'mpio';
       form.msg = String(req.query.msg || '');
       form.msgOk = req.query.ok === '1';
       // Maestros con CRUD real: precarga filas + catálogos para el renderer.
@@ -856,6 +856,11 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
           hayMontos: mm.rows.length > 0,
           hayValores: vv.rows.length > 0,
         };
+        // Tab Carga (paso 2): totales por circunscripción para asignar valores.
+        if (hit.leaf.crud === 'distribuciones' && form.tab === 'carga') {
+          const cc = await pool2.query('SELECT codigo, nombre FROM circunscripciones ORDER BY nombre');
+          form.circs = cc.rows;
+        }
       }
       // Regla de Oro (2 pasos): precarga regla + circunscripciones para la vigencia.
       if (hit.leaf.reglaOro) {

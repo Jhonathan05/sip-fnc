@@ -9,7 +9,7 @@ informes contables por periodos — Comité de Cafeteros del Tolima.
 
 ## Stack (PERFIL rendimiento, acta v2 en docs/analisis.md)
 Node 22 + Express 4 + Vanilla + Postgres 16 + `pg` + `multer` + `sharp` + `exceljs`.
-Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (74 tests, 13 suites).
+Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (78 tests, 13 suites).
 
 ## Puesta en marcha
 ```powershell
@@ -43,6 +43,11 @@ Flip KC staging: registrar `sip-fnc-client` en `fnc-realm` + `AUTH_PROVIDER=keyc
 - SMTP: solo Resend, API key cifrada en BD, módulo Email solo admin.
 - Skills en `G:\Open\infra-fnc/skills` (sede canónica; `appweb-skills-fnc` congelado), nunca por proyecto. Catálogo: `skills/INDEX.md`.
 - Principios Modo B en cada cierre: 1) nada KC a medias, 2) sesión por contrato, 3) re-correr e2e al flipear.
+- Distribuciones UX (dev, sin versionar): sin breadcrumb; membrete `<details>` colapsado;
+vigencia con 3 atajos (YN-2/YN-1/YN+1) + input año; stepper de pasos por vigencia con
+CTA; tab Histórico nuevo (circ-anterior apunta allí; Carga sin sección histórica);
+Carga con vigencia implícita (hidden) + condicionales por etapa (usa `form.doc`,
+`circs` cargados para el tab); `distTabUrl(vy,tab)`.
 - Distribuciones unificada (`?tab=` carga/mpio/circ, default mpio; hoja mpio fuera del nav, legacy → 302 a `tab=mpio`); tokens `/v/` congelados (nuevas páginas AL FINAL).
 - Tablas documento calcadas de `docs/formatos/distribucion por {municipio,circunscripcion}.xlsx`: columnas MUNICIPIO|SICA 2005|DISTRIBUCIÓN (%×monto)|ASIGNACIONES CREADAS|SALDO (dist−creadas); fila `Circunscripción X` tras cada bloque + TOTAL; sin `$` (comas); centavos exactos (aritmética en enteros); en tab circ, DISTRIBUCIÓN/SALDO en blanco por municipio. Membrete 4 líneas + huecos `______` para N° distribución/acta (sin fuente en BD aún).
 - Tablas documento SIN paginación (`PAGER_JS` exime `.doc-table`) y editables en línea (botón ✎): CREADAS por fila (tab mpio) + línea de monto global por tab (PUT/POST `distribuciones`); tarjetas CRUD eliminadas. Nuevo `PUT /api/distribucion-municipio/valor` (1 fila→UPDATE, 0→INSERT 1/1, N→409 ir a Carga). Consultor sin botones (server-rendered).

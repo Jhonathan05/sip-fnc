@@ -518,11 +518,15 @@ function configTabs(sub, leaf, role) {
 }
 
 // Tabs de la vista unificada Distribuciones (server-rendered, como configTabs).
+function distTabUrl(vy, tab) {
+  const tok = tokenFor('/distribucion/actualizaciones/distribuciones').replace('/v/', '');
+  return `${tokenFor('/dashboard')}?f=${encodeURIComponent(tok)}&tab=${tab}&vigencia=${vy}`;
+}
 function distTabs(form) {
   const tab = form.tab || 'mpio';
   const tok = tokenFor('/distribucion/actualizaciones/distribuciones').replace('/v/', '');
   const base = `${tokenFor('/dashboard')}?f=${encodeURIComponent(tok)}&vigencia=${form.vigSel}`;
-  const defs = [['carga', 'Carga'], ['mpio', 'Por municipio'], ['circ', 'Por circunscripción']];
+  const defs = [['carga', 'Carga'], ['mpio', 'Por municipio'], ['circ', 'Por circunscripción'], ['hist', 'Histórico']];
   const items = defs.map(([k, t]) => (tab === k
     ? `<span class="cfg-tab active">${t}</span>`
     : `<a class="cfg-tab" href="${base}&tab=${k}">${t}</a>`)).join('');
@@ -533,21 +537,24 @@ function distTabs(form) {
 // anterior: histórico año+tipo con sobrante y acumulado · actual: checklist +
 // tabla · siguiente: % por municipio. DISTRIBUCIÓN = % × monto global,
 // CREADAS = valores cargados, SALDO = DISTRIBUCIÓN − CREADAS, en centavos exactos.
-// Encabezado compartido de la vista unificada: breadcrumb + h2 + membrete +
-// selector de vigencia + banner msg + tab bar. Abre la card (cierra el llamador).
+// Encabezado compartido de la vista unificada: h2 + membrete colapsable +
+// vigencia (3 atajos + input) + banner msg + tab bar. Abre la card (cierra el llamador).
+// Sin breadcrumb a rutas superiores.
 function docHead(form) {
-  const { sub, mod } = form;
   const vy = form.vigSel;
+  const yNow = new Date().getFullYear();
   const leafTok = tokenFor('/distribucion/actualizaciones/distribuciones').replace('/v/', '');
   const goUrl = `${tokenFor('/dashboard')}?f=${encodeURIComponent(leafTok)}`;
-  const opts = (form.vigencias || [vy]).map((y) =>
-    `<option value="${y}"${y === vy ? ' selected' : ''}>${y}</option>`).join('');
-  const sel = `<form method="get" action="${goUrl}"><input type="hidden" name="tab" value="${form.tab || 'mpio'}"><div class="skl-bar"><label class="fld"><span>Vigencia</span><select name="vigencia">${opts}</select></label><button class="btn-primary" type="submit" style="margin-top:0">Ver</button></div></form>`;
-  const membrete = `<div class="doc-head"><strong>FEDERACION NACIONAL DE CAFETEROS DE COLOMBIA - COMITE TOLIMA</strong><br>LEY 863 DE 2003 TRANSFERENCIA ${vy}<br>OBRAS DE INFRAESTRUCTURA<br>DISTRIBUCION No. <span class="doc-blank">______</span> SEGÚN ACTA <span class="doc-blank">______</span> DE <span class="doc-blank">______</span></div>`;
+  const curTab = form.tab || 'mpio';
+  const shorts = [yNow - 2, yNow - 1, yNow + 1].map((y) => (y === vy
+    ? `<span class="cfg-tab active">${y}</span>`
+    : `<a class="cfg-tab" href="${goUrl}&tab=${curTab}&vigencia=${y}">${y}</a>`)).join('');
+  const sel = `<div class="vig-row"><div class="vig-shortcuts" role="group" aria-label="Vigencias">${shorts}</div><form method="get" action="${goUrl}"><input type="hidden" name="tab" value="${curTab}"><label class="fld"><span>Año</span><input name="vigencia" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="${vy}" aria-label="Año de vigencia"></label><button class="btn-primary" type="submit" style="margin-top:0">Ver</button></form></div>`;
+  const membrete = `<details class="doc-membrete"><summary>FEDERACION NACIONAL DE CAFETEROS DE COLOMBIA - COMITE TOLIMA</summary><div class="doc-head"><strong>FEDERACION NACIONAL DE CAFETEROS DE COLOMBIA - COMITE TOLIMA</strong><br>LEY 863 DE 2003 TRANSFERENCIA ${vy}<br>OBRAS DE INFRAESTRUCTURA<br>DISTRIBUCION No. <span class="doc-blank">______</span> SEGÚN ACTA <span class="doc-blank">______</span> DE <span class="doc-blank">______</span></div></details>`;
   const msg = form.msg ? (form.msgOk
     ? `<p><span class="badge">${esc(form.msg)}</span></p>`
     : `<div class="alert-err">${esc(form.msg)}</div>`) : '';
-  return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>Distribuciones <span class="badge">vigencia ${vy}</span></h2>${membrete}${sel}${msg}${distTabs(form)}`;
+  return `<div class="card form-slot"><h2>Distribuciones <span class="badge">vigencia ${vy}</span></h2>${membrete}${sel}${msg}${distTabs(form)}`;
 }
 
 // Une regla (%) + valores por municipio, agrupado por circunscripción.
@@ -657,20 +664,26 @@ function cargaUrl(vy) {
 }
 
 // Formularios de carga (paso 1 + paso 2) reutilizados en el tab Carga.
-// (En la hoja Regla de Oro solo queda la vista histórica.)
+// La vigencia es la seleccionada arriba (inputs ocultos, sin re-selección).
+// Condicionales por etapa con datos reales: paso 1 muestra estado + reemplazo;
+// paso 2 requiere regla y resume los valores ya asignados.
 function reglaCargaForms(form) {
   const vy = form.vigSel;
   const canW = form.perms && form.perms.w;
+  const d = form.doc || {};
+  const nRegla = (d.regla || []).length;
+  const vals = d.valores || [];
+  const mpioUrl = distTabUrl(vy, 'mpio');
   const tots = (form.circs || []).map((c) =>
     `<label class="fld"><span>${esc(c.nombre)}</span><input id="reglaTot_${esc(c.codigo)}" type="number" min="0" step="0.01" placeholder="0"></label>`).join('');
-  const upForm = canW ? `<div class="skl-bar"><label class="fld"><span>Vigencia</span><input id="reglaVig" type="number" value="${vy}" min="2000" max="2100"></label>
+  const upForm = !canW ? '' : `${d.hayRegla ? `<p><span class="badge">Regla ${vy} cargada: ${nRegla} municipios.</span> Para reemplazarla vuelve a subir el archivo.</p>` : ''}<div class="skl-bar"><input id="reglaVig" type="hidden" value="${vy}">
 <label class="fld"><span>Archivo xlsx (REGLA DE ORO)</span><input id="reglaFile" type="file" accept=".xlsx"></label>
-<button class="btn-primary" id="reglaUp" type="button" style="margin-top:0">Paso 1 · Cargar regla</button></div>` : '';
+<button class="btn-primary" id="reglaUp" type="button" style="margin-top:0">Paso 1 · ${d.hayRegla ? 'Reemplazar regla' : 'Cargar regla'}</button></div>`;
   const goForm = !canW ? `<p><span class="badge">solo lectura</span></p>`
-    : !(form.reglaRows || []).length ? `<p><span class="badge badge-warn">Completa el paso 1 para la vigencia ${vy}.</span></p>`
-    : `<div class="skl-bar"><label class="fld"><span>Número</span><input id="reglaNum" type="number" value="1" min="0"></label>
+    : !d.hayRegla ? `<p><span class="badge badge-warn">Completa el paso 1 para la vigencia ${vy}.</span></p>`
+    : `${d.hayValores ? `<p><span class="badge">Valores ${vy}: ${vals.length} municipios.</span> <a href="${mpioUrl}">Ver en Por municipio</a></p>` : ''}<div class="skl-bar"><label class="fld"><span>Número</span><input id="reglaNum" type="number" value="1" min="0"></label>
 <label class="fld"><span>Tipo</span><input id="reglaTipo" type="number" value="1" min="0"></label>
-<label class="fld"><span>Vigencia</span><input id="reglaVig2" type="number" value="${vy}" min="2000" max="2100"></label>${tots}
+<input id="reglaVig2" type="hidden" value="${vy}">${tots}
 <button class="btn-primary" id="reglaGo" type="button" style="margin-top:0">Paso 2 · Asignar valores</button></div>`;
   return { upForm, goForm };
 }
@@ -698,7 +711,27 @@ function docMontoLine(form, kind) {
   return `<p class="doc-monto" id="${cellId}-line">Monto global · ${label} ${vy}: <strong id="${cellId}"><span class="doc-val">${valHtml}</span></strong>${btn}</p><p id="docEditMsg" class="drawer-msg"></p>`;
 }
 
-// Vista unificada Distribuciones: tabs carga/mpio/circ en una sola card.
+// Pasos para completar la vigencia (1 regla → 2 monto → 3 valores),
+// con estado real y CTA al pendiente. Se muestra en los tabs de datos.
+function docPasos(form) {
+  const vy = form.vigSel;
+  const d = form.doc || {};
+  const nRegla = (d.regla || []).length;
+  const nVal = (d.valores || []).length;
+  const steps = [
+    { ok: !!d.hayRegla, t: `1 · Regla de Oro ${vy}${d.hayRegla ? ` (${nRegla} municipios)` : ''}`, href: distTabUrl(vy, 'carga') },
+    { ok: !!d.hayMontos, t: '2 · Monto global', href: `${distTabUrl(vy, 'mpio')}#docmonto-municipio-${vy}-line` },
+    { ok: !!d.hayValores, t: `3 · Valores individuales${d.hayValores ? ` (${nVal} municipios)` : ''}`, href: distTabUrl(vy, 'carga') },
+  ];
+  const done = steps.filter((s) => s.ok).length;
+  const items = steps.map((s) => `<li class="${s.ok ? 'ok' : 'todo'}">${s.ok ? '✓' : '○'} ${esc(s.t)}${s.ok ? '' : ` — <a href="${s.href}">completar</a>`}</li>`).join('');
+  const badge = done === steps.length
+    ? '<span class="badge">Vigencia completa ✓</span>'
+    : `<span class="badge badge-warn">Faltan ${steps.length - done} de ${steps.length} pasos</span>`;
+  return `<h3 class="rail-sub">Pasos vigencia ${vy} ${badge}</h3><ol class="doc-pasos">${items}</ol>`;
+}
+
+// Vista unificada Distribuciones: tabs carga/mpio/circ/hist en una sola card.
 // Sin paginación en las tablas documento; valores editables en línea
 // (botón ✎ por fila de municipio y en la línea de monto global).
 function distribucionesView(form, fnc) {
@@ -708,14 +741,17 @@ function distribucionesView(form, fnc) {
   const head = docHead(form);
   if (tab === 'carga') {
     const { upForm, goForm } = reglaCargaForms(form);
-    return `${head}<h3 class="rail-sub">Carga por vigencia</h3><p id="reglaMsg" class="drawer-msg"></p>${upForm}${goForm}<h3 class="rail-sub">Consulta histórica</h3>${docHistorial(form)}</div>`;
+    return `${head}<h3 class="rail-sub">Carga por vigencia</h3><p id="reglaMsg" class="drawer-msg"></p>${upForm}${goForm}</div>`;
+  }
+  if (tab === 'hist') {
+    return `${head}${docHistorial(form)}</div>`;
   }
   if (tab === 'mpio') {
     const dOpts = { total: docTotalFor(form, 'municipio'), circ: false, edit: canW, ano: vy };
-    return `${head}${docMontoLine(form, 'municipio')}<h3 class="rail-sub">Por municipio</h3>${docTablaFrom(docDatos(form), dOpts)}${docFoot()}</div>`;
+    return `${head}${docPasos(form)}${docMontoLine(form, 'municipio')}<h3 class="rail-sub">Por municipio</h3>${docTablaFrom(docDatos(form), dOpts)}${docFoot()}</div>`;
   }
   const cOpts = { total: docTotalFor(form, 'circunscripcion'), circ: true, edit: false, ano: vy };
-  return `${head}${docMontoLine(form, 'circunscripcion')}${docEscenarios(form, cOpts)}${docFoot()}</div>`;
+  return `${head}${docPasos(form)}${docMontoLine(form, 'circunscripcion')}${docEscenarios(form, cOpts)}${docFoot()}</div>`;
 }
 
 // Escenarios de la vista unificada: anterior (histórico), actual (checklist +
@@ -726,7 +762,7 @@ function docEscenarios(form, opts) {
   const yNow = new Date().getFullYear();
   const d = form.doc;
   if (vy < yNow) {
-    return docHistorial(form);
+    return `<h3 class="rail-sub">Vigencias anteriores</h3><p>Consulta el <a href="${distTabUrl(vy, 'hist')}">Histórico + sobrante acumulado</a>.</p>`;
   }
   if (vy > yNow) {
     const hay = (d.regla || []).length > 0;

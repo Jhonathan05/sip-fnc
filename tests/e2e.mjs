@@ -570,14 +570,22 @@ describe('regla de oro (2 pasos)', () => {
 describe('distribuciones: 3 escenarios por vigencia', () => {
   const YN = new Date().getFullYear();
   const tokDist = () => mods.tokenFor('/distribucion/actualizaciones/distribuciones').slice(3);
-  it('anteriores: histórico con sobrante año + acumulado', async () => {
+  it('anteriores: puntero al Histórico desde circ', async () => {
     await loginAsAdmin();
     const y = YN - 1; // migrate seed: municipio_anteriores 480M/410M + circ 295M/260M
     const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=circ&vigencia=${y}`)).text();
+    assert.match(html, /Vigencias anteriores/, 'sección anterior');
+    assert.match(html, /tab=hist[^>]*>Histórico \+ sobrante acumulado</, 'enlace a la pestaña Histórico');
+  });
+  it('hist: tabla histórica con sobrante año + acumulado', async () => {
+    await loginAsAdmin();
+    const y = YN - 1;
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=hist&vigencia=${y}`)).text();
     assert.match(html, /Histórico \+ sobrante acumulado/, 'bloque histórico');
     assert.match(html, /Sobrante acumulado/, 'columna acumulado');
     assert.ok(html.includes('$105.000.000'), 'acumulado 70M+35M=105M');
     assert.ok(html.includes('Sin histórico') === false, 'hay histórico');
+    assert.match(html, /cfg-tab active[^>]*>Histórico/, 'tab hist activo');
   });
   it('actual: checklist + tabla documento', async () => {
     await loginAsAdmin();
@@ -593,21 +601,53 @@ describe('distribuciones: 3 escenarios por vigencia', () => {
     assert.match(html, /Porcentajes vigencia siguiente/, 'bloque siguiente');
     assert.ok(html.includes('Cargar regla'), 'CTA carga');
   });
-  it('tabs Carga/mpio/circ: mpio activo por defecto y orden nuevo', async () => {
+  it('tabs Carga/mpio/circ/hist: mpio activo por defecto y orden nuevo', async () => {
     await loginAsAdmin();
     const html = await (await fetchJ(`/v/rs?f=${tokDist()}&vigencia=${YN}`)).text();
     assert.match(html, /role="tablist" aria-label="Distribuciones"/, 'tab bar presente');
     assert.match(html, /cfg-tab active[^>]*>Por municipio/, 'mpio activo por defecto');
-    assert.ok(html.includes('tab=carga') && html.includes('tab=circ'), 'links a carga y circ');
-    const order = ['>Carga<', '>Por municipio<', '>Por circunscripción<'].map((s) => html.indexOf(s));
-    assert.ok(order[0] < order[1] && order[1] < order[2] && order[0] > -1, `orden tabs: ${order}`);
+    assert.ok(html.includes('tab=carga') && html.includes('tab=circ') && html.includes('tab=hist'), 'links a carga, circ e hist');
+    const order = ['>Carga<', '>Por municipio<', '>Por circunscripción<', '>Histórico<'].map((s) => html.indexOf(s));
+    assert.ok(order[0] < order[1] && order[1] < order[2] && order[2] < order[3] && order[0] > -1, `orden tabs: ${order}`);
     assert.match(html, /FEDERACION NACIONAL DE CAFETEROS DE COLOMBIA - COMITE TOLIMA/, 'membrete línea 1');
-    assert.match(html, new RegExp(`LEY 863 DE 2003 TRANSFERENCIA ${YN}`), 'membrete línea 2');
-    assert.match(html, /OBRAS DE INFRAESTRUCTURA/, 'membrete línea 3');
+    assert.match(html, /<details class="doc-membrete"><summary>/, 'membrete colapsable con flecha');
     assert.match(html, /DISTRIBUCION No\. <span class="doc-blank">______<\/span> SEGÚN ACTA <span class="doc-blank">______<\/span> DE <span class="doc-blank">______<\/span>/, 'línea acta con huecos reservados');
+    assert.ok(!html.includes('Distribución Recursos</a> /'), 'sin breadcrumb superior');
     assert.match(html, /class="doc-foot"/, 'pie documento (fecha+página)');
     const legacy = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=dist&vigencia=${YN}`)).text();
     assert.match(legacy, /cfg-tab active[^>]*>Por municipio/, 'tab=dist viejo cae a mpio');
+  });
+  it('vigencia: 3 atajos + input año (sin re-selección en Carga)', async () => {
+    await loginAsAdmin();
+    const yNow = YN;
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=mpio&vigencia=${yNow}`)).text();
+    for (const y of [yNow - 2, yNow - 1, yNow + 1]) {
+      assert.ok(html.includes(`tab=mpio&vigencia=${y}">${y}<`), `atajo ${y} preserva tab`);
+    }
+    assert.match(html, /<input name="vigencia"[^>]*aria-label="Año de vigencia"/, 'input año');
+    assert.match(html, /<input type="hidden" name="tab" value="mpio">/, 'tab preservado en input');
+    const carga = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=carga&vigencia=${yNow}`)).text();
+    assert.ok(carga.includes('id="reglaVig" type="hidden"'), 'paso 1 con vigencia implícita');
+    assert.ok(!carga.includes('Consulta histórica'), 'histórico vive en su pestaña');
+  });
+  it('carga: condicionales por etapa con datos reales (regla 2031)', async () => {
+    await loginAsAdmin();
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=carga&vigencia=2031`)).text();
+    assert.ok(html.includes('Regla 2031 cargada: 3 municipios.'), 'paso 1 persistente con conteo');
+    assert.ok(html.includes('Paso 1 · Reemplazar regla'), 'reemplazo en vez de carga vacía');
+    assert.ok(html.includes('id="reglaGo"'), 'paso 2 visible con regla');
+    assert.ok(html.includes('id="reglaVig2" type="hidden"'), 'paso 2 con vigencia implícita');
+    assert.ok(html.includes('Valores 2031: 3 municipios.'), 'resumen de valores asignados');
+    assert.ok(html.includes('Ver en Por municipio'), 'CTA a la tabla');
+    assert.ok(html.includes('id="reglaTot_CHAP"') && html.includes('id="reglaTot_FRES"'), 'totales por circunscripción presentes');
+  });
+  it('stepper pasos con estado real y CTA (vigencia actual)', async () => {
+    await loginAsAdmin();
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=mpio&vigencia=${YN}`)).text();
+    assert.match(html, /Pasos vigencia \d+/, 'stepper presente');
+    assert.ok(html.includes('Faltan 2 de 3 pasos'), 'YN: regla y valores pendientes');
+    assert.ok(html.includes('1 · Regla de Oro') && html.includes('tab=carga'), 'paso 1 con CTA a Carga');
+    assert.ok(html.includes('<li class="ok">✓ 2 · Monto global</li>'), 'paso 2 completo sin CTA');
   });
   it('mpio: tabla documento sin paginación ni CRUD, con edición en línea', async () => {
     await loginAsAdmin();
