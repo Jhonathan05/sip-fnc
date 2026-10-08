@@ -591,8 +591,8 @@ function docTotalFor(form, kind) {
 // cada valor se redondea una sola vez a centavos y las sumas son Σ exactas.
 const CENTS = (n) => Math.round((Number(n) || 0) * 100);
 const fmtCents = (c) => (c / 100).toLocaleString('en-US', { maximumFractionDigits: 2 });
-// Montos globales: siempre 2 decimales (muestra los centavos, también .00).
-const fmtMoney2 = (c) => (c / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Montos y cifras: valor EXACTO guardado — centavos visibles solo si existen
+// (124999996250 → "1,249,999,962.5"; entero → sin ".00" de relleno).
 
 // Tablas documento Distribución (formato .xlsx): columnas MUNICIPIO | SICA 2005 |
 // DISTRIBUCIÓN (% × monto global) | ASIGNACIONES CREADAS (valores cargados) |
@@ -706,7 +706,7 @@ function docMontoLine(form, kind) {
   const hit = mm.find((r) => r.tipo === tipo && Number(r.vigencia) === vy)
     || mm.find((r) => String(r.tipo || '').startsWith(kind) && Number(r.vigencia) === vy);
   const cellId = `docmonto-${kind}-${vy}`;
-  const valHtml = hit ? fmtMoney2(CENTS(hit.asignado)) : '—';
+  const valHtml = hit ? fmtCents(CENTS(hit.asignado)) : '—';
   let btn = '';
   if (canW) {
     btn = hit

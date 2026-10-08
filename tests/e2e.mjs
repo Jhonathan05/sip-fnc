@@ -701,7 +701,22 @@ describe('distribuciones: 3 escenarios por vigencia', () => {
     assert.ok(html.includes('data-docedit="monto"'), 'botón editar monto global');
     assert.match(html, /id="docmonto-municipio-\d+-line"/, 'línea monto global municipio');
     assert.match(html, /cfg-tab active[^>]*>Por municipio/, 'tab mpio activo');
-    assert.ok(html.includes('<span class="doc-val">1,250,000,000.00</span>'), 'monto global con centavos (.00 visible)');
+    assert.ok(html.includes('<span class="doc-val">1,250,000,000</span>'), 'monto global exacto sin .00 de relleno');
+  });
+  it('monto global conserva centavos reales de punta a punta', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    const list = await (await fetchJ('/api/maestros/distribuciones')).json();
+    const m = list.find((r) => r.tipo === 'municipio_actual' && Number(r.vigencia) === YN);
+    assert.ok(m, 'monto sembrado');
+    const u = await (await fetchJ(`/api/maestros/distribuciones/${m.id}`, { method: 'PUT', headers: h, body: JSON.stringify({ asignado: 1249999962.5 }) })).json();
+    assert.equal(u.ok, true);
+    let html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=mpio&vigencia=${YN}`)).text();
+    assert.ok(html.includes('<span class="doc-val">1,249,999,962.5</span>'), 'muestra el valor real con centavos, sin redondear');
+    await fetchJ(`/api/maestros/distribuciones/${m.id}`, { method: 'PUT', headers: h, body: JSON.stringify({ asignado: 1250000000 }) });
+    html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=mpio&vigencia=${YN}`)).text();
+    assert.ok(html.includes('<span class="doc-val">1,250,000,000</span>'), 'restaurado');
   });
   it('mpio: botón ✎ por fila cuando hay municipios (vigencia regla 2031)', async () => {
     await loginAsAdmin();
