@@ -27,7 +27,10 @@ const PORT_C = 3102;
 const BASE_C = `http://localhost:${PORT_C}`;
 
 async function fetchJ(pathname, opts = {}) {
-  const headers = { ...(opts.headers || {}) };
+  // Connection: close — el servidor corta keep-alive a los 5s; tras brechas
+  // largas (p. ej. backup 8s) reutilizar pooled RST ECONNRESET. Los navegadores
+  // reintentan GETs idempotentes; aquí evitamos la carrera directamente.
+  const headers = { Connection: 'close', ...(opts.headers || {}) };
   if (jar.cookie) headers.Cookie = jar.cookie;
   const res = await fetch(BASE + pathname, { redirect: 'manual', ...opts, headers });
   const sets = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
@@ -36,7 +39,7 @@ async function fetchJ(pathname, opts = {}) {
 }
 
 async function fetchC(pathname, opts = {}) {
-  const headers = { ...(opts.headers || {}) };
+  const headers = { Connection: 'close', ...(opts.headers || {}) };
   if (jarC.cookie) headers.Cookie = jarC.cookie;
   const res = await fetch(BASE_C + pathname, { redirect: 'manual', ...opts, headers });
   const sets = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
@@ -73,6 +76,9 @@ before(async () => {
       AUTH_PROVIDER: 'mock', MOCK_ROLES: 'admin',
       CLIENT_ROLES: 'admin,coordinador,consultor,analista,auxiliar',
       APP_BASE: BASE, RATE_LIMIT_API_PER_MIN: '1000',
+      RATE_LIMIT_AUTH_PER_MIN: '1000',
+      NOTIFY_MS: '400', NOTIFY_MAX_INTENTOS: '2', NOTIFY_RETRY_MIN: '0',
+      RESEND_API_KEY: '', MAIL_FROM: '', DISCORD_WEBHOOK_URL: '',
       KEYCLOAK_URL: 'http://fnc-keycloak:8080/auth', KEYCLOAK_PUBLIC_URL: 'http://localhost:8080/auth',
       KEYCLOAK_REALM: 'fnc-realm', KEYCLOAK_CLIENT_ID: 'sip-fnc-client', KEYCLOAK_CLIENT_SECRET: 'x',
     },
@@ -91,6 +97,9 @@ before(async () => {
       AUTH_PROVIDER: 'mock', MOCK_ROLES: 'consultor',
       CLIENT_ROLES: 'admin,coordinador,consultor,analista,auxiliar',
       APP_BASE: BASE_C, RATE_LIMIT_API_PER_MIN: '1000',
+      RATE_LIMIT_AUTH_PER_MIN: '1000',
+      NOTIFY_MS: '400', NOTIFY_MAX_INTENTOS: '2', NOTIFY_RETRY_MIN: '0',
+      RESEND_API_KEY: '', MAIL_FROM: '', DISCORD_WEBHOOK_URL: '',
       KEYCLOAK_URL: 'http://fnc-keycloak:8080/auth', KEYCLOAK_PUBLIC_URL: 'http://localhost:8080/auth',
       KEYCLOAK_REALM: 'fnc-realm', KEYCLOAK_CLIENT_ID: 'sip-fnc-client', KEYCLOAK_CLIENT_SECRET: 'x',
     },
@@ -754,6 +763,262 @@ describe('distribuciones: 3 escenarios por vigencia', () => {
     await loginAsAdmin();
     const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=circ&vigencia=2099`)).text();
     assert.match(html, /Sin regla para 2099/, 'marco sin datos');
+  });
+});
+
+describe('notificaciones outbox + campana', () => {
+  const { Pool } = require('pg');
+  const pool = () => new Pool({ connectionString: TEST_DB });
+  async function waitFor(fn, ms = 10000) {
+    const t0 = Date.now();
+    for (;;) {
+      const v = await fn();
+      if (v) return v;
+      if (Date.now() - t0 > ms) throw new Error('timeout esperando condición e2e');
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+  it('scheduler 3-1-0 encola campana idempotente + validar encola discord', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const p = pool();
+    try {
+      const t = await p.query(`INSERT INTO tasks (rol, titulo, fecha_limite, estado) VALUES ('analista','E2E-aviso-3d', CURRENT_DATE + 3, 'pendiente') RETURNING id`);
+      const id = t.rows[0].id;
+      const row = await waitFor(async () => (await p.query(`SELECT * FROM outbox WHERE ref = $1`, [`tarea:${id}:3d`])).rows[0]);
+      assert.equal(row.canal, 'campana');
+      assert.deepEqual(row.roles, ['analista']);
+      assert.match(row.titulo, /vence en 3 días/);
+      await new Promise((r) => setTimeout(r, 1500)); // ~3 ticks × 2 instancias
+      const c = await p.query(`SELECT COUNT(*)::int AS n FROM outbox WHERE ref = $1`, [`tarea:${id}:3d`]);
+      assert.equal(c.rows[0].n, 1, 'sin duplicados entre instancias');
+      const v = await (await fetchJ(`/api/tareas/${id}/validar`, { method: 'POST', headers: { 'x-csrf-token': mt } })).json();
+      assert.equal(v.ok, true);
+      const d = await waitFor(async () => (await p.query(`SELECT * FROM outbox WHERE ref = $1`, [`tarea-validada:${id}`])).rows[0]);
+      assert.equal(d.canal, 'discord');
+      await p.query(`DELETE FROM outbox WHERE ref LIKE $1`, [`tarea:${id}:%`]);
+      await p.query(`DELETE FROM outbox WHERE ref = $1`, [`tarea-validada:${id}`]);
+      await p.query(`DELETE FROM tasks WHERE id = $1`, [id]);
+      const left = await p.query(`SELECT COUNT(*)::int AS n FROM tasks WHERE id = $1`, [id]);
+      assert.equal(left.rows[0].n, 0, 'limpieza verificada');
+    } finally { await p.end(); }
+  });
+  it('campana por rol: ver, leer una, leer todas + badge', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    const p = pool();
+    try {
+      const a = await p.query(`INSERT INTO outbox (canal, titulo, roles, estado) VALUES ('campana','E2E-camp-1','{admin}','enviado') RETURNING id`);
+      const b = await p.query(`INSERT INTO outbox (canal, titulo, roles, estado) VALUES ('campana','E2E-camp-2','{admin}','pendiente') RETURNING id`);
+      await waitFor(async () => (await p.query(`SELECT estado FROM outbox WHERE id = $1`, [b.rows[0].id])).rows[0].estado === 'enviado');
+      let list = await (await fetchJ('/api/notificaciones')).json();
+      assert.ok(list.some((x) => x.titulo === 'E2E-camp-1'), 've campana de su rol');
+      assert.ok(list.some((x) => x.titulo === 'E2E-camp-2'), 'worker entregó pendiente');
+      let html = await (await fetchJ('/dashboard')).text();
+      const bell = html.slice(html.indexOf('hdr-bell'), html.indexOf('hdr-bell') + 1200);
+      assert.ok(bell.includes('aria-label="Campana"'), 'icono campana');
+      assert.match(bell, /hdr-badge[^>]*>2</, 'badge con 2');
+      assert.equal((await fetchJ(`/api/notificaciones/${a.rows[0].id}/leida`, { method: 'PUT', headers: h })).status, 200);
+      list = await (await fetchJ('/api/notificaciones')).json();
+      assert.ok(!list.some((x) => x.id === a.rows[0].id), 'leída sale de la lista');
+      assert.ok(list.some((x) => x.id === b.rows[0].id), 'la otra sigue');
+      assert.equal((await fetchJ(`/api/notificaciones/${a.rows[0].id}/leida`, { method: 'PUT', headers: h })).status, 404, 'releer → 404');
+      assert.equal((await fetchJ('/api/notificaciones/999999/leida', { method: 'PUT', headers: h })).status, 404);
+      assert.equal((await fetchJ('/api/notificaciones/xx/leida', { method: 'PUT', headers: h })).status, 400);
+      const all = await (await fetchJ('/api/notificaciones/leidas', { method: 'PUT', headers: h })).json();
+      assert.equal(all.n, 1);
+      list = await (await fetchJ('/api/notificaciones')).json();
+      assert.equal(list.length, 0, 'bandeja vacía');
+      html = await (await fetchJ('/dashboard')).text();
+      const bell2 = html.slice(html.indexOf('hdr-bell'), html.indexOf('hdr-bell') + 1200);
+      assert.ok(!bell2.includes('hdr-badge'), 'sin badge vacía');
+      assert.ok(bell2.includes('Sin notificaciones.'), 'estado vacío');
+      await p.query(`DELETE FROM outbox WHERE titulo LIKE 'E2E-camp-%'`);
+    } finally { await p.end(); }
+  });
+  it('reintentos → fallido sin SMTP ni webhook', async () => {
+    await loginAsAdmin();
+    const p = pool();
+    try {
+      const e = await p.query(`INSERT INTO outbox (canal, titulo, destino, estado) VALUES ('email','E2E-mail-x','nadie@ejemplo.co','pendiente') RETURNING id`);
+      const d = await p.query(`INSERT INTO outbox (canal, titulo, estado) VALUES ('discord','E2E-disc-x','pendiente') RETURNING id`);
+      const er = await waitFor(async () => {
+        const r = (await p.query(`SELECT estado, intentos FROM outbox WHERE id = $1`, [e.rows[0].id])).rows[0];
+        return r.estado === 'fallido' ? r : null;
+      });
+      assert.equal(er.intentos, 2, 'agota reintentos (NOTIFY_MAX_INTENTOS=2)');
+      const dr = await waitFor(async () => {
+        const r = (await p.query(`SELECT estado FROM outbox WHERE id = $1`, [d.rows[0].id])).rows[0];
+        return r.estado === 'fallido' ? r : null;
+      });
+      assert.ok(dr, 'discord sin webhook → fallido');
+      await p.query(`DELETE FROM outbox WHERE id = ANY($1)`, [[e.rows[0].id, d.rows[0].id]]);
+    } finally { await p.end(); }
+  });
+  it('aislamiento por rol + 401 sin sesión', async () => {
+    await loginAsAdmin();
+    const p = pool();
+    try {
+      await p.query(`INSERT INTO outbox (canal, titulo, roles, estado) VALUES ('campana','E2E-rol-admin','{admin}','enviado')`);
+      await p.query(`INSERT INTO outbox (canal, titulo, roles, estado) VALUES ('campana','E2E-rol-cons','{consultor}','enviado')`);
+      jarC.cookie = '';
+      const lh = await (await fetchC('/login')).text();
+      const ctok = (lh.match(/name="_csrf" value="([^"]+)"/) || [])[1];
+      await fetchC('/auth/mock', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: ctok }) });
+      const clist = await (await fetchC('/api/notificaciones')).json();
+      assert.ok(clist.some((x) => x.titulo === 'E2E-rol-cons'), 'consultor ve las suyas');
+      assert.ok(!clist.some((x) => x.titulo === 'E2E-rol-admin'), 'consultor no ve las de admin');
+      const cd = await (await fetchC('/dashboard')).text();
+      const cmt = (cd.match(/name="csrf-token" content="([^"]+)"/) || [])[1];
+      const adm = await p.query(`SELECT id FROM outbox WHERE titulo = 'E2E-rol-admin'`);
+      assert.equal((await fetchC(`/api/notificaciones/${adm.rows[0].id}/leida`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-csrf-token': cmt } })).status, 404, 'leer ajena → 404');
+      assert.equal((await fetch(`${BASE}/api/notificaciones`)).status, 401, 'sin sesión → 401');
+      await p.query(`DELETE FROM outbox WHERE titulo LIKE 'E2E-rol-%'`);
+    } finally { await p.end(); }
+  });
+});
+
+describe('monitoreo health/ready + backup', () => {
+  it('health liviano y ready con BD (públicos, sin sesión)', async () => {
+    const h = await (await fetch(`${BASE}/api/health`)).json();
+    assert.equal(h.ok, true);
+    assert.match(h.version, /^\d+\.\d+\.\d+$/, 'versión semántica');
+    const r = await (await fetch(`${BASE}/api/ready`)).json();
+    assert.equal(r.ok, true);
+    assert.equal(r.db, true);
+    assert.equal(r.version, h.version);
+  });
+  it('maestro.borrar encola aviso Discord', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    const c = await (await fetchJ('/api/maestros/circunscripciones', { method: 'POST', headers: h, body: JSON.stringify({ codigo: 'E2EDEL', nombre: 'Para borrar' }) })).json();
+    assert.equal(c.ok, true);
+    const d = await (await fetchJ('/api/maestros/circunscripciones/E2EDEL', { method: 'DELETE', headers: h })).json();
+    assert.equal(d.ok, true);
+    const { Pool } = require('pg');
+    const p = new Pool({ connectionString: TEST_DB });
+    try {
+      const row = await p.query(`SELECT canal, estado FROM outbox WHERE ref = 'maestro-borrado:circunscripciones:E2EDEL'`);
+      assert.equal(row.rows.length, 1, 'aviso encolado');
+      assert.equal(row.rows[0].canal, 'discord');
+      await p.query(`DELETE FROM outbox WHERE ref = 'maestro-borrado:circunscripciones:E2EDEL'`);
+    } finally { await p.end(); }
+  });
+  it('backup-r2.ps1 LocalOnly genera .enc verificado (BD de test)', async () => {
+    const out = path.join(fs.mkdtempSync(path.join(require('os').tmpdir(), 'e2e-bak-')));
+    try {
+      const log = execSync(
+        `powershell -NoProfile -ExecutionPolicy Bypass -File "${path.join(ROOT, 'infra', 'backup-r2.ps1')}" -LocalOnly -DbName sip_fnc_test -OutDir "${out}"`,
+        { cwd: ROOT, env: { ...process.env, BACKUP_ENCRYPTION_KEY: 'e2e-local-test-key' }, stdio: 'pipe', timeout: 120000 }).toString();
+      assert.ok(log.includes('OK local'), 'backup verificado con hash');
+      assert.ok(fs.readdirSync(out).some((f) => f.endsWith('.dump.gz.enc')), 'existe .enc');
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('pwa + webpush', () => {
+  const { Pool } = require('pg');
+  const pool = () => new Pool({ connectionString: TEST_DB });
+  const SUB = { endpoint: 'https://fcm.test/e2e-sub-1', p256dh: 'e2e-p256dh-0123456789', auth: 'e2e-auth-1234' };
+  it('manifest dual-UA + sw.js + iconos + layout', async () => {
+    const d = await fetch(`${BASE}/manifest.webmanifest`);
+    assert.equal(d.status, 200);
+    assert.match(d.headers.get('content-type'), /application\/manifest\+json/);
+    assert.ok(d.headers.get('cache-control').includes('no-store'));
+    const dm = await d.json();
+    assert.equal(dm.short_name, 'SIP FNC');
+    assert.ok(Array.isArray(dm.display_override), 'desktop con window-controls-overlay');
+    assert.ok(dm.icons.some((i) => i.sizes === '512x512' && i.purpose === 'maskable'), 'maskable declarado');
+    const m = await (await fetch(`${BASE}/manifest.webmanifest`, { headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_4 like Mac OS X)' } })).json();
+    assert.equal(m.orientation, 'portrait', 'móvil portrait');
+    assert.ok(!m.display_override, 'móvil sin display_override');
+    const sw = await fetch(`${BASE}/sw.js`);
+    assert.equal(sw.status, 200);
+    const swt = await sw.text();
+    assert.ok(swt.includes('notificationclick') && swt.includes('/api/'), 'sw push + bypass api');
+    const ic = await fetch(`${BASE}/icons/app-icon-192.png`);
+    assert.equal(ic.status, 200);
+    assert.match(ic.headers.get('content-type'), /image\/png/);
+    await loginAsAdmin();
+    const html = await (await fetchJ('/dashboard')).text();
+    assert.ok(html.includes('rel="manifest" href="/manifest.webmanifest"'), 'link manifest');
+    assert.ok(html.includes('name="theme-color"'), 'theme-color');
+    assert.ok(html.includes("register('/sw.js')"), 'registro SW');
+    assert.ok(html.includes('beforeinstallprompt'), 'captura install');
+    assert.ok(html.includes('id="pushStatus"') && html.includes('id="pushOnBtn"'), 'consent en perfil');
+  });
+  it('public-key 401 anónimo y 503 sin VAPID', async () => {
+    assert.equal((await fetch(`${BASE}/api/push/public-key`)).status, 401);
+    await loginAsAdmin();
+    const r = await fetchJ('/api/push/public-key');
+    assert.equal(r.status, 503, 'sin VAPID en e2e');
+  });
+  it('subscribe upsert + validación + revoke + consultor', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    const post = (b) => fetchJ('/api/push/subscribe', { method: 'POST', headers: h, body: JSON.stringify(b) });
+    assert.equal((await post({ endpoint: 'x' })).status, 400, 'suscripción inválida 400');
+    assert.equal((await post({ endpoint: SUB.endpoint })).status, 400, 'sin claves 400');
+    assert.equal((await post(SUB)).status, 200);
+    assert.equal((await post(SUB)).status, 200, 're-suscribir idempotente');
+    const p = pool();
+    try {
+      const c = await p.query(`SELECT COUNT(*)::int AS n FROM push_subscriptions WHERE endpoint = $1`, [SUB.endpoint]);
+      assert.equal(c.rows[0].n, 1, 'upsert por endpoint');
+      const me = await p.query(`SELECT fnc_sub FROM push_subscriptions WHERE endpoint = $1`, [SUB.endpoint]);
+      assert.ok(me.rows[0].fnc_sub, 'dueño registrado');
+      jarC.cookie = '';
+      const lh = await (await fetchC('/login')).text();
+      const ctok = (lh.match(/name="_csrf" value="([^"]+)"/) || [])[1];
+      await fetchC('/auth/mock', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: ctok }) });
+      const cd = await (await fetchC('/dashboard')).text();
+      const cmt = (cd.match(/name="csrf-token" content="([^"]+)"/) || [])[1];
+      assert.equal((await fetchC('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': cmt }, body: JSON.stringify({ endpoint: 'https://fcm.test/e2e-cons', p256dh: SUB.p256dh, auth: SUB.auth }) })).status, 200, 'consultor suscribe');
+      await p.query(`DELETE FROM push_subscriptions WHERE endpoint LIKE 'https://fcm.test/%'`);
+    } finally { await p.end(); }
+    assert.equal((await fetchJ('/api/push/subscribe', { method: 'DELETE', headers: h, body: JSON.stringify({ endpoint: SUB.endpoint }) })).status, 404, 'ya revocada → 404');
+  });
+  it('worker push sin VAPID → fallido (purga pendiente de suscripción real)', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    await fetchJ('/api/push/subscribe', { method: 'POST', headers: h, body: JSON.stringify(SUB) });
+    const p = pool();
+    try {
+      const me = await p.query(`SELECT fnc_sub FROM push_subscriptions WHERE endpoint = $1`, [SUB.endpoint]);
+      await p.query(`INSERT INTO outbox (canal, titulo, destino, estado) VALUES ('push','E2E-push-x',$1,'pendiente')`, [me.rows[0].fnc_sub]);
+      const t0 = Date.now();
+      let row = null;
+      for (;;) {
+        row = (await p.query(`SELECT estado FROM outbox WHERE titulo = 'E2E-push-x'`)).rows[0];
+        if (row.estado === 'fallido' || Date.now() - t0 > 10000) break;
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      assert.equal(row.estado, 'fallido', 'sin VAPID no se envía');
+      await p.query(`DELETE FROM outbox WHERE titulo = 'E2E-push-x'`);
+      await p.query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [SUB.endpoint]);
+    } finally { await p.end(); }
+  });
+});
+
+describe('fase 4: licencias + habeas + auth-limit', () => {
+  it('license-audit limpio (sin copyleft fuerte)', async () => {
+    const log = execSync('node scripts/license-audit.cjs', { cwd: ROOT, stdio: 'pipe', timeout: 60000 }).toString();
+    assert.ok(log.includes('limpio'), 'auditoría en verde');
+    assert.ok(log.includes('sin copyleft fuerte'));
+  });
+  it('login con modal Habeas (CSS :target, sin JS)', async () => {
+    const html = await (await fetch(`${BASE}/login`)).text();
+    assert.ok(html.includes('href="#habeasModal"'), 'enlace habeas');
+    assert.ok(html.includes('id="habeasModal"'), 'modal presente');
+    assert.ok(html.includes('conocer, actualizar y rectificar'), 'texto habeas');
+    const css = await (await fetchJ('/css/app.css')).text();
+    assert.ok(css.includes('#habeasModal:target'), 'apertura por :target');
   });
 });
 

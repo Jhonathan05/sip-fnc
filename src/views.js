@@ -32,6 +32,7 @@ const P = {
   perfil: '<path d="M17.925 20.056a6 6 0 0 0-11.851.001" /> <circle cx="12" cy="11" r="4" /> <circle cx="12" cy="12" r="10" />',
   mail: '<rect width="20" height="16" x="2" y="4" rx="2" /> <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />',
   chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />',
+  campana: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /> <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />',
 };
 
 function icon(name) {
@@ -146,6 +147,10 @@ function profileModal(csrf) {
     </div>
     <div class="pref-block"><span class="a11y-sec-label">Foto (jpeg, png, webp · máx 5 MB → se guarda en 256px)</span>
       <div class="a11y-font"><input id="prefFoto" type="file" accept=".jpg,.jpeg,.png,.webp"><button id="prefFotoBtn" type="button">Subir</button></div>
+    </div>
+    <div class="pref-block"><span class="a11y-sec-label">Notificaciones push en este equipo</span>
+      <p class="modal-note" id="pushStatus">Verificando soporte…</p>
+      <div class="a11y-font"><button id="pushOnBtn" type="button" hidden>Activar</button><button id="pushOffBtn" type="button" hidden>Desactivar</button><button id="pushInstallBtn" type="button" hidden>Instalar app</button></div>
     </div>
     <p id="prefMsg" class="drawer-msg"></p>
     <form method="post" action="/api/perfil/solicitar-clave" style="margin:12px 0 0">${csrfField}
@@ -275,12 +280,16 @@ function layout(appName, fnc, active, body, csrf, nonce, extra) {
   const vencidas = (extra && extra.vencidasList) || [];
   const vencItems = vencidas.map((t) =>
     `<a class="hdr-pop-item" href="/dashboard#tarea-${t.id}"><strong>${esc(t.titulo)}</strong><span class="hdr-pop-meta">Límite ${esc(fmtFechaCorta(t.fecha_limite))} · <span class="badge">${esc(t.rol || '')}</span></span></a>`).join('');
+  const nNotif = (extra && Number(extra.nNotif)) || 0;
+  const notifs = (extra && extra.notifList) || [];
+  const notifItems = notifs.map((n) =>
+    `<a class="hdr-pop-item" href="${esc(n.url || '#')}" data-notif-read="${n.id}"><strong>${esc(n.titulo)}</strong><span class="hdr-pop-meta">${esc(n.detalle || '')}</span></a>`).join('');
   const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
   const csrfMetaTag = csrf ? `<meta name="csrf-token" content="${csrf}">` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-doc"><link rel="stylesheet" href="/css/app.css?v=20260928-doc"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#6B4A2B"><link rel="stylesheet" href="/css/layout.css?v=20260928-doc"><link rel="stylesheet" href="/css/app.css?v=20260928-doc"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-100.png" alt="Comité de Cafeteros del Tolima" height="30"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="26"><span class="brand-divider" aria-hidden="true"></span><div><span class="header-brand-name"><strong>SIP</strong> Sistema de Información de Proyectos</span></div></div></div>
-<div class="header-user-profile"><div class="hdr-mail"><a class="hdr-icon" href="/dashboard" aria-label="Notificaciones" title="Tareas vencidas: ir al dashboard">${icon('mail')}${nVencidas > 0 ? `<span class="hdr-badge tnum">${nVencidas > 9 ? '9+' : nVencidas}</span>` : ''}</a><div class="hdr-pop" role="menu" aria-label="Tareas vencidas">${vencItems || '<span class="hdr-pop-empty">Sin vencidas.</span>'}<a class="hdr-pop-all" href="/dashboard">Ver todas</a></div></div><span class="hdr-icon" aria-label="Mensajes" title="Mensajes — próximamente" aria-disabled="true">${icon('chat')}</span><div class="user-menu"><button class="user-menu-trigger" aria-haspopup="true" aria-label="Menú de usuario" title="${esc((fnc.displayName || '') + (fnc.email ? ' · ' + fnc.email : ''))}"><span class="user-name">${esc(shownName(fnc))}</span>${fnc?.photo ? `<img class="user-photo" src="${fnc.photo}" alt="${esc(shownName(fnc) || 'Usuario')}">` : `<div class="user-avatar">${esc(initial)}</div>`}</button><div class="user-menu-pop" role="menu"><button class="user-menu-item" data-open-modal="perfil" type="button" role="menuitem">Perfil</button><form method="post" action="/auth/logout" style="margin:0">${csrfField}<button class="user-menu-item" type="submit" role="menuitem">Cerrar Sesión</button></form></div></div></div>
+<div class="header-user-profile"><div class="hdr-mail"><a class="hdr-icon" href="/dashboard" aria-label="Notificaciones" title="Tareas vencidas: ir al dashboard">${icon('mail')}${nVencidas > 0 ? `<span class="hdr-badge tnum">${nVencidas > 9 ? '9+' : nVencidas}</span>` : ''}</a><div class="hdr-pop" role="menu" aria-label="Tareas vencidas">${vencItems || '<span class="hdr-pop-empty">Sin vencidas.</span>'}<a class="hdr-pop-all" href="/dashboard">Ver todas</a></div></div><span class="hdr-icon" aria-label="Mensajes" title="Mensajes — próximamente" aria-disabled="true">${icon('chat')}</span><div class="hdr-bell"><a class="hdr-icon" href="#" aria-label="Campana" title="Notificaciones">${icon('campana')}${nNotif > 0 ? `<span class="hdr-badge tnum">${nNotif > 9 ? '9+' : nNotif}</span>` : ''}</a><div class="hdr-pop" role="menu" aria-label="Notificaciones">${notifItems || '<span class="hdr-pop-empty">Sin notificaciones.</span>'}${nNotif > 0 ? '<button type="button" class="hdr-pop-all" data-notif-all>Marcar leídas</button>' : ''}</div></div><div class="user-menu"><button class="user-menu-trigger" aria-haspopup="true" aria-label="Menú de usuario" title="${esc((fnc.displayName || '') + (fnc.email ? ' · ' + fnc.email : ''))}"><span class="user-name">${esc(shownName(fnc))}</span>${fnc?.photo ? `<img class="user-photo" src="${fnc.photo}" alt="${esc(shownName(fnc) || 'Usuario')}">` : `<div class="user-avatar">${esc(initial)}</div>`}</button><div class="user-menu-pop" role="menu"><button class="user-menu-item" data-open-modal="perfil" type="button" role="menuitem">Perfil</button><form method="post" action="/auth/logout" style="margin:0">${csrfField}<button class="user-menu-item" type="submit" role="menuitem">Cerrar Sesión</button></form></div></div></div>
 </div></header>
 <aside class="app-sidebar" aria-label="Navegacion principal">
 <nav class="sidebar-nav">
@@ -296,7 +305,7 @@ ${inactivityModal()}
 ${taskCreateModal()}
 ${detailDrawer()}
 <div class="conn-overlay" id="connOverlay" hidden><div class="modal-card" role="alert"><h2>Sin conexión</h2><p>Se perdió la conexión con el servidor. Reintentando automáticamente…</p><button class="btn-primary" id="connRetry" type="button" style="margin-top:0">Reintentar ahora</button></div></div>
-${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}${withNonce(PRINT_JS, nonce)}${withNonce(REGLA_JS, nonce)}${withNonce(DOCEDIT_JS, nonce)}</body></html>`;
+${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}${withNonce(PRINT_JS, nonce)}${withNonce(REGLA_JS, nonce)}${withNonce(DOCEDIT_JS, nonce)}${withNonce(NOTIF_JS, nonce)}${withNonce(PUSH_JS, nonce)}</body></html>`;
 }
 
 // Regla de Oro en 2 pasos: paso 1 carga xlsx (tabla % sin valores),
@@ -340,14 +349,15 @@ function loginPage(appName, kcMode, csrf, reason) {
     ? `<div class="alert-err">Sesión cerrada por inactividad. Ingresa de nuevo.</div>`
     : reason === 'sesion'
       ? `<div class="alert-err">Tu sesión se renovó (reinicio o expiración). Ingresa de nuevo e intenta otra vez.</div>` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="stylesheet" href="/css/layout.css?v=20260928-doc"><link rel="stylesheet" href="/css/app.css?v=20260928-doc"></head><body>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — ${esc(appName)}</title><link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#6B4A2B"><link rel="stylesheet" href="/css/layout.css?v=20260928-doc"><link rel="stylesheet" href="/css/app.css?v=20260928-doc"></head><body>
 <main class="main-container" style="margin-left:15px"><div class="card"><div class="login-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-tolima.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="44"><img class="brand-sip" src="/img/logo-sip.svg" alt="SIP" height="30"></div><h1>${esc(appName)}</h1>
 <p>Sistema de Información de Proyectos — gestión e informes contables por periodos.</p>
 ${notice}
 ${kcMode
       ? `<a class="btn-primary" href="/auth/app">Continuar con Comit\u00e9 Tolima</a>`
       : `<form method="post" action="/auth/mock" style="margin:0">${csrfField}<button class="btn-primary" type="submit">Continuar con Comit\u00e9 Tolima</button></form><p><span class="badge">mock offline</span> sin Keycloak.</p>`}
-</div></main></body></html>`;
+<p><a href="#habeasModal">Tratamiento de datos personales</a></p>
+</div></main><div class="modal-overlay" id="habeasModal" role="dialog" aria-modal="true" aria-label="Tratamiento de datos"><div class="modal-card"><h2>Tratamiento de datos personales</h2><p>La Federación Nacional de Cafeteros — Comité Departamental del Tolima trata tus datos de identificación y contacto exclusivamente para operar el Sistema de Información de Proyectos (autenticación, auditoría y notificaciones operativas). No se comparten con terceros. Puedes ejercer tus derechos de conocer, actualizar y rectificar ante el Comité.</p><p><a class="btn-primary" href="#">Entendido</a></p></div></div></body></html>`;
 }
 
 function rolesMatrix(fnc) {
@@ -846,6 +856,72 @@ if(p)p.disabled=cur===0;if(n)n.disabled=cur===pages-1;
 bar.querySelector('[data-pg-prev]').addEventListener('click',function(){if(cur>0){cur--;render();}});
 bar.querySelector('[data-pg-next]').addEventListener('click',function(){if(cur<pages-1){cur++;render();}});
 render();
+});
+}catch(e){}})();</script>`;
+
+// PWA + Web Push (skill fnc-pwa-webpush, variante vanilla): registro del SW,
+// captura global de beforeinstallprompt (UI estable en el perfil, sin banner
+// flotante) y consentimiento activar/desactivar idempotente. Sin inline onclick.
+const PUSH_JS = `<script>(function(){try{
+function csrfH(){try{var m=document.querySelector('meta[name="csrf-token"]');return m?m.getAttribute('content')||'':'';}catch(e){return '';}}
+function pmsg(t){var m=document.getElementById('pushStatus');if(m){m.textContent=t||'';}}
+function b64(s){var p=(s||'').replace(/-/g,'+').replace(/_/g,'/');while(p.length%4){p+='=';}var b=atob(p);var o=new Uint8Array(b.length);for(var i=0;i<b.length;i++){o[i]=b.charCodeAt(i);}return o;}
+var deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();deferredPrompt=e;var b=document.getElementById('pushInstallBtn');if(b){b.hidden=false;}});
+if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}
+function paint(on,unsupported){
+var onB=document.getElementById('pushOnBtn'),offB=document.getElementById('pushOffBtn');
+if(unsupported){pmsg('Este navegador no soporta push.');if(onB)onB.hidden=true;if(offB)offB.hidden=true;return;}
+if(onB)onB.hidden=!!on;if(offB)offB.hidden=!on;
+pmsg(on?'Push activo en este equipo.':'Push inactivo en este equipo.');
+}
+function refresh(){
+if(!('serviceWorker' in navigator)||!('PushManager' in window)){paint(false,true);return;}
+navigator.serviceWorker.ready.then(function(reg){return reg.pushManager.getSubscription();}).then(function(s){paint(!!s,false);}).catch(function(){paint(false,false);});
+}
+var onB=document.getElementById('pushOnBtn'),offB=document.getElementById('pushOffBtn'),insB=document.getElementById('pushInstallBtn');
+if(insB)insB.addEventListener('click',function(){if(!deferredPrompt)return;deferredPrompt.prompt();deferredPrompt.userChoice.then(function(){deferredPrompt=null;insB.hidden=true;}).catch(function(){});});
+if(onB)onB.addEventListener('click',function(){
+pmsg('Activando…');
+if(!('serviceWorker' in navigator)||!('PushManager' in window)){paint(false,true);return;}
+navigator.serviceWorker.ready.then(function(reg){
+return fetch('/api/push/public-key').then(function(r){return r.json();}).then(function(d){
+if(!d||!d.ok||!d.key){throw new Error('srv');}
+return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64(d.key)});
+});
+}).then(function(sub){
+var j=sub.toJSON();
+return fetch('/api/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':csrfH()},body:JSON.stringify({endpoint:sub.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth})}).then(function(r){return r.json();});
+}).then(function(d){if(d&&d.ok){paint(true,false);}else{pmsg('No se pudo activar.');}}).catch(function(){pmsg('No se pudo activar (¿HTTPS y VAPID?).');});
+});
+if(offB)offB.addEventListener('click',function(){
+pmsg('Desactivando…');
+navigator.serviceWorker.ready.then(function(reg){return reg.pushManager.getSubscription();}).then(function(sub){
+if(!sub){paint(false,false);return null;}
+var ep=sub.endpoint;
+return sub.unsubscribe().then(function(){
+return fetch('/api/push/subscribe',{method:'DELETE',headers:{'Content-Type':'application/json','x-csrf-token':csrfH()},body:JSON.stringify({endpoint:ep})});
+});
+}).then(function(){paint(false,false);}).catch(function(){pmsg('No se pudo desactivar.');});
+});
+refresh();
+}catch(e){}})();</script>`;
+
+// Campana: marcar notificación leída al abrirla + marcar todas leídas.
+// Sin inline onclick (CSP nonce).
+const NOTIF_JS = `<script>(function(){try{
+function csrfH(){try{var m=document.querySelector('meta[name="csrf-token"]');return m?m.getAttribute('content')||'':'';}catch(e){return '';}}
+function go(href){if(href&&href!=='#'){window.location.href=href;}else{window.location.reload();}}
+document.querySelectorAll('[data-notif-read]').forEach(function(a){
+a.addEventListener('click',function(ev){
+ev.preventDefault();
+var id=a.getAttribute('data-notif-read');var href=a.getAttribute('href');
+fetch('/api/notificaciones/'+encodeURIComponent(id)+'/leida',{method:'PUT',headers:{'x-csrf-token':csrfH(),'Accept':'application/json'}}).then(function(){go(href);}).catch(function(){go(href);});
+});
+});
+var all=document.querySelector('[data-notif-all]');
+if(all)all.addEventListener('click',function(){
+fetch('/api/notificaciones/leidas',{method:'PUT',headers:{'x-csrf-token':csrfH(),'Accept':'application/json'}}).then(function(){window.location.reload();}).catch(function(){window.location.reload();});
 });
 }catch(e){}})();</script>`;
 

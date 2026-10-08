@@ -1,6 +1,6 @@
 {
   "name": "sip-fnc",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "private": true,
   "description": "SIP-FNC: gestion e informes contables por periodos (Express + Vanilla + Postgres)",
   "main": "src/server.js",
@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "test:e2e": "node --test tests/e2e.mjs"
+    "test:e2e": "node --test tests/e2e.mjs",
+    "audit:licenses": "node scripts/license-audit.cjs"
   },
   "dependencies": {
     "compression": "^1.7.4",
@@ -22,7 +23,8 @@
     "openid-client": "^5.7.1",
     "pdfkit": "^0.20.2",
     "pg": "8.23.0",
-    "sharp": "0.35.5"
+    "sharp": "0.35.5",
+    "web-push": "^3.6.7"
   },
   "overrides": {
     "uuid": "^11.0.0"

@@ -238,8 +238,8 @@ a.hdr-icon:hover {
     padding: 0 4px;
 }
 
-/* ── Dropdown de vencidas (hover/foco, sin JS) ── */
-.hdr-mail {
+/* ── Dropdown de vencidas (hover/foco, sin JS) ── */.hdr-mail,
+.hdr-bell {
     position: relative;
     flex-shrink: 0;
     /* El propio padre extiende su zona hover bajo el icono: así el puente
@@ -265,7 +265,9 @@ a.hdr-icon:hover {
 }
 
 .hdr-mail:hover .hdr-pop,
-.hdr-mail:focus-within .hdr-pop {
+.hdr-mail:focus-within .hdr-pop,
+.hdr-bell:hover .hdr-pop,
+.hdr-bell:focus-within .hdr-pop {
     display: block;
 }
 
@@ -308,6 +310,15 @@ a.hdr-icon:hover {
     font-size: var(--fs-meta);
     color: var(--azul-ink);
     text-decoration: none;
+}
+
+button.hdr-pop-all {
+    width: 100%;
+    background: none;
+    border: 0;
+    border-top: 1px solid var(--border-light);
+    cursor: pointer;
+    font: inherit;
 }
 
 /* Ancla de tarea: compensa header fijo + resaltado al llegar */
@@ -1097,6 +1108,15 @@ a.hdr-icon:hover {
 
 .modal-overlay[hidden] {
     display: none;
+}
+
+/* Habeas en login: modal puro CSS vía :target (sin JS). */
+#habeasModal {
+    display: none;
+}
+
+#habeasModal:target {
+    display: flex;
 }
 
 /* ── Overlay sin conexión (blindaje fetch, con reintento) ── */

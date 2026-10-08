@@ -69,9 +69,14 @@ function pkVal(m, raw) {
 const { ensureToken, verifyCsrf } = require('./csrf');
 const { getPool, dbReady } = require('./db');
 const { writeAudit } = require('./audit');
+const notify = require('./notify');
+
+// Roles del usuario para la campana (rol + roles, minúsculas, sin vacíos).
+const myRoles = (fnc) => [...new Set([String(fnc.role || '').toLowerCase(), ...((fnc.roles || []).map((r) => String(r).toLowerCase()))])].filter(Boolean);
 
 const crypto = require('crypto');
 const APP_NAME = process.env.APP_NAME || 'app-fnc';
+const APP_VERSION = require('../package.json').version;
 const app = express();
 app.set('trust proxy', 1); // IP real tras nginx (cf-connecting-ip / x-forwarded-for)
 // URLs opacas: /v/:token → ruta real (conserva query). Primero de todo;
@@ -148,6 +153,33 @@ function rateLimitMax() {
   return hotMax == null ? ENV_MAX : hotMax;
 }
 
+// Antifuerza en autenticación (skill fnc-login): /auth/* con límite propio.
+// Sin credenciales locales (mock de un botón + KC) no hay lockout de clave;
+// Keycloak gobierna brute-force en staging/prod (realm failureFactor 5).
+const AUTH_MAX = parseInt(process.env.RATE_LIMIT_AUTH_PER_MIN || '60', 10);
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: AUTH_MAX,
+  standardHeaders: false,
+  legacyHeaders: false,
+  handler: (req, res) => res.status(429).json({ error: 'Demasiados intentos. Espera un minuto.' }),
+});
+app.use('/auth/', authLimiter);
+
+// Sondas de monitoreo (públicas, sin sesión): Kuma → /api/ready.
+// /health no toca BD; /ready verifica SELECT 1 (503 si la BD cae).
+app.get('/api/health', (req, res) => res.json({ ok: true, version: APP_VERSION }));
+app.get('/api/ready', async (req, res) => {
+  try {
+    const pool = getPool();
+    if (!pool) return res.status(503).json({ ok: false, error: 'Sin BD.' });
+    await pool.query('SELECT 1');
+    return res.json({ ok: true, version: APP_VERSION, db: true });
+  } catch (e) {
+    return res.status(503).json({ ok: false, error: 'BD no disponible.' });
+  }
+});
+
 // CSRF synchronizer en todos los POST (tras parsers y sesión).
 app.use(verifyCsrf);
 
@@ -202,6 +234,27 @@ app.use(async (req, res, next) => {
       }
     }
   } catch { /* badge en 0 */ }
+  next();
+});
+
+// Campana: notificaciones no leídas visibles según roles (best-effort).
+app.use(async (req, res, next) => {
+  res.locals.nNotif = 0;
+  res.locals.notifList = [];
+  try {
+    const fnc = req.session?.fnc;
+    const pool = getPool();
+    if (isFncValid(fnc) && pool) {
+      const c = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM outbox WHERE canal = 'campana' AND estado = 'enviado' AND roles && $1`, [myRoles(fnc)]);
+      res.locals.nNotif = (c.rows[0] && c.rows[0].n) || 0;
+      if (res.locals.nNotif) {
+        const { rows } = await pool.query(
+          `SELECT id, titulo, detalle, url FROM outbox WHERE canal = 'campana' AND estado = 'enviado' AND roles && $1 ORDER BY id DESC LIMIT 8`, [myRoles(fnc)]);
+        res.locals.notifList = rows;
+      }
+    }
+  } catch { /* campana en 0 (p. ej. sin migrar 006) */ }
   next();
 });
 
@@ -420,6 +473,9 @@ app.post('/api/tareas/:id/validar', needLogin, needDb, async (req, res) => {
   }
   await pool.query(`UPDATE tasks SET estado = 'hecha', hecha_por = $1, hecha_at = now() WHERE id = $2`, [fnc.email, t.id]);
   await writeAudit(req, { action: 'tarea.validar', modulo: 'tareas', entidadId: String(t.id), detalle: `Validada: ${t.titulo}` });
+  try {
+    await notify.encolar({ canal: 'discord', titulo: `Tarea validada: ${t.titulo}`, detalle: `Por ${fnc.email || fnc.displayName || '?'}`, url: `/dashboard#tarea-${t.id}`, ref: `tarea-validada:${t.id}` });
+  } catch { /* aviso best-effort, no tumba la validación */ }
   return res.json({ ok: true, msg: 'Tarea completada.' });
 });
 
@@ -559,6 +615,9 @@ app.delete('/api/maestros/:id/:codigo', needLogin, needDb, async (req, res) => {
     const { rowCount } = await getPool().query(`DELETE FROM ${m.table} WHERE ${m.pk} = $1`, [pk]);
     if (!rowCount) return res.status(404).json({ ok: false, error: 'No encontrado.' });
     await writeAudit(req, { action: 'maestro.borrar', modulo: 'distribucion', entidadId: String(pk), detalle: req.params.id });
+    try {
+      await notify.encolar({ canal: 'discord', titulo: `Maestro borrado: ${req.params.id} ${pk}`, detalle: `Por ${req.session.fnc.email || '?'}`, ref: `maestro-borrado:${req.params.id}:${pk}` });
+    } catch { /* aviso best-effort */ }
     return res.json({ ok: true });
   } catch (e) {
     if (e.code === '23503') return res.status(409).json({ ok: false, error: 'En uso: no se puede borrar.' });
@@ -600,7 +659,132 @@ app.put('/api/distribucion-municipio/valor', needLogin, needDb, async (req, res)
     return res.status(500).json({ ok: false, error: 'Error interno.' });
   }
 });
-const page = (req, fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body, ensureToken(req), req.nonce, { nVencidas: (req.res && req.res.locals.nVencidas) || 0, vencidasList: (req.res && req.res.locals.vencidasList) || [] });
+
+// GET /api/notificaciones — campana no leída visible por mis roles (máx. 20).
+app.get('/api/notificaciones', needLogin, needDb, async (req, res) => {
+  try {
+    const { rows } = await getPool().query(
+      `SELECT id, titulo, detalle, url, created_at FROM outbox
+       WHERE canal = 'campana' AND estado = 'enviado' AND roles && $1 ORDER BY id DESC LIMIT 20`,
+      [myRoles(req.session.fnc)]);
+    return res.json(rows);
+  } catch (e) {
+    console.error('[notificaciones:list]', e.message);
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+
+// PUT /api/notificaciones/leidas — marca todas las visibles como leídas.
+app.put('/api/notificaciones/leidas', needLogin, needDb, async (req, res) => {
+  try {
+    const { rowCount } = await getPool().query(
+      `UPDATE outbox SET estado = 'leida' WHERE canal = 'campana' AND estado = 'enviado' AND roles && $1`,
+      [myRoles(req.session.fnc)]);
+    return res.json({ ok: true, n: rowCount });
+  } catch (e) {
+    console.error('[notificaciones:leidas]', e.message);
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+
+// PUT /api/notificaciones/:id/leida — marca una visible como leída (solo lectura: sin canWrite).
+app.put('/api/notificaciones/:id/leida', needLogin, needDb, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ ok: false, error: 'Identificador inválido.' });
+  try {
+    const { rowCount } = await getPool().query(
+      `UPDATE outbox SET estado = 'leida' WHERE id = $1 AND canal = 'campana' AND estado = 'enviado' AND roles && $2`,
+      [id, myRoles(req.session.fnc)]);
+    if (!rowCount) return res.status(404).json({ ok: false, error: 'No encontrada.' });
+    await writeAudit(req, { action: 'notificacion.leida', modulo: 'plataforma', entidadId: String(id), detalle: 'Campana leída' });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('[notificaciones:leida]', e.message);
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+
+// GET /manifest.webmanifest — manifiesto PWA dual-UA (skill fnc-pwa-webpush).
+// Móvil: standalone+portrait; escritorio: display_override window-controls-overlay.
+app.get('/manifest.webmanifest', (req, res) => {
+  const ua = String(req.get('User-Agent') || '');
+  const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+  const manifest = {
+    name: 'SIP-FNC · Comité de Cafeteros del Tolima',
+    short_name: 'SIP FNC',
+    start_url: '/dashboard',
+    scope: '/',
+    display: 'standalone',
+    background_color: '#6B4A2B',
+    theme_color: '#6B4A2B',
+    description: 'Sistema de Información de Proyectos — FNC Tolima',
+    icons: [
+      { src: '/icons/app-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/icons/app-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '/icons/app-icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ],
+  };
+  if (mobile) {
+    manifest.orientation = 'portrait';
+  } else {
+    manifest.display_override = ['window-controls-overlay', 'standalone', 'browser'];
+  }
+  res.set('Content-Type', 'application/manifest+json');
+  res.set('Cache-Control', 'no-store');
+  return res.json(manifest);
+});
+
+// GET /api/push/public-key — clave VAPID pública (solo sesión; 503 sin configurar).
+app.get('/api/push/public-key', needLogin, (req, res) => {
+  try {
+    const key = require('./push').publicKey();
+    if (!key) return res.status(503).json({ ok: false, error: 'Push no configurado.' });
+    return res.json({ ok: true, key });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+
+// POST /api/push/subscribe — alta/idempotente por endpoint {endpoint,p256dh,auth}.
+app.post('/api/push/subscribe', needLogin, needDb, async (req, res) => {
+  const b = req.body || {};
+  const endpoint = String(b.endpoint || '').trim();
+  const p256dh = String(b.p256dh || '').trim();
+  const auth = String(b.auth || '').trim();
+  if (!/^https?:\/\/.{8,2000}$/.test(endpoint) || p256dh.length < 10 || auth.length < 5) {
+    return res.status(400).json({ ok: false, error: 'Suscripción inválida.' });
+  }
+  const sub = req.session.fnc.sub || req.session.fnc.email || '';
+  try {
+    await getPool().query(
+      `INSERT INTO push_subscriptions (endpoint, p256dh, auth, fnc_sub) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth, fnc_sub = EXCLUDED.fnc_sub`,
+      [endpoint, p256dh, auth, sub]);
+    await writeAudit(req, { action: 'push.suscribir', modulo: 'plataforma', detalle: 'Push activado en este equipo' });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('[push:subscribe]', e.message);
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+
+// DELETE /api/push/subscribe — revoca por endpoint (solo propias).
+app.delete('/api/push/subscribe', needLogin, needDb, async (req, res) => {
+  const endpoint = String((req.body && req.body.endpoint) || req.query.endpoint || '').trim();
+  if (!endpoint) return res.status(400).json({ ok: false, error: 'Endpoint requerido.' });
+  const sub = req.session.fnc.sub || req.session.fnc.email || '';
+  try {
+    const { rowCount } = await getPool().query(
+      `DELETE FROM push_subscriptions WHERE endpoint = $1 AND fnc_sub = $2`, [endpoint, sub]);
+    if (!rowCount) return res.status(404).json({ ok: false, error: 'No encontrada.' });
+    await writeAudit(req, { action: 'push.revocar', modulo: 'plataforma', detalle: 'Push desactivado en este equipo' });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('[push:revoke]', e.message);
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+const page = (req, fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body, ensureToken(req), req.nonce, { nVencidas: (req.res && req.res.locals.nVencidas) || 0, vencidasList: (req.res && req.res.locals.vencidasList) || [], nNotif: (req.res && req.res.locals.nNotif) || 0, notifList: (req.res && req.res.locals.notifList) || [] });
 
 app.get('/dashboard', needLogin, needDb, async (req, res) => {
   const fnc = req.session.fnc;
@@ -1241,6 +1425,7 @@ app.use('/api/', (req, res) => {
 const PORT = process.env.PORT || 3020;
 if (require.main === module) {
   app.listen(PORT, () => console.log(`[${APP_NAME}] http://localhost:${PORT} provider=${process.env.AUTH_PROVIDER || 'mock'}`));
+  notify.startWorker();
 }
 module.exports = app;
 

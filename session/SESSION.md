@@ -1,4 +1,4 @@
-# Sesión SIP-FNC — contexto de trabajo (2026-10-08, v1.9.0)
+# Sesión SIP-FNC — contexto de trabajo (2026-10-08, v1.10.0)
 
 > Archivo vivo: resume el estado para retomar en cualquier momento.
 > Flujo de ramas: `dev` (trabajo) → `master` (releases) → GitHub.
@@ -9,7 +9,7 @@ informes contables por periodos — Comité de Cafeteros del Tolima.
 
 ## Stack (PERFIL rendimiento, acta v2 en docs/analisis.md)
 Node 22 + Express 4 + Vanilla + Postgres 16 + `pg` + `multer` + `sharp` + `exceljs`.
-Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (61 tests, 9 suites).
+Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (74 tests, 13 suites).
 
 ## Puesta en marcha
 ```powershell
@@ -41,7 +41,7 @@ Flip KC staging: registrar `sip-fnc-client` en `fnc-realm` + `AUTH_PROVIDER=keyc
 - Foto: jpeg/png/webp ≤5 MB → webp 256px q80, un archivo por `sub`.
 - Actividad en 3 niveles (plataforma / mía / auditoría admin).
 - SMTP: solo Resend, API key cifrada en BD, módulo Email solo admin.
-- Skills en `G:\Open\appweb-skills-fnc` (sede canónica), nunca por proyecto.
+- Skills en `G:\Open\infra-fnc/skills` (sede canónica; `appweb-skills-fnc` congelado), nunca por proyecto. Catálogo: `skills/INDEX.md`.
 - Principios Modo B en cada cierre: 1) nada KC a medias, 2) sesión por contrato, 3) re-correr e2e al flipear.
 - Distribuciones unificada (`?tab=` carga/mpio/circ, default mpio; hoja mpio fuera del nav, legacy → 302 a `tab=mpio`); tokens `/v/` congelados (nuevas páginas AL FINAL).
 - Tablas documento calcadas de `docs/formatos/distribucion por {municipio,circunscripcion}.xlsx`: columnas MUNICIPIO|SICA 2005|DISTRIBUCIÓN (%×monto)|ASIGNACIONES CREADAS|SALDO (dist−creadas); fila `Circunscripción X` tras cada bloque + TOTAL; sin `$` (comas); centavos exactos (aritmética en enteros); en tab circ, DISTRIBUCIÓN/SALDO en blanco por municipio. Membrete 4 líneas + huecos `______` para N° distribución/acta (sin fuente en BD aún).
@@ -56,6 +56,29 @@ Flip KC staging: registrar `sip-fnc-client` en `fnc-realm` + `AUTH_PROVIDER=keyc
 3. Backups cifrados a R2 + monitoreo (skills fnc).
 4. Validar opción A (consola de cuenta KC) para contraseña.
 5. Staging KC: client + secret + flip `AUTH_PROVIDER` + e2e contra staging.
+
+## Plan por fases — skills infra-fnc (2026-10-08)
+Fuente: `G:\Open\infra-fnc/skills` (`INDEX.md`). Fuera: `fnc-url-masking`
+(revertida 1.3.1), UI `fnc-admin-panel` (Next/Prisma), `fnc-backend`
+(rige Postgres único).
+- **Fase 1** ✅ 2026-10-08 — Notificaciones: `006_outbox.sql` + `src/notify.js` (encolar transaccional,
+worker `setInterval` con `SKIP LOCKED`, scheduler vencimientos 3-1-0, campana por rol
+`GET|PUT /api/notificaciones`, email Resend, Discord helper fire-and-forget).
+- **Fase 2** ✅ 2026-10-08 — Monitoreo (`fnc-monitoring`): `/api/health|/ready` públicos,
+`maestro.borrar`→Discord, `infra/backup-r2.ps1` (pg_dump|gzip|AES-256-CBC .NET nativo,
+formato `openssl enc` compatible, round-trip hash) + retención R2 30d. Kuma apunta a
+`/api/ready` (externo, pendiente instalar). Harness: `Connection: close` (keep-alive
+Node 5s vs brechas largas → RST).
+- **Fase 3** ✅ 2026-10-08 — PWA+push (`fnc-pwa-webpush`, `fnc-pwa`, `fnc-app-icon-badge`):
+`007_push.sql`, `src/push.js` (VAPID), endpoints subscribe, manifest dual-UA,
+`sw.js`, iconos generados (`scripts/gen-app-icon.cjs`), consent en perfil, canal push
+en worker. Falta para producción: claves VAPID + HTTPS (túnel) + envío real.
+- **Fase 4** ✅ 2026-10-08 — Transversales: `scripts/license-audit.cjs` + `npm run audit:licenses`,
+limitador `/auth/*` 60/min (sin lockout de clave: no hay credenciales locales; KC
+gobierna brute-force en staging/prod), modal Habeas CSS `:target` en login,
+`.github/workflows/e2e.yml` (Postgres servicio en 5433 + `sip-fnc-dev-db` nombrado),
+`.gitattributes`. Bloqueado externo: flip KC staging (sin staging disponible).
+Diferido: `fnc-design-system` completo (overhaul visual).
 
 ## Skills aplicables del ecosistema
 `test-hygiene` (obligatoria), `fnc-url-masking` (revertida: ver release 1.3.1),
