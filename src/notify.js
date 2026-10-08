@@ -14,7 +14,7 @@ const RETRY_MIN = Number(process.env.NOTIFY_RETRY_MIN || 5); // espera entre rei
 async function encolar({ canal, titulo, detalle = '', destino = '', url = '', roles = [], ref = null }) {
   const pool = getPool();
   if (!pool) return null;
-  if (!['email', 'discord', 'campana'].includes(canal)) throw new Error('Canal inválido.');
+  if (!['email', 'discord', 'campana', 'push'].includes(canal)) throw new Error('Canal inválido.');
   if (!titulo || !String(titulo).trim()) throw new Error('Título requerido.');
   const { rows } = await pool.query(
     `INSERT INTO outbox (canal, titulo, detalle, destino, url, roles, ref)
@@ -61,7 +61,30 @@ async function entregar(row) {
     await notifyDiscord(row.titulo, row.detalle);
     return;
   }
+  if (row.canal === 'push') {
+    await entregarPush(row);
+    return;
+  }
   throw new Error('Canal desconocido.');
+}
+
+// Push: envía a todas las suscripciones de destino (email/sub); purga 404/410.
+async function entregarPush(row) {
+  const pool = getPool();
+  const push = require('./push');
+  const { rows } = await pool.query(`SELECT * FROM push_subscriptions WHERE fnc_sub = $1`, [row.destino]);
+  if (!rows.length) throw new Error('Sin suscripciones.');
+  for (const s of rows) {
+    try {
+      await push.sendPush(s, { titulo: row.titulo, detalle: row.detalle, url: row.url || '/dashboard' });
+    } catch (e) {
+      if (e && e.code === 'push-expirada') {
+        await pool.query(`DELETE FROM push_subscriptions WHERE id = $1`, [s.id]);
+      } else {
+        throw e;
+      }
+    }
+  }
 }
 
 async function procesarPendientes() {

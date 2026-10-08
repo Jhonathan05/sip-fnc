@@ -918,6 +918,92 @@ describe('monitoreo health/ready + backup', () => {
   });
 });
 
+describe('pwa + webpush', () => {
+  const { Pool } = require('pg');
+  const pool = () => new Pool({ connectionString: TEST_DB });
+  const SUB = { endpoint: 'https://fcm.test/e2e-sub-1', p256dh: 'e2e-p256dh-0123456789', auth: 'e2e-auth-1234' };
+  it('manifest dual-UA + sw.js + iconos + layout', async () => {
+    const d = await fetch(`${BASE}/manifest.webmanifest`);
+    assert.equal(d.status, 200);
+    assert.match(d.headers.get('content-type'), /application\/manifest\+json/);
+    assert.ok(d.headers.get('cache-control').includes('no-store'));
+    const dm = await d.json();
+    assert.equal(dm.short_name, 'SIP FNC');
+    assert.ok(Array.isArray(dm.display_override), 'desktop con window-controls-overlay');
+    assert.ok(dm.icons.some((i) => i.sizes === '512x512' && i.purpose === 'maskable'), 'maskable declarado');
+    const m = await (await fetch(`${BASE}/manifest.webmanifest`, { headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_4 like Mac OS X)' } })).json();
+    assert.equal(m.orientation, 'portrait', 'móvil portrait');
+    assert.ok(!m.display_override, 'móvil sin display_override');
+    const sw = await fetch(`${BASE}/sw.js`);
+    assert.equal(sw.status, 200);
+    const swt = await sw.text();
+    assert.ok(swt.includes('notificationclick') && swt.includes('/api/'), 'sw push + bypass api');
+    const ic = await fetch(`${BASE}/icons/app-icon-192.png`);
+    assert.equal(ic.status, 200);
+    assert.match(ic.headers.get('content-type'), /image\/png/);
+    await loginAsAdmin();
+    const html = await (await fetchJ('/dashboard')).text();
+    assert.ok(html.includes('rel="manifest" href="/manifest.webmanifest"'), 'link manifest');
+    assert.ok(html.includes('name="theme-color"'), 'theme-color');
+    assert.ok(html.includes("register('/sw.js')"), 'registro SW');
+    assert.ok(html.includes('beforeinstallprompt'), 'captura install');
+    assert.ok(html.includes('id="pushStatus"') && html.includes('id="pushOnBtn"'), 'consent en perfil');
+  });
+  it('public-key 401 anónimo y 503 sin VAPID', async () => {
+    assert.equal((await fetch(`${BASE}/api/push/public-key`)).status, 401);
+    await loginAsAdmin();
+    const r = await fetchJ('/api/push/public-key');
+    assert.equal(r.status, 503, 'sin VAPID en e2e');
+  });
+  it('subscribe upsert + validación + revoke + consultor', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    const post = (b) => fetchJ('/api/push/subscribe', { method: 'POST', headers: h, body: JSON.stringify(b) });
+    assert.equal((await post({ endpoint: 'x' })).status, 400, 'suscripción inválida 400');
+    assert.equal((await post({ endpoint: SUB.endpoint })).status, 400, 'sin claves 400');
+    assert.equal((await post(SUB)).status, 200);
+    assert.equal((await post(SUB)).status, 200, 're-suscribir idempotente');
+    const p = pool();
+    try {
+      const c = await p.query(`SELECT COUNT(*)::int AS n FROM push_subscriptions WHERE endpoint = $1`, [SUB.endpoint]);
+      assert.equal(c.rows[0].n, 1, 'upsert por endpoint');
+      const me = await p.query(`SELECT fnc_sub FROM push_subscriptions WHERE endpoint = $1`, [SUB.endpoint]);
+      assert.ok(me.rows[0].fnc_sub, 'dueño registrado');
+      jarC.cookie = '';
+      const lh = await (await fetchC('/login')).text();
+      const ctok = (lh.match(/name="_csrf" value="([^"]+)"/) || [])[1];
+      await fetchC('/auth/mock', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: ctok }) });
+      const cd = await (await fetchC('/dashboard')).text();
+      const cmt = (cd.match(/name="csrf-token" content="([^"]+)"/) || [])[1];
+      assert.equal((await fetchC('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': cmt }, body: JSON.stringify({ endpoint: 'https://fcm.test/e2e-cons', p256dh: SUB.p256dh, auth: SUB.auth }) })).status, 200, 'consultor suscribe');
+      await p.query(`DELETE FROM push_subscriptions WHERE endpoint LIKE 'https://fcm.test/%'`);
+    } finally { await p.end(); }
+    assert.equal((await fetchJ('/api/push/subscribe', { method: 'DELETE', headers: h, body: JSON.stringify({ endpoint: SUB.endpoint }) })).status, 404, 'ya revocada → 404');
+  });
+  it('worker push sin VAPID → fallido (purga pendiente de suscripción real)', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    await fetchJ('/api/push/subscribe', { method: 'POST', headers: h, body: JSON.stringify(SUB) });
+    const p = pool();
+    try {
+      const me = await p.query(`SELECT fnc_sub FROM push_subscriptions WHERE endpoint = $1`, [SUB.endpoint]);
+      await p.query(`INSERT INTO outbox (canal, titulo, destino, estado) VALUES ('push','E2E-push-x',$1,'pendiente')`, [me.rows[0].fnc_sub]);
+      const t0 = Date.now();
+      let row = null;
+      for (;;) {
+        row = (await p.query(`SELECT estado FROM outbox WHERE titulo = 'E2E-push-x'`)).rows[0];
+        if (row.estado === 'fallido' || Date.now() - t0 > 10000) break;
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      assert.equal(row.estado, 'fallido', 'sin VAPID no se envía');
+      await p.query(`DELETE FROM outbox WHERE titulo = 'E2E-push-x'`);
+      await p.query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [SUB.endpoint]);
+    } finally { await p.end(); }
+  });
+});
+
 describe('rate-limit + actividad + perfil + logout', () => {
   it('override a 5 → 429 con Retry-After → restore', { timeout: 30000 }, async () => {
     const mt = await csrfMeta();
