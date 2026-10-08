@@ -205,6 +205,12 @@ describe('auth + CSRF + contrato', () => {
     assert.ok(n && html.includes(`nonce="${n}"`));
     assert.match(html, /__fncFetch/, 'wrapper fetch auto-redirect INACTIVE');
   });
+  it('dashboard sin tarjetas KPI de ejecutado', async () => {
+    await loginAsAdmin();
+    const html = await (await fetchJ('/dashboard')).text();
+    assert.ok(!html.includes('kpi-strip'), 'sin franja KPI');
+    assert.ok(!html.includes('% ejecutado'), 'sin % ejecutado en tarjetas');
+  });
   it('a11y botones independientes al pie del nav + nav-lock', async () => {
     const html = await (await fetchJ('/dashboard')).text();
     const iBar = html.indexOf('nav-collapse-bar');
@@ -519,13 +525,15 @@ describe('regla de oro (2 pasos)', () => {
   it('paso 2 bloqueado sin regla + tabla por circunscripción', async () => {
     await loginAsAdmin();
     const tokLeaf = mods.tokenFor('/distribucion/actualizaciones/regla-oro').slice(3);
-    const v = await (await fetchJ(`/v/rs?f=${tokLeaf}&vigencia=${VY + 5}`)).text();
+    const tokDist = mods.tokenFor('/distribucion/actualizaciones/distribuciones').slice(3);
+    const v = await (await fetchJ(`/v/rs?f=${tokDist}&tab=carga&vigencia=${VY + 5}`)).text();
     assert.match(v, /Completa el paso 1/, 'paso 2 bloqueado sin regla');
     assert.ok(!v.includes('id="reglaGo"'), 'sin botón asignar');
     const p = await (await fetchJ(`/v/rs?f=${tokLeaf}&vigencia=${VY}`)).text();
     assert.match(p, /Porcentaje por circunscripción/, 'tabla por circunscripción');
     assert.match(p, /Chaparral[\s\S]{0,120}80\.00%/, 'Chaparral suma 80%');
     assert.match(p, /reglaVerGo|Imprimir|reglaCmpGo/, 'ver/visualizar/comparar presentes');
+    assert.ok(!p.includes('id="reglaUp"') && !p.includes('id="reglaGo"'), 'regla histórica sin formularios de carga');
   });
   it('comparar 2 vigencias + exportar xlsx/pdf', async () => {
 
@@ -556,7 +564,7 @@ describe('distribuciones: 3 escenarios por vigencia', () => {
   it('anteriores: histórico con sobrante año + acumulado', async () => {
     await loginAsAdmin();
     const y = YN - 1; // migrate seed: municipio_anteriores 480M/410M + circ 295M/260M
-    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&vigencia=${y}`)).text();
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=circ&vigencia=${y}`)).text();
     assert.match(html, /Histórico \+ sobrante acumulado/, 'bloque histórico');
     assert.match(html, /Sobrante acumulado/, 'columna acumulado');
     assert.ok(html.includes('$105.000.000'), 'acumulado 70M+35M=105M');
@@ -564,7 +572,7 @@ describe('distribuciones: 3 escenarios por vigencia', () => {
   });
   it('actual: checklist + tabla documento', async () => {
     await loginAsAdmin();
-    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&vigencia=${YN}`)).text();
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=circ&vigencia=${YN}`)).text();
     assert.match(html, /Estado vigencia actual/, 'checklist presente');
     assert.ok(html.includes('Montos globales') && html.includes('Valores por municipio'), 'checklist completa');
     assert.match(html, /Circunscripción/, 'bloques por circunscripción');
@@ -572,20 +580,179 @@ describe('distribuciones: 3 escenarios por vigencia', () => {
   });
   it('siguiente: % por municipio + CTA sin valores', async () => {
     await loginAsAdmin();
-    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&vigencia=${YN + 1}`)).text();
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=circ&vigencia=${YN + 1}`)).text();
     assert.match(html, /Porcentajes vigencia siguiente/, 'bloque siguiente');
-    assert.ok(html.includes('Ir a Regla de Oro'), 'CTA carga');
+    assert.ok(html.includes('Cargar regla'), 'CTA carga');
   });
-  it('mpio: mismo formato documento por municipio', async () => {
+  it('tabs Carga/mpio/circ: mpio activo por defecto y orden nuevo', async () => {
     await loginAsAdmin();
-    const tok = mods.tokenFor('/distribucion/actualizaciones/distribucion-municipio').slice(3);
-    const html = await (await fetchJ(`/v/rs?f=${tok}&vigencia=${YN}`)).text();
-    assert.match(html, /MUNICIPIOS ICA 2005/, 'membrete documento');
-    assert.match(html, /<th>Municipio<\/th><th>%<\/th><th>Asignado<\/th><th>Ejecutado<\/th><th>Saldo<\/th>/, 'columnas documento');
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&vigencia=${YN}`)).text();
+    assert.match(html, /role="tablist" aria-label="Distribuciones"/, 'tab bar presente');
+    assert.match(html, /cfg-tab active[^>]*>Por municipio/, 'mpio activo por defecto');
+    assert.ok(html.includes('tab=carga') && html.includes('tab=circ'), 'links a carga y circ');
+    const order = ['>Carga<', '>Por municipio<', '>Por circunscripción<'].map((s) => html.indexOf(s));
+    assert.ok(order[0] < order[1] && order[1] < order[2] && order[0] > -1, `orden tabs: ${order}`);
+    assert.match(html, /FEDERACION NACIONAL DE CAFETEROS DE COLOMBIA - COMITE TOLIMA/, 'membrete línea 1');
+    assert.match(html, new RegExp(`LEY 863 DE 2003 TRANSFERENCIA ${YN}`), 'membrete línea 2');
+    assert.match(html, /OBRAS DE INFRAESTRUCTURA/, 'membrete línea 3');
+    assert.match(html, /DISTRIBUCION No\. <span class="doc-blank">______<\/span> SEGÚN ACTA <span class="doc-blank">______<\/span> DE <span class="doc-blank">______<\/span>/, 'línea acta con huecos reservados');
+    assert.match(html, /class="doc-foot"/, 'pie documento (fecha+página)');
+    const legacy = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=dist&vigencia=${YN}`)).text();
+    assert.match(legacy, /cfg-tab active[^>]*>Por municipio/, 'tab=dist viejo cae a mpio');
+  });
+  it('mpio: tabla documento sin paginación ni CRUD, con edición en línea', async () => {
+    await loginAsAdmin();
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=mpio&vigencia=${YN}`)).text();
+    assert.match(html, /<h3 class="rail-sub">Por municipio<\/h3>/, 'sección mpio');
+    assert.match(html, /<th>MUNICIPIO<\/th><th>SICA 2005<\/th><th>DISTRIBUCIÓN<\/th><th>ASIGNACIONES CREADAS<\/th><th>SALDO DISPONIBLE<\/th>/, 'columnas documento .xlsx');
+    assert.match(html, /<table class="skl-table doc-table">/, 'tabla con estilo documento');
+    assert.ok(!html.includes('colspan="5"><strong>Circunscripción'), 'sin fila-grupo de bloque');
+    const tbl = (html.match(/<table class="skl-table doc-table">[\s\S]*?<\/table>/) || [])[0] || '';
+    assert.ok(!tbl.includes('$'), 'cifras documento sin signo $ (calcado xlsx)');
+    assert.ok(!html.includes('Editar valores por municipio'), 'sin tarjeta CRUD mpio');
+    assert.ok(html.includes('data-docedit="monto"'), 'botón editar monto global');
+    assert.match(html, /id="docmonto-municipio-\d+-line"/, 'línea monto global municipio');
+    assert.match(html, /cfg-tab active[^>]*>Por municipio/, 'tab mpio activo');
+  });
+  it('mpio: botón ✎ por fila cuando hay municipios (vigencia regla 2031)', async () => {
+    await loginAsAdmin();
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=mpio&vigencia=2031`)).text();
+    assert.ok(html.includes('data-docedit="creada" data-cell="doccre-CHA-2031" data-ano="2031" data-mun="CHA"'), 'botón editar por fila de municipio');
+  });
+  it('tablas documento sin paginación (PAGER_JS exime .doc-table)', async () => {
+    await loginAsAdmin();
+    const html = await (await fetchJ('/dashboard')).text();
+    assert.ok(html.includes('table.skl-table:not(.doc-table)'), 'pager exime doc-table');
+  });
+  it('circ: sin CRUD montos, monto editable y filas solo lectura', async () => {
+    await loginAsAdmin();
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=circ&vigencia=${YN}`)).text();
+    assert.ok(!html.includes('Editar montos globales'), 'sin tarjeta CRUD montos');
+    assert.match(html, /id="docmonto-circunscripcion-\d+-line"/, 'línea monto global circunscripción');
+    assert.ok(html.includes('data-docedit="monto"'), 'botón editar monto');
+    assert.ok(!html.includes('data-docedit="creada"'), 'filas circ sin botón de edición');
+  });
+  it('consultor: ve tablas sin botones de edición y PUT valor → 403', async () => {
+    jarC.cookie = '';
+    const lh = await (await fetchC('/login')).text();
+    const ctok = (lh.match(/name="_csrf" value="([^"]+)"/) || [])[1];
+    await fetchC('/auth/mock', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: ctok }) });
+    const cd = await (await fetchC('/dashboard')).text();
+    const cmt = (cd.match(/name="csrf-token" content="([^"]+)"/) || [])[1];
+    const cHtml = await (await fetchC(`/v/rs?f=${tokDist()}&tab=mpio&vigencia=2031`)).text();
+    assert.ok(!cHtml.includes('data-docedit="creada"'), 'consultor sin botones por fila');
+    assert.ok(!cHtml.includes('data-docedit="monto"'), 'consultor sin botón de monto');
+    assert.equal((await fetchC('/api/distribucion-municipio/valor', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-csrf-token': cmt }, body: JSON.stringify({ ano: YN, municipio: 'CHA', valor: 1 }) })).status, 403);
+  });
+  it('mpio+circ: DISTRIBUCIÓN y SALDO exactos en centavos (regla 2031 + monto 2000.50)', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    // Regla 2031 (.5/.3/.2) + creadas (625/375/500) ya sembradas por la suite de regla de oro.
+    const m = await (await fetchJ('/api/maestros/distribuciones', { method: 'POST', headers: h, body: JSON.stringify({ tipo: 'municipio_anteriores', vigencia: 2031, asignado: 2000.50 }) })).json();
+    assert.equal(m.ok, true);
+    try {
+      const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=mpio&vigencia=2031`)).text();
+      assert.ok(html.includes('<td>CHAPARRAL</td><td class="n">50.00 %</td><td class="n">1,000.25</td>'), 'Chaparral: % y DISTRIBUCIÓN');
+      assert.ok(html.includes('<span class="doc-val">625</span>'), 'Chaparral: CREADAS 625');
+      assert.ok(html.includes('<td>FALAN</td><td class="n">20.00 %</td><td class="n">400.1</td>'), 'Falan: % y DISTRIBUCIÓN');
+      assert.ok(html.includes('<span class="doc-val">500</span>'), 'Falan: CREADAS 500');
+      assert.ok(html.includes('<tr class="doc-sub"><td><strong>Circunscripción Chaparral</strong></td><td class="n"><strong>80.00 %</strong></td><td class="n"><strong>1,600.4</strong></td><td class="n"><strong>1,000</strong></td><td class="n"><strong>600.4</strong></td>'), 'subtotal Chaparral exacto');
+      assert.ok(html.includes('<tr class="doc-tot"><td><strong>TOTAL</strong></td><td class="n"><strong>100.00 %</strong></td><td class="n"><strong>2,000.5</strong></td><td class="n"><strong>1,500</strong></td><td class="n"><strong>500.5</strong></td>'), 'TOTAL = Σ exactas, sin aproximar');
+    } finally {
+      await fetchJ(`/api/maestros/distribuciones/${m.id}`, { method: 'DELETE', headers: h });
+    }
+  });
+  it('circ: filas municipio con DISTRIBUCIÓN y SALDO en blanco (calcado xlsx)', async () => {
+    await loginAsAdmin();
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=circ&vigencia=2031`)).text();
+    assert.ok(html.includes('<td>CHAPARRAL</td><td class="n">50.00 %</td><td class="n"></td><td class="n" id="doccre-CHA-2031"><span class="doc-val">625</span></td><td class="n"></td>'), 'municipio circ solo % + creadas');
+    assert.ok(html.includes('<tr class="doc-sub"><td><strong>Circunscripción Chaparral</strong></td>'), 'fila Circunscripción tras el bloque');
+    assert.match(html, /<tr class="doc-tot"><td><strong>TOTAL<\/strong>/, 'fila TOTAL al final');
+  });
+  it('PUT valor: crear → editar → validación → 409 multilote', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    const Y = 2035, put = (b) => fetchJ('/api/distribucion-municipio/valor', { method: 'PUT', headers: h, body: JSON.stringify(b) });
+    const c = await put({ ano: Y, municipio: 'CHA', valor: 10.5 });
+    assert.equal(c.status, 201);
+    const cb = await c.json();
+    assert.equal(cb.ok, true);
+    let html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=mpio&vigencia=${Y}`)).text();
+    assert.ok(html.includes('<td>CHAPARRAL</td><td class="n"></td><td class="n"></td>'), 'fila municipio sin regla');
+    assert.ok(html.includes('<span class="doc-val">10.5</span>'), 'valor creado visible en tabla');
+    assert.ok(html.includes('data-tipo="municipio_anteriores" data-vig="2035"'), 'botón fijar monto cuando falta');
+    const u = await put({ ano: Y, municipio: 'CHA', valor: 20.25 });
+    assert.equal(u.status, 200);
+    html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=mpio&vigencia=${Y}`)).text();
+    assert.ok(html.includes('<span class="doc-val">20.25</span>'), 'valor editado visible en tabla');
+    assert.equal((await put({ ano: Y, municipio: 'CHA', valor: -5 })).status, 400, 'negativo 400');
+    assert.equal((await put({ ano: 'xx', municipio: 'CHA', valor: 1 })).status, 400, 'año inválido 400');
+    assert.equal((await put({ ano: Y, municipio: 'ZZZ', valor: 1 })).status, 400, 'municipio fantasma 400');
+    const second = await (await fetchJ('/api/maestros/distribucion-municipio', { method: 'POST', headers: h, body: JSON.stringify({ numero: 8, tipo: 8, ano: Y, municipio: 'CHA', valor: 1 }) })).json();
+    assert.equal(second.ok, true);
+    assert.equal((await put({ ano: Y, municipio: 'CHA', valor: 99 })).status, 409, 'multilote 409');
+    await fetchJ(`/api/maestros/distribucion-municipio/${second.id}`, { method: 'DELETE', headers: h });
+    await fetchJ(`/api/maestros/distribucion-municipio/${cb.id}`, { method: 'DELETE', headers: h });
+    const check = await (await fetchJ('/api/maestros/distribucion-municipio')).json();
+    assert.ok(!check.some((x) => x.ano === Y && x.municipio === 'CHA'), 'limpieza verificada');
+  });
+  it('circ: monto global edita la base de DISTRIBUCIÓN (subtotales exactos)', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    // Regla 2031 (.5/.3/.2) + creadas (625/375/500) sembradas por la suite de regla de oro.
+    const m = await (await fetchJ('/api/maestros/distribuciones', { method: 'POST', headers: h, body: JSON.stringify({ tipo: 'circunscripcion_anteriores', vigencia: 2031, asignado: 900 }) })).json();
+    assert.equal(m.ok, true);
+    try {
+      let html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=circ&vigencia=2031`)).text();
+      assert.ok(html.includes('<tr class="doc-sub"><td><strong>Circunscripción Chaparral</strong></td><td class="n"><strong>80.00 %</strong></td><td class="n"><strong>720</strong></td><td class="n"><strong>1,000</strong></td><td class="n"><strong>-280</strong></td>'), 'subtotal con monto 900');
+      assert.ok(html.includes('<tr class="doc-tot"><td><strong>TOTAL</strong></td><td class="n"><strong>100.00 %</strong></td><td class="n"><strong>900</strong></td><td class="n"><strong>1,500</strong></td><td class="n"><strong>-600</strong></td>'), 'TOTAL con monto 900');
+      const u = await (await fetchJ(`/api/maestros/distribuciones/${m.id}`, { method: 'PUT', headers: h, body: JSON.stringify({ asignado: 1000 }) })).json();
+      assert.equal(u.ok, true);
+      html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=circ&vigencia=2031`)).text();
+      assert.ok(html.includes('<td class="n"><strong>800</strong></td><td class="n"><strong>1,000</strong></td><td class="n"><strong>-200</strong></td>'), 'subtotal recalculado con monto 1000');
+    } finally {
+      await fetchJ(`/api/maestros/distribuciones/${m.id}`, { method: 'DELETE', headers: h });
+    }
+  });
+  it('legacy mpio redirige a tab mpio (token y ruta directa)', async () => {
+    await loginAsAdmin();
+    const tokOld = mods.tokenFor('/distribucion/actualizaciones/distribucion-municipio').slice(3);
+    const r1 = await fetchJ(`/v/rs?f=${tokOld}&vigencia=${YN}`);
+    assert.equal(r1.status, 302);
+    assert.match(r1.headers.get('location'), /tab=mpio/);
+    assert.match(r1.headers.get('location'), new RegExp(`vigencia=${YN}`));
+    const r2 = await fetchJ('/distribucion/actualizaciones/distribucion-municipio');
+    assert.equal(r2.status, 302);
+    assert.match(r2.headers.get('location'), /tab=mpio/);
+  });
+  it('banner msg escapado (ok y error)', async () => {
+    await loginAsAdmin();
+    const ok = await (await fetchJ(`/v/rs?f=${tokDist()}&vigencia=${YN}&ok=1&msg=` + encodeURIComponent('Regla 2027 cargada: 3 municipios.'))).text();
+    assert.ok(ok.includes('<span class="badge">Regla 2027 cargada: 3 municipios.</span>'), 'banner éxito');
+    const bad = await (await fetchJ(`/v/rs?f=${tokDist()}&vigencia=${YN}&msg=` + encodeURIComponent('<script>alert(1)</script>'))).text();
+    assert.ok(!bad.includes('<script>alert(1)</script>'), 'msg escapado sin script');
+    assert.match(bad, /alert-err/, 'banner error');
+  });
+  it('numpk editar/borrar por id en distribucion-municipio', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    const c = await (await fetchJ('/api/maestros/distribucion-municipio', { method: 'POST', headers: h, body: JSON.stringify({ numero: 77, tipo: 7, ano: YN, municipio: 'IBG', valor: 1000 }) })).json();
+    assert.equal(c.ok, true);
+    const id = c.id;
+    const u = await (await fetchJ(`/api/maestros/distribucion-municipio/${id}`, { method: 'PUT', headers: h, body: JSON.stringify({ valor: 2000 }) })).json();
+    assert.equal(u.ok, true);
+    const d = await (await fetchJ(`/api/maestros/distribucion-municipio/${id}`, { method: 'DELETE', headers: h })).json();
+    assert.equal(d.ok, true);
+    const check = await (await fetchJ('/api/maestros/distribucion-municipio')).json();
+    assert.ok(!check.some((x) => x.id === id), 'borrado verificado');
   });
   it('vigencia vacía: marco de incompletos', async () => {
     await loginAsAdmin();
-    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&vigencia=2099`)).text();
+    const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=circ&vigencia=2099`)).text();
     assert.match(html, /Sin regla para 2099/, 'marco sin datos');
   });
 });

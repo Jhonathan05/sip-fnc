@@ -296,7 +296,7 @@ ${inactivityModal()}
 ${taskCreateModal()}
 ${detailDrawer()}
 <div class="conn-overlay" id="connOverlay" hidden><div class="modal-card" role="alert"><h2>Sin conexión</h2><p>Se perdió la conexión con el servidor. Reintentando automáticamente…</p><button class="btn-primary" id="connRetry" type="button" style="margin-top:0">Reintentar ahora</button></div></div>
-${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}${withNonce(PRINT_JS, nonce)}${withNonce(REGLA_JS, nonce)}</body></html>`;
+${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}${withNonce(PRINT_JS, nonce)}${withNonce(REGLA_JS, nonce)}${withNonce(DOCEDIT_JS, nonce)}</body></html>`;
 }
 
 // Regla de Oro en 2 pasos: paso 1 carga xlsx (tabla % sin valores),
@@ -304,7 +304,6 @@ ${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_
 function reglaOroView(form, fnc) {
   const { leaf, sub, mod } = form;
   const vy = form.vigencia;
-  const canW = form.perms && form.perms.w;
   const valOf = (cod) => (form.valores && form.valores[cod] != null ? Number(form.valores[cod]).toLocaleString('es-CO') : '—');
   const rows = (form.reglaRows || []).map((r) =>
     `<tr><td>${esc(r.municipio_nombre || r.municipio)}</td><td>${esc(r.circ_nombre || '—')}</td><td class="tnum">${(Number(r.regla) * 100).toFixed(2)}%</td><td class="tnum">${valOf(r.municipio)}</td></tr>`).join('');
@@ -317,33 +316,21 @@ function reglaOroView(form, fnc) {
   }
   const circRows = Object.entries(porCirc).map(([c, x]) =>
     `<tr><td>${esc(c)}</td><td class="tnum">${x.n}</td><td class="tnum">${(x.suma * 100).toFixed(2)}%</td></tr>`).join('');
-  const tots = (form.circs || []).map((c) =>
-    `<label class="fld"><span>${esc(c.nombre)}</span><input id="reglaTot_${esc(c.codigo)}" type="number" min="0" step="0.01" placeholder="0"></label>`).join('');
   const verCtl = `<div class="skl-bar"><label class="fld"><span>Ver vigencia</span><input id="reglaVer" type="number" value="${vy}" min="2000" max="2100"></label>
 <button class="btn-logout" id="reglaVerGo" type="button" style="padding:10px 20px">Ver</button>
 <span style="flex:1"></span><button class="btn-logout" id="reglaPrint" type="button" style="padding:10px 20px">Imprimir</button>
 <a class="btn-logout" style="text-decoration:none;display:inline-block;padding:10px 20px" href="/api/regla-oro/xlsx?vigencia=${vy}">Excel</a>
 <a class="btn-logout" style="text-decoration:none;display:inline-block;padding:10px 20px" href="/api/regla-oro/pdf?vigencia=${vy}">PDF</a></div>`;
-  const upForm = canW ? `<div class="skl-bar"><label class="fld"><span>Vigencia</span><input id="reglaVig" type="number" value="${vy}" min="2000" max="2100"></label>
-<label class="fld"><span>Archivo xlsx (REGLA DE ORO)</span><input id="reglaFile" type="file" accept=".xlsx"></label>
-<button class="btn-primary" id="reglaUp" type="button" style="margin-top:0">Paso 1 · Cargar regla</button></div>` : '';
-  const goForm = !canW ? `<p><span class="badge">solo lectura</span></p>`
-    : !(form.reglaRows || []).length ? `<p><span class="badge badge-warn">Completa el paso 1 para la vigencia ${vy}.</span></p>`
-    : `<div class="skl-bar"><label class="fld"><span>Número</span><input id="reglaNum" type="number" value="1" min="0"></label>
-<label class="fld"><span>Tipo</span><input id="reglaTipo" type="number" value="1" min="0"></label>
-<label class="fld"><span>Vigencia</span><input id="reglaVig2" type="number" value="${vy}" min="2000" max="2100"></label>${tots}
-<button class="btn-primary" id="reglaGo" type="button" style="margin-top:0">Paso 2 · Asignar valores</button></div>`;
   const cmpForm = `<div class="skl-bar"><label class="fld"><span>Vigencia A</span><input id="reglaCmpA" type="number" value="${vy}" min="2000" max="2100"></label>
 <label class="fld"><span>Vigencia B</span><input id="reglaCmpB" type="number" value="${vy + 1}" min="2000" max="2100"></label>
 <label class="fld"><span>Vigencia C (opcional)</span><input id="reglaCmpC" type="number" placeholder="—" min="2000" max="2100"></label>
 <button class="btn-logout" id="reglaCmpGo" type="button" style="padding:10px 20px">Comparar</button></div><div id="reglaCmpOut"></div>`;
   return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)} <span class="badge">vigencia ${vy}</span></h2>
-<p id="reglaMsg" class="drawer-msg"></p>${verCtl}
-<h3 class="rail-sub">Paso 1 · Porcentajes por municipio (sin valores)</h3>${upForm}
+<p><span class="badge">solo histórico</span></p>${verCtl}
+<h3 class="rail-sub">Porcentajes por municipio (histórico)</h3>
 <table class="skl-table"><thead><tr><th>Municipio</th><th>Circunscripción</th><th>Regla</th><th>Valor ${vy}</th></tr></thead><tbody>${rows || '<tr><td colspan="4">Sin regla cargada para la vigencia.</td></tr>'}</tbody></table>
 <h3 class="rail-sub">Porcentaje por circunscripción</h3>
 <table class="skl-table"><thead><tr><th>Circunscripción</th><th>Municipios</th><th>% total</th></tr></thead><tbody>${circRows || '<tr><td colspan="3">Sin datos.</td></tr>'}</tbody></table>
-<h3 class="rail-sub">Paso 2 · Totales por circunscripción</h3>${goForm}
 <h3 class="rail-sub">Comparar vigencias (2 o 3)</h3>${cmpForm}</div>`;
 }
 
@@ -520,25 +507,41 @@ function configTabs(sub, leaf, role) {
   return `<div class="cfg-tabs" role="tablist" aria-label="${esc(sub.title)}">${tabs}</div>`;
 }
 
-// Tablas documento Distribución (formato .xps) + 3 escenarios por vigencia.
+// Tabs de la vista unificada Distribuciones (server-rendered, como configTabs).
+function distTabs(form) {
+  const tab = form.tab || 'mpio';
+  const tok = tokenFor('/distribucion/actualizaciones/distribuciones').replace('/v/', '');
+  const base = `${tokenFor('/dashboard')}?f=${encodeURIComponent(tok)}&vigencia=${form.vigSel}`;
+  const defs = [['carga', 'Carga'], ['mpio', 'Por municipio'], ['circ', 'Por circunscripción']];
+  const items = defs.map(([k, t]) => (tab === k
+    ? `<span class="cfg-tab active">${t}</span>`
+    : `<a class="cfg-tab" href="${base}&tab=${k}">${t}</a>`)).join('');
+  return `<div class="cfg-tabs" role="tablist" aria-label="Distribuciones">${items}</div>`;
+}
+
+// Tablas documento Distribución (formato .xlsx) + 3 escenarios por vigencia.
 // anterior: histórico año+tipo con sobrante y acumulado · actual: checklist +
-// tabla · siguiente: % por municipio. Sin ejecutado por circunscripción en BD:
-// Ejecutado = —, Saldo = Asignado.
-function docDistribucion(form, fnc) {
-  const { leaf, sub, mod } = form;
+// tabla · siguiente: % por municipio. DISTRIBUCIÓN = % × monto global,
+// CREADAS = valores cargados, SALDO = DISTRIBUCIÓN − CREADAS, en centavos exactos.
+// Encabezado compartido de la vista unificada: breadcrumb + h2 + membrete +
+// selector de vigencia + banner msg + tab bar. Abre la card (cierra el llamador).
+function docHead(form) {
+  const { sub, mod } = form;
   const vy = form.vigSel;
-  const yNow = new Date().getFullYear();
-  const escN = (n) => esc(fmtCOP(n));
-  const leafTok = tokenFor(leaf.path).replace('/v/', '');
+  const leafTok = tokenFor('/distribucion/actualizaciones/distribuciones').replace('/v/', '');
   const goUrl = `${tokenFor('/dashboard')}?f=${encodeURIComponent(leafTok)}`;
   const opts = (form.vigencias || [vy]).map((y) =>
     `<option value="${y}"${y === vy ? ' selected' : ''}>${y}</option>`).join('');
-  const sel = `<form method="get" action="${goUrl}"><div class="skl-bar"><label class="fld"><span>Vigencia</span><select name="vigencia">${opts}</select></label><button class="btn-primary" type="submit" style="margin-top:0">Ver</button></div></form>`;
-  const membrete = `<div class="doc-head"><strong>MUNICIPIOS ICA 2005 · SALDO DISPONIBLE</strong><br>DISTRIBUCIÓN · ASIGNACIONES CREADAS · LEY 863 DE 2003<br>FEDERACIÓN NACIONAL DE CAFETEROS · COMITÉ TOLIMA · TRANSFERENCIA ${vy} · OBRAS DE INFRAESTRUCTURA</div>`;
-  const head = `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>${esc(leaf.title)} <span class="badge">vigencia ${vy}</span></h2>${membrete}${sel}`;
-  const tail = `</div>`;
-  const incompleto = (msg) => `${head}<table class="skl-table"><thead><tr><th>Municipio</th><th>%</th><th>Asignado</th><th>Ejecutado</th><th>Saldo</th></tr></thead><tbody><tr><td colspan="5">${esc(msg)}</td></tr></tbody></table>${tail}`;
-  // Une regla (%) + valores por municipio, agrupado por circunscripción.
+  const sel = `<form method="get" action="${goUrl}"><input type="hidden" name="tab" value="${form.tab || 'mpio'}"><div class="skl-bar"><label class="fld"><span>Vigencia</span><select name="vigencia">${opts}</select></label><button class="btn-primary" type="submit" style="margin-top:0">Ver</button></div></form>`;
+  const membrete = `<div class="doc-head"><strong>FEDERACION NACIONAL DE CAFETEROS DE COLOMBIA - COMITE TOLIMA</strong><br>LEY 863 DE 2003 TRANSFERENCIA ${vy}<br>OBRAS DE INFRAESTRUCTURA<br>DISTRIBUCION No. <span class="doc-blank">______</span> SEGÚN ACTA <span class="doc-blank">______</span> DE <span class="doc-blank">______</span></div>`;
+  const msg = form.msg ? (form.msgOk
+    ? `<p><span class="badge">${esc(form.msg)}</span></p>`
+    : `<div class="alert-err">${esc(form.msg)}</div>`) : '';
+  return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p><h2>Distribuciones <span class="badge">vigencia ${vy}</span></h2>${membrete}${sel}${msg}${distTabs(form)}`;
+}
+
+// Une regla (%) + valores por municipio, agrupado por circunscripción.
+function docDatos(form) {
   const byMun = {};
   for (const r of (form.doc.regla || [])) {
     byMun[r.municipio] = { nombre: r.municipio_nombre || r.municipio, circ: r.circ_nombre || '—', pct: Number(r.regla), asig: 0 };
@@ -547,54 +550,187 @@ function docDistribucion(form, fnc) {
     byMun[v.municipio] = byMun[v.municipio] || { nombre: v.municipio_nombre || v.municipio, circ: v.circ_nombre || '—', pct: null };
     byMun[v.municipio].asig = Number(v.total);
   }
+  return byMun;
+}
+
+// Monto global (asignado) de la vista documento para la vigencia: fila de
+// distribuciones con tipo {kind}_actual/_anteriores. Null si no existe.
+function docTotalFor(form, kind) {
+  const mm = (form.doc && form.doc.montos) || [];
+  const vy = Number(form.vigSel);
+  const yNow = new Date().getFullYear();
+  const suf = vy === yNow ? '_actual' : '_anteriores';
+  const hit = mm.find((r) => r.tipo === `${kind}${suf}` && Number(r.vigencia) === vy)
+    || mm.find((r) => String(r.tipo || '').startsWith(kind) && Number(r.vigencia) === vy);
+  return hit ? Number(hit.asignado) : null;
+}
+
+// Centavos exactos: la aritmética monetaria se hace en enteros (cents);
+// cada valor se redondea una sola vez a centavos y las sumas son Σ exactas.
+const CENTS = (n) => Math.round((Number(n) || 0) * 100);
+const fmtCents = (c) => (c / 100).toLocaleString('en-US', { maximumFractionDigits: 2 });
+
+// Tablas documento Distribución (formato .xlsx): columnas MUNICIPIO | SICA 2005 |
+// DISTRIBUCIÓN (% × monto global) | ASIGNACIONES CREADAS (valores cargados) |
+// SALDO DISPONIBLE (DISTRIBUCIÓN − CREADAS). Sin fila-grupo: tras cada bloque
+// va la fila «Circunscripción X» y al final TOTAL. En modo circ las filas
+// municipio dejan DISTRIBUCIÓN y SALDO en blanco (calcado del xlsx).
+const docThead = `<thead><tr><th>MUNICIPIO</th><th>SICA 2005</th><th>DISTRIBUCIÓN</th><th>ASIGNACIONES CREADAS</th><th>SALDO DISPONIBLE</th></tr></thead>`;
+const docColGroup = `<colgroup><col style="width:30ch"><col style="width:11ch"><col style="width:18ch"><col style="width:18ch"><col style="width:18ch"></colgroup>`;
+function docTablaFrom(byMun, opts) {
+  const { total, circ, edit, ano } = opts || {};
   const circs = {};
   for (const [cod, m] of Object.entries(byMun)) {
     (circs[m.circ] = circs[m.circ] || []).push({ cod, ...m });
   }
-  const docTabla = () => {
-    let body = '', tPct = 0, tAsig = 0;
-    for (const [c, items] of Object.entries(circs)) {
-      const sp = items.reduce((a, x) => a + (x.pct || 0), 0);
-      const sa = items.reduce((a, x) => a + x.asig, 0);
-      tPct += sp; tAsig += sa;
-      body += `<tr><td colspan="5"><strong>Circunscripción ${esc(c)} · ${(sp * 100).toFixed(2)}%</strong></td></tr>`;
-      for (const x of items) {
-        body += `<tr><td>${esc(x.nombre)}</td><td class="tnum">${x.pct == null ? '—' : (x.pct * 100).toFixed(2) + '%'}</td><td class="tnum">${escN(x.asig)}</td><td class="tnum">—</td><td class="tnum">${escN(x.asig)}</td></tr>`;
-      }
-      body += `<tr><td><strong>Subtotal</strong></td><td class="tnum"><strong>${(sp * 100).toFixed(2)}%</strong></td><td class="tnum"><strong>${escN(sa)}</strong></td><td class="tnum">—</td><td class="tnum"><strong>${escN(sa)}</strong></td></tr>`;
+  const pctTxt = (p) => (p == null ? '' : (p * 100).toFixed(2) + ' %');
+  let body = '', tP = 0, tD = 0, tC = 0, tBlank = total == null;
+  for (const [c, items] of Object.entries(circs)) {
+    let sp = 0, sd = 0, sc = 0, bBlank = total == null;
+    for (const x of items) {
+      const creadas = CENTS(x.asig);
+      const dist = (x.pct == null || total == null) ? null : CENTS(x.pct * total);
+      const saldo = dist == null ? null : dist - creadas;
+      if (dist == null) { bBlank = true; tBlank = true; }
+      if (x.pct != null) sp += x.pct;
+      if (dist != null) sd += dist;
+      sc += creadas;
+      const dCol = circ ? '' : (dist == null ? '' : fmtCents(dist));
+      const sCol = circ ? '' : (saldo == null ? '' : fmtCents(saldo));
+      const cellId = `doccre-${x.cod}-${ano}`;
+      const editBtn = edit ? ` <button type="button" class="doc-edit" data-docedit="creada" data-cell="${cellId}" data-ano="${ano}" data-mun="${esc(x.cod)}" title="Editar valor" aria-label="Editar valor de ${esc(x.nombre)}">✎</button>` : '';
+      body += `<tr><td>${esc(x.nombre)}</td><td class="n">${pctTxt(x.pct)}</td><td class="n">${dCol}</td><td class="n" id="${cellId}"><span class="doc-val">${fmtCents(creadas)}</span>${editBtn}</td><td class="n">${sCol}</td></tr>`;
+      if (x.pct != null) tP += x.pct;
+      if (dist != null) tD += dist;
+      tC += creadas;
     }
-    body += `<tr><td><strong>TOTAL</strong></td><td class="tnum"><strong>${(tPct * 100).toFixed(2)}%</strong></td><td class="tnum"><strong>${escN(tAsig)}</strong></td><td class="tnum">—</td><td class="tnum"><strong>${escN(tAsig)}</strong></td></tr>`;
-    return `<table class="skl-table"><thead><tr><th>Municipio</th><th>%</th><th>Asignado</th><th>Ejecutado</th><th>Saldo</th></tr></thead><tbody>${body}</tbody></table>`;
-  };
-  // Escenario: anterior (histórico), actual (checklist + tabla), siguiente (%).
+    const sD = bBlank ? '' : fmtCents(sd);
+    const sS = bBlank ? '' : fmtCents(sd - sc);
+    body += `<tr class="doc-sub"><td><strong>Circunscripción ${esc(c)}</strong></td><td class="n"><strong>${(sp * 100).toFixed(2)} %</strong></td><td class="n"><strong>${sD}</strong></td><td class="n"><strong>${fmtCents(sc)}</strong></td><td class="n"><strong>${sS}</strong></td></tr>`;
+  }
+  const tDv = tBlank ? '' : fmtCents(tD);
+  const tSv = tBlank ? '' : fmtCents(tD - tC);
+  body += `<tr class="doc-tot"><td><strong>TOTAL</strong></td><td class="n"><strong>${(tP * 100).toFixed(2)} %</strong></td><td class="n"><strong>${tDv}</strong></td><td class="n"><strong>${fmtCents(tC)}</strong></td><td class="n"><strong>${tSv}</strong></td></tr>`;
+  return `<table class="skl-table doc-table">${docColGroup}${docThead}<tbody>${body}</tbody></table>`;
+}
+
+function docIncompleto(msg) {
+  return `<table class="skl-table doc-table">${docColGroup}${docThead}<tbody><tr><td colspan="5">${esc(msg)}</td></tr></tbody></table>`;
+}
+
+// Pie del documento (formato .xps): fecha de emisión + página.
+function docFoot() {
+  const d = new Date();
+  const p2 = (n) => String(n).padStart(2, '0');
+  const fecha = `${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${d.getFullYear()}`;
+  return `<div class="doc-foot"><span>${fecha}</span><span>1</span></div>`;
+}
+
+function docHistorial(form) {
+  const escN = (n) => esc(fmtCOP(n));
+  const yNow = new Date().getFullYear();
+  let acc = 0, hbody = '';
+  for (const h of (form.doc.historial || []).filter((x) => Number(x.vigencia) < yNow)) {
+    const as = Number(h.asignado), ej = Number(h.ejecutado), sob = as - ej;
+    acc += sob;
+    hbody += `<tr><td class="tnum">${esc(h.vigencia)}</td><td>${esc(h.tipo)}</td><td class="tnum">${escN(as)}</td><td class="tnum">${escN(ej)}</td><td class="tnum">${escN(sob)}</td><td class="tnum"><strong>${escN(acc)}</strong></td></tr>`;
+  }
+  const hist = hbody
+    ? `<table class="skl-table"><thead><tr><th>Año</th><th>Tipo</th><th>Asignado</th><th>Ejecutado</th><th>Sobrante año</th><th>Sobrante acumulado</th></tr></thead><tbody>${hbody}</tbody></table><p><span class="badge">Sobrante por circunscripción no disponible (sin ejecutado por circunscripción)</span></p>`
+    : `<table class="skl-table"><thead><tr><th>Año</th><th>Tipo</th><th>Asignado</th><th>Ejecutado</th><th>Sobrante año</th><th>Sobrante acumulado</th></tr></thead><tbody><tr><td colspan="6">Sin histórico de vigencias anteriores.</td></tr></tbody></table>`;
+  return `<h3 class="rail-sub">Histórico + sobrante acumulado</h3>${hist}`;
+}
+
+function cargaUrl(vy) {
+  const tok = tokenFor('/distribucion/actualizaciones/distribuciones').replace('/v/', '');
+  return `${tokenFor('/dashboard')}?f=${encodeURIComponent(tok)}&tab=carga&vigencia=${vy}`;
+}
+
+// Formularios de carga (paso 1 + paso 2) reutilizados en el tab Carga.
+// (En la hoja Regla de Oro solo queda la vista histórica.)
+function reglaCargaForms(form) {
+  const vy = form.vigSel;
+  const canW = form.perms && form.perms.w;
+  const tots = (form.circs || []).map((c) =>
+    `<label class="fld"><span>${esc(c.nombre)}</span><input id="reglaTot_${esc(c.codigo)}" type="number" min="0" step="0.01" placeholder="0"></label>`).join('');
+  const upForm = canW ? `<div class="skl-bar"><label class="fld"><span>Vigencia</span><input id="reglaVig" type="number" value="${vy}" min="2000" max="2100"></label>
+<label class="fld"><span>Archivo xlsx (REGLA DE ORO)</span><input id="reglaFile" type="file" accept=".xlsx"></label>
+<button class="btn-primary" id="reglaUp" type="button" style="margin-top:0">Paso 1 · Cargar regla</button></div>` : '';
+  const goForm = !canW ? `<p><span class="badge">solo lectura</span></p>`
+    : !(form.reglaRows || []).length ? `<p><span class="badge badge-warn">Completa el paso 1 para la vigencia ${vy}.</span></p>`
+    : `<div class="skl-bar"><label class="fld"><span>Número</span><input id="reglaNum" type="number" value="1" min="0"></label>
+<label class="fld"><span>Tipo</span><input id="reglaTipo" type="number" value="1" min="0"></label>
+<label class="fld"><span>Vigencia</span><input id="reglaVig2" type="number" value="${vy}" min="2000" max="2100"></label>${tots}
+<button class="btn-primary" id="reglaGo" type="button" style="margin-top:0">Paso 2 · Asignar valores</button></div>`;
+  return { upForm, goForm };
+}
+
+// Monto global editable del tab (reemplaza la tarjeta «Editar montos globales»):
+// muestra el asignado de distribuciones para (kind, vigencia) con botón
+// Editar (PUT) o Fijar monto (POST) cuando falta. Solo con permiso de escritura.
+function docMontoLine(form, kind) {
+  const vy = form.vigSel;
+  const canW = form.perms && form.perms.w;
+  const label = kind === 'municipio' ? 'Municipio' : 'Circunscripción';
+  const mm = (form.doc && form.doc.montos) || [];
+  const yNow = new Date().getFullYear();
+  const tipo = `${kind}${vy === yNow ? '_actual' : '_anteriores'}`;
+  const hit = mm.find((r) => r.tipo === tipo && Number(r.vigencia) === vy)
+    || mm.find((r) => String(r.tipo || '').startsWith(kind) && Number(r.vigencia) === vy);
+  const cellId = `docmonto-${kind}-${vy}`;
+  const valHtml = hit ? fmtCents(CENTS(hit.asignado)) : '—';
+  let btn = '';
+  if (canW) {
+    btn = hit
+      ? ` <button type="button" class="doc-edit" data-docedit="monto" data-cell="${cellId}" data-id="${hit.id}" title="Editar monto global" aria-label="Editar monto global">✎ Editar</button>`
+      : ` <button type="button" class="doc-edit" data-docedit="monto" data-cell="${cellId}" data-tipo="${tipo}" data-vig="${vy}" title="Fijar monto global" aria-label="Fijar monto global">✎ Fijar monto</button>`;
+  }
+  return `<p class="doc-monto" id="${cellId}-line">Monto global · ${label} ${vy}: <strong id="${cellId}"><span class="doc-val">${valHtml}</span></strong>${btn}</p><p id="docEditMsg" class="drawer-msg"></p>`;
+}
+
+// Vista unificada Distribuciones: tabs carga/mpio/circ en una sola card.
+// Sin paginación en las tablas documento; valores editables en línea
+// (botón ✎ por fila de municipio y en la línea de monto global).
+function distribucionesView(form, fnc) {
+  const vy = form.vigSel;
+  const tab = form.tab || 'mpio';
+  const canW = form.perms && form.perms.w;
+  const head = docHead(form);
+  if (tab === 'carga') {
+    const { upForm, goForm } = reglaCargaForms(form);
+    return `${head}<h3 class="rail-sub">Carga por vigencia</h3><p id="reglaMsg" class="drawer-msg"></p>${upForm}${goForm}<h3 class="rail-sub">Consulta histórica</h3>${docHistorial(form)}</div>`;
+  }
+  if (tab === 'mpio') {
+    const dOpts = { total: docTotalFor(form, 'municipio'), circ: false, edit: canW, ano: vy };
+    return `${head}${docMontoLine(form, 'municipio')}<h3 class="rail-sub">Por municipio</h3>${docTablaFrom(docDatos(form), dOpts)}${docFoot()}</div>`;
+  }
+  const cOpts = { total: docTotalFor(form, 'circunscripcion'), circ: true, edit: false, ano: vy };
+  return `${head}${docMontoLine(form, 'circunscripcion')}${docEscenarios(form, cOpts)}${docFoot()}</div>`;
+}
+
+// Escenarios de la vista unificada: anterior (histórico), actual (checklist +
+// tabla), siguiente (%). Reutiliza docTablaFrom/docHistorial/docIncompleto
+// con las opciones del tab circ (blancos municipio).
+function docEscenarios(form, opts) {
+  const vy = form.vigSel;
+  const yNow = new Date().getFullYear();
+  const d = form.doc;
   if (vy < yNow) {
-    let acc = 0, hbody = '';
-    for (const h of (form.doc.historial || []).filter((x) => Number(x.vigencia) < yNow)) {
-      const as = Number(h.asignado), ej = Number(h.ejecutado), sob = as - ej;
-      acc += sob;
-      hbody += `<tr><td class="tnum">${esc(h.vigencia)}</td><td>${esc(h.tipo)}</td><td class="tnum">${escN(as)}</td><td class="tnum">${escN(ej)}</td><td class="tnum">${escN(sob)}</td><td class="tnum"><strong>${escN(acc)}</strong></td></tr>`;
-    }
-    const hist = hbody
-      ? `<table class="skl-table"><thead><tr><th>Año</th><th>Tipo</th><th>Asignado</th><th>Ejecutado</th><th>Sobrante año</th><th>Sobrante acumulado</th></tr></thead><tbody>${hbody}</tbody></table><p><span class="badge">Sobrante por circunscripción no disponible (sin ejecutado por circunscripción)</span></p>`
-      : `<table class="skl-table"><thead><tr><th>Año</th><th>Tipo</th><th>Asignado</th><th>Ejecutado</th><th>Sobrante año</th><th>Sobrante acumulado</th></tr></thead><tbody><tr><td colspan="6">Sin histórico de vigencias anteriores.</td></tr></tbody></table>`;
-    return `${head}<h3 class="rail-sub">Histórico + sobrante acumulado</h3>${hist}${tail}`;
+    return docHistorial(form);
   }
   if (vy > yNow) {
-    const hay = (form.doc.regla || []).length > 0;
-    const pct = hay ? docTabla() : `<table class="skl-table"><thead><tr><th>Municipio</th><th>%</th><th>Asignado</th><th>Ejecutado</th><th>Saldo</th></tr></thead><tbody><tr><td colspan="5">Sin regla para ${vy}: cárgala en Regla de Oro.</td></tr></tbody></table>`;
-    const link = `<p><a class="btn-primary" href="${tokenFor('/dashboard')}?f=${encodeURIComponent(tokenFor('/distribucion/actualizaciones/regla-oro').replace('/v/', ''))}&vigencia=${vy}">Ir a Regla de Oro ${vy}</a></p>`;
-    return `${head}<h3 class="rail-sub">Porcentajes vigencia siguiente</h3>${link}${pct}${tail}`;
+    const hay = (d.regla || []).length > 0;
+    const pct = hay ? docTablaFrom(docDatos(form), opts) : docIncompleto(`Sin regla para ${vy}: cárgala en Regla de Oro.`);
+    const link = `<p><a class="btn-primary" href="${cargaUrl(vy)}">Cargar regla ${vy}</a></p>`;
+    return `<h3 class="rail-sub">Porcentajes vigencia siguiente</h3>${link}${pct}`;
   }
   // Actual: checklist + tabla (o marco de incompletos).
-  const d = form.doc;
-  const reglaTok = tokenFor('/distribucion/actualizaciones/regla-oro').replace('/v/', '');
-  const reglaUrl = tokenFor('/dashboard') + '?f=' + encodeURIComponent(reglaTok) + '&vigencia=' + vy;
   const chk = (ok, txt) => `<li>${ok ? '✓' : '✗'} ${txt}</li>`;
-  const check = `<ul class="check-list">${chk(d.hayRegla, 'Regla cargada' + (d.hayRegla ? '' : ' — <a href="' + reglaUrl + '">cargarla</a>'))}${chk(d.hayMontos, 'Montos globales (distribuciones)')}${chk(d.hayValores, 'Valores por municipio')}</ul>`;
+  const check = `<ul class="check-list">${chk(d.hayRegla, 'Regla cargada' + (d.hayRegla ? '' : ' — <a href="' + cargaUrl(vy) + '">cargarla</a>'))}${chk(d.hayMontos, 'Montos globales (distribuciones)')}${chk(d.hayValores, 'Valores por municipio')}</ul>`;
   if (!d.hayRegla && !d.hayMontos && !d.hayValores) {
-    return `${head}<h3 class="rail-sub">Estado vigencia actual</h3>${check}${incompleto(`Datos incompletos para la vigencia actual (${vy}).`)}${tail}`;
+    return `<h3 class="rail-sub">Estado vigencia actual</h3>${check}${docIncompleto(`Datos incompletos para la vigencia actual (${vy}).`)}`;
   }
-  return `${head}<h3 class="rail-sub">Estado vigencia actual</h3>${check}${docTabla()}${tail}`;
+  return `<h3 class="rail-sub">Estado vigencia actual</h3>${check}${docTablaFrom(docDatos(form), opts)}`;
 }
 
 function formSlot(form, fnc) {
@@ -603,9 +739,9 @@ function formSlot(form, fnc) {
   }
   const { leaf, sub, mod } = form;
   const tabs = sub.tabs ? configTabs(sub, leaf, fnc?.role) : '';
-  if (leaf.crud === 'distribuciones' || leaf.crud === 'distribucion-municipio') {
+  if (leaf.crud === 'distribuciones') {
     if (!form.rows) return '';
-    return `${docDistribucion(form, fnc)}<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p>${tabs}<h2>${esc(leaf.title)}</h2>${crudMaestro(leaf, form)}</div>`;
+    return distribucionesView(form, fnc);
   }
   if (leaf.reglaOro) return reglaOroView(form, fnc);
   if (leaf.crud && form.rows) return `<div class="card form-slot"><p><a href="${tokenFor(mod.path)}">${esc(mod.title)}</a> / ${esc(sub.title)}</p>${tabs}<h2>${esc(leaf.title)}</h2>${crudMaestro(leaf, form)}</div>`;
@@ -638,11 +774,15 @@ function crudField(f, catalogs) {
 
 function crudMaestro(leaf, form) {
   const perms = form.perms || {};
-  const cols = Object.keys((form.rows && form.rows[0]) || { codigo: '', nombre: '' });
+  const allCols = Object.keys((form.rows && form.rows[0]) || { codigo: '', nombre: '' });
+  // Oculta el pk interno (id numérico) para alinear columnas con el formulario;
+  // codigo sí se muestra porque es dato editable/visible.
+  const cols = allCols.filter((c) => c === 'codigo' || c !== (form.pkCol || 'codigo'));
   const head = cols.map((c) => `<th>${esc(c)}</th>`).join('');
   const bodyRows = (form.rows || []).map((r) => {
     const tds = cols.map((c) => `<td class="tnum">${esc(r[c] == null ? '' : String(r[c]))}</td>`).join('');
-    const pk = esc(r.codigo || '');
+    const pkv = form.pkCol ? r[form.pkCol] : r.codigo;
+    const pk = esc(pkv ?? '');
     const edit = perms.w ? `<button class="stepper-button" data-crud-edit="${pk}" type="button">Editar</button>` : '';
     const del = perms.d ? `<button class="stepper-button" data-crud-del="${pk}" type="button">Borrar</button>` : '';
     return `<tr data-crud-row="${pk}">${tds}<td>${edit} ${del}</td></tr>`;
@@ -662,7 +802,7 @@ function collect(){var map={'código':'codigo','nombre':'nombre','circunscripci�
 var g=document.getElementById('crudGuardar');
 if(g)g.addEventListener('click',function(){
 var id=g.getAttribute('data-crud-id');var editPk=g.getAttribute('data-edit-pk')||'';
-var body=collect();var method=editPk?'PUT':'POST';var url='/api/maestros/'+id+(editPk?'/'+encodeURIComponent(editPk):'');
+var body=collect();if(id==='distribucion-municipio'&&body.vigencia!==undefined){body.ano=body.vigencia;delete body.vigencia;}var method=editPk?'PUT':'POST';var url='/api/maestros/'+id+(editPk?'/'+encodeURIComponent(editPk):'');
 msg('Guardando…');
 fetch(url,{method:method,headers:{'Content-Type':'application/json','x-csrf-token':csrfH()},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
 if(x.d&&x.d.ok){window.location.reload();return;}
@@ -690,7 +830,7 @@ msg((x.d&&(x.d.error||x.d.msg))||('Error '+x.s+'.'));
 
 const PAGER_JS = `<script>(function(){try{
 var PER=9;
-document.querySelectorAll('table.skl-table').forEach(function(tbl){
+document.querySelectorAll('table.skl-table:not(.doc-table)').forEach(function(tbl){
 var rows=tbl.querySelectorAll('tbody tr');
 if(rows.length<=PER)return;
 var pages=Math.ceil(rows.length/PER),cur=0;
@@ -706,6 +846,50 @@ if(p)p.disabled=cur===0;if(n)n.disabled=cur===pages-1;
 bar.querySelector('[data-pg-prev]').addEventListener('click',function(){if(cur>0){cur--;render();}});
 bar.querySelector('[data-pg-next]').addEventListener('click',function(){if(cur<pages-1){cur++;render();}});
 render();
+});
+}catch(e){}})();</script>`;
+
+// Edición en línea de las tablas documento: botón ✎ por fila (ASIGNACIONES
+// CREADAS) y en la línea de monto global. Sin inline onclick (CSP nonce);
+// solo visible con permiso de escritura (server-rendered).
+const DOCEDIT_JS = `<script>(function(){try{
+function csrfH(){try{var m=document.querySelector('meta[name="csrf-token"]');return m?m.getAttribute('content')||'':'';}catch(e){return '';}}
+function dmsg(t){var m=document.getElementById('docEditMsg');if(m){m.textContent=t||'';}}
+function numOk(s){return /^-?\\d+(\\.\\d{1,2})?$/.test(String(s).trim());}
+document.querySelectorAll('[data-docedit]').forEach(function(btn){
+btn.addEventListener('click',function(){
+if(document.querySelector('[data-docediting]')){dmsg('Termina la edición en curso.');return;}
+var kind=btn.getAttribute('data-docedit');
+var cell=document.getElementById(btn.getAttribute('data-cell'));
+if(!cell){dmsg('Celda no encontrada.');return;}
+var span=cell.querySelector('.doc-val');
+if(!span){dmsg('Celda no encontrada.');return;}
+var orig=span.textContent.trim().replace(/,/g,'');
+if(orig==='—')orig='';
+var inCell=btn.parentNode===cell;
+btn.setAttribute('data-docediting','1');
+cell.innerHTML='';
+var inp=document.createElement('input');
+inp.type='number';inp.min='0';inp.step='0.01';inp.value=orig;inp.className='doc-input';inp.setAttribute('aria-label','Nuevo valor');
+var ok=document.createElement('button');ok.type='button';ok.className='btn-primary';ok.textContent='Guardar';
+var no=document.createElement('button');no.type='button';no.textContent='Cancelar';
+cell.appendChild(inp);cell.appendChild(document.createTextNode(' '));cell.appendChild(ok);cell.appendChild(document.createTextNode(' '));cell.appendChild(no);
+try{inp.focus();inp.select();}catch(e){}
+function close(){btn.removeAttribute('data-docediting');cell.innerHTML='';cell.appendChild(span);if(inCell){cell.appendChild(document.createTextNode(' '));cell.appendChild(btn);}dmsg('');}
+no.addEventListener('click',function(){close();});
+ok.addEventListener('click',function(){
+var v=inp.value.trim();
+if(!numOk(v)||Number(v)<0){dmsg('Valor inválido (número ≥ 0, máx. 2 decimales).');return;}
+dmsg('Guardando…');
+var url,method='PUT',payload;
+if(kind==='creada'){url='/api/distribucion-municipio/valor';payload={ano:btn.getAttribute('data-ano'),municipio:btn.getAttribute('data-mun'),valor:v};}
+else{var id=btn.getAttribute('data-id');if(id){url='/api/maestros/distribuciones/'+encodeURIComponent(id);payload={asignado:v};}else{url='/api/maestros/distribuciones';method='POST';payload={tipo:btn.getAttribute('data-tipo'),vigencia:btn.getAttribute('data-vig'),asignado:v};}}
+fetch(url,{method:method,headers:{'Content-Type':'application/json','x-csrf-token':csrfH(),'Accept':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){
+if(x.d&&x.d.ok){window.location.reload();return;}
+dmsg((x.d&&(x.d.error))||('Error '+x.s+'.'));
+}).catch(function(){dmsg('Error de red.');});
+});
+});
 });
 }catch(e){}})();</script>`;
 
@@ -894,7 +1078,7 @@ back.addEventListener('click',function(e){if(e.target===back)close();});
 function dashboardPage(fnc, data) {
   const nAct = (data.actividad || []).length;
   return `<div class="dash-grid">
-<div>${kpiStrip(data.saldos)}${formSlot(data.form, fnc)}</div>
+<div>${formSlot(data.form, fnc)}</div>
 <div class="dash-rail"><div class="card rail-card"><div class="rail-card-head"><h2>Actividad reciente</h2><span class="rail-card-meta tnum">${nAct} movimientos</span></div><div class="rail-scroll">${activityFeed(data.actividad, data.nonce)}</div></div><div class="card rail-card"><div class="rail-card-head"><h2>Tareas</h2></div><div class="rail-scroll">${taskCards(fnc, data.tareas)}${doneList(data.hechas)}</div></div></div>
 </div>`;
 }
