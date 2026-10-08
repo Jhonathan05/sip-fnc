@@ -1,4 +1,4 @@
-# Sesión SIP-FNC — contexto de trabajo (2026-10-08, v1.10.0)
+# Sesión SIP-FNC — contexto de trabajo (2026-10-08, v1.11.0)
 
 > Archivo vivo: resume el estado para retomar en cualquier momento.
 > Flujo de ramas: `dev` (trabajo) → `master` (releases) → GitHub.
@@ -43,16 +43,16 @@ Flip KC staging: registrar `sip-fnc-client` en `fnc-realm` + `AUTH_PROVIDER=keyc
 - SMTP: solo Resend, API key cifrada en BD, módulo Email solo admin.
 - Skills en `G:\Open\infra-fnc/skills` (sede canónica; `appweb-skills-fnc` congelado), nunca por proyecto. Catálogo: `skills/INDEX.md`.
 - Principios Modo B en cada cierre: 1) nada KC a medias, 2) sesión por contrato, 3) re-correr e2e al flipear.
-- Distribuciones UX (dev, sin versionar): sin breadcrumb; membrete `<details>` colapsado;
+- Distribuciones UX (v1.11.0): sin breadcrumb; membrete `<details>` colapsado;
 vigencia con 3 atajos (YN-2/YN-1/YN+1) + input año; stepper de pasos por vigencia con
 CTA; tab Histórico nuevo (circ-anterior apunta allí; Carga sin sección histórica);
 Carga con vigencia implícita (hidden) + condicionales por etapa (usa `form.doc`,
 `circs` cargados para el tab); `distTabUrl(vy,tab)`.
-- Distribuciones pulido (dev, sin versionar): título con controles a la derecha
+- Distribuciones pulido (v1.11.0): título con controles a la derecha
 (`.dist-title`); Ver con `f` oculto + action limpio; pasos solo en Carga;
 paso 2 con 1 input (total municipios) + modal doble validación +
 `POST /api/regla-oro/asignar-total` (reparto exacto en centavos, Σ = total).
-- Distribuciones diseño (dev, sin versionar): tabs conectadas, pills de vigencia
+- Distribuciones diseño (v1.11.0): tabs conectadas, pills de vigencia
 con primario, membrete summary pill, stepper en panel, tabla con thead
 enfatizado + hover + subtotales/TOTAL separados, monto en barra, secciones
 con acento y formularios en panel (clase `dist-view`; formato xlsx intacto).
@@ -81,7 +81,7 @@ worker `setInterval` con `SKIP LOCKED`, scheduler vencimientos 3-1-0, campana po
 oficiales — montos 1,000,000,003/967,151,728 y 500,000,000/471,018,310 + 38 CREADAS
 (Σ exacta); vacía 2027; migrate.js sembró los mismos valores. Cifras: valor EXACTO
 guardado, centavos solo si existen, sin `.00` de relleno ni redondeo (E2E punta a punta).
-- Documento oficial exportable (dev, sin versionar): `src/docdist.js` (datos compartidos)
+- Documento oficial exportable (v1.11.0): `src/docdist.js` (datos compartidos)
 + `GET /api/distribucion/documento/{xlsx,pdf}?tab=mpio|circ&vigencia=` calcados al
 formato xlsx (membrete R1–R4 con huecos, encabezados, bloques Circunscripción, TOTAL,
 pie fecha+página; circ con dist/saldo en blanco por municipio) + toolbar
