@@ -235,14 +235,19 @@ if(window.fncAlive){window.fncAlive().then(function(ok){if(ok){go();}else{g.disa
 });
 }catch(e){}})();</script>`;
 
-const NAV_MEMORY_JS = `<script>(function(){try{var k='sip-nav-open';var open=JSON.parse(localStorage.getItem(k)||'[]');function save(id,on){try{var cur=JSON.parse(localStorage.getItem(k)||'[]');if(on&&cur.indexOf(id)<0)cur.push(id);if(!on)cur=cur.filter(function(x){return x!==id});localStorage.setItem(k,JSON.stringify(cur));}catch(e){}}document.querySelectorAll('details.tree-sub, details.tree-mod').forEach(function(d){var id=d.getAttribute('data-navkey');if(open.indexOf(id)>=0)d.open=true;d.addEventListener('toggle',function(){save(id,d.open)});});
+// Memoria del árbol: restaura ramas abiertas ANTES del primer pintado.
+// Se emite justo tras </aside> (parser-blocking): sin salto de elementos al
+// navegar con el árbol desplegado. En dashboard plano solo limpia la memoria.
+const NAV_OPEN_JS = `<script>(function(){try{var open=JSON.parse(localStorage.getItem('sip-nav-open')||'[]');var all=document.querySelectorAll('details.tree-sub, details.tree-mod');for(var i=0;i<all.length;i++){var d=all[i];if(open.indexOf(d.getAttribute('data-navkey'))>=0)d.open=true;d.addEventListener('toggle',function(){var k='sip-nav-open';try{var cur=JSON.parse(localStorage.getItem(k)||'[]');var my=this.getAttribute('data-navkey');if(this.open&&cur.indexOf(my)<0)cur.push(my);if(!this.open)cur=cur.filter(function(x){return x!==my;});localStorage.setItem(k,JSON.stringify(cur));}catch(e){}});}}catch(e){}})();</script>`;
+
+const NAV_MEMORY_JS = `<script>(function(){try{
 var scrollAreas=Array.prototype.slice.call(document.querySelectorAll('.sidebar-nav, .rail-scroll'));
 scrollAreas.forEach(function(el){var scrollT=null;el.addEventListener('scroll',function(){el.classList.add('is-scrolling');if(scrollT)clearTimeout(scrollT);scrollT=setTimeout(function(){el.classList.remove('is-scrolling');},800);},{passive:true});});
 document.addEventListener('error',function(e){var t=e.target;if(t&&t.classList&&t.classList.contains('user-photo')){var d=document.createElement('div');d.className='user-avatar';d.textContent=(t.getAttribute('alt')||'U').trim().charAt(0).toUpperCase()||'U';t.replaceWith(d);}},true);}catch(e){}})();</script>`;
 
 // Reset al seleccionar Dashboard: el dashboard sin formulario inline se renderiza con
-// active '/dashboard'. Limpiar la memoria de ramas para que el árbol cargue colapsado.
-// Se emite ANTES de NAV_MEMORY_JS para que no reabra nada guardado.
+// active '/dashboard'. Se emite tras </aside> (y ya no al final): limpia la memoria
+// de ramas para que el árbol cargue colapsado sin reabrir nada guardado.
 const NAV_RESET_JS = `<script>(function(){try{localStorage.removeItem('sip-nav-open');}catch(e){}})();</script>`;
 
 const A11Y_HEAD_JS = `<script>(function(){try{var t=localStorage.getItem('sip-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);var s=parseInt(localStorage.getItem('sip-font')||'100',10);if(s>=80&&s<=120&&s!==100)document.documentElement.style.fontSize=(s/100*16)+'px';if(localStorage.getItem('sip-nav-collapsed')==='1')document.documentElement.classList.add('nav-collapsed');}catch(e){}})();</script>`;
@@ -299,13 +304,14 @@ ${navConfig(active, role)}
 </nav>
 <div class="nav-collapse-bar"><button class="nav-collapse-btn" id="navCollapseBtn" aria-label="Contraer menú" title="Contraer / expandir menú"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9.5 3v18"/></svg></button>${a11yControls()}</div>
 </aside>
+${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : withNonce(NAV_OPEN_JS, nonce)}
 <main class="main-container">${body}</main>
 ${profileModal(csrf)}
 ${inactivityModal()}
 ${taskCreateModal()}
 ${detailDrawer()}
 <div class="conn-overlay" id="connOverlay" hidden><div class="modal-card" role="alert"><h2>Sin conexión</h2><p>Se perdió la conexión con el servidor. Reintentando automáticamente…</p><button class="btn-primary" id="connRetry" type="button" style="margin-top:0">Reintentar ahora</button></div></div>
-${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}${withNonce(PRINT_JS, nonce)}${withNonce(REGLA_JS, nonce)}${withNonce(DOCEDIT_JS, nonce)}${withNonce(NOTIF_JS, nonce)}${withNonce(PUSH_JS, nonce)}</body></html>`;
+${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}${withNonce(PRINT_JS, nonce)}${withNonce(REGLA_JS, nonce)}${withNonce(DOCEDIT_JS, nonce)}${withNonce(NOTIF_JS, nonce)}${withNonce(PUSH_JS, nonce)}</body></html>`;
 }
 
 // Regla de Oro en 2 pasos: paso 1 carga xlsx (tabla % sin valores),

@@ -235,6 +235,14 @@ describe('auth + CSRF + contrato', () => {
     assert.match(html, /nav-lock/, 'lógica nav-lock presente');
     assert.match(html, /is-default/, 'color a 100% presente');
   });
+  it('árbol sin salto: memoria se restaura antes del contenido', async () => {
+    await loginAsAdmin();
+    const html = await (await fetchJ('/dashboard')).text();
+    const iAside = html.indexOf('</aside>');
+    const iMain = html.indexOf('<main');
+    const iNav = html.indexOf('sip-nav-open');
+    assert.ok(iAside > 0 && iMain > iAside && iNav > iAside && iNav < iMain, 'restore tras aside y antes del main');
+  });
   it('JS inline compila en dashboard plano y con formulario (gate anti-SyntaxError)', async () => {
 
     await loginAsAdmin();
