@@ -1227,6 +1227,25 @@ app.post('/api/regla-oro/asignar-total', needLogin, needDb, async (req, res) => 
   }
 });
 
+// POST /api/distribucion/vigencia/limpiar — reinicia una vigencia desde 0:
+// borra regla + valores + montos (admin y coordinador; irreversible).
+app.post('/api/distribucion/vigencia/limpiar', needLogin, needDb, async (req, res) => {
+  if (!canDelete(req.session.fnc)) return res.status(403).json({ ok: false, error: 'Solo admin y coordinador.' });
+  const vy = Number(req.body && req.body.vigencia);
+  if (!Number.isInteger(vy) || vy < 2000 || vy > 2100) return res.status(400).json({ ok: false, error: 'Vigencia inválida (2000–2100).' });
+  try {
+    const pool = getPool();
+    const r1 = await pool.query(`DELETE FROM regla_oro_anual WHERE vigencia = $1`, [vy]);
+    const r2 = await pool.query(`DELETE FROM distribucion_municipio WHERE ano = $1`, [vy]);
+    const r3 = await pool.query(`DELETE FROM distribuciones WHERE vigencia = $1`, [vy]);
+    await writeAudit(req, { action: 'vigencia.limpiar', modulo: 'distribucion', entidadId: String(vy), detalle: `Vigencia ${vy} reiniciada (regla ${r1.rowCount}, valores ${r2.rowCount}, montos ${r3.rowCount})` });
+    return res.json({ ok: true, regla: r1.rowCount, valores: r2.rowCount, montos: r3.rowCount });
+  } catch (e) {
+    console.error('[vigencia:limpiar]', e.message);
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
+
 // GET /api/regla-oro/comparar?vigencias=2026,2027[,2028] — regla % lado a lado (2 o 3).
 app.get('/api/regla-oro/comparar', needLogin, needDb, async (req, res) => {
   try {

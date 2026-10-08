@@ -9,7 +9,7 @@ informes contables por periodos — Comité de Cafeteros del Tolima.
 
 ## Stack (PERFIL rendimiento, acta v2 en docs/analisis.md)
 Node 22 + Express 4 + Vanilla + Postgres 16 + `pg` + `multer` + `sharp` + `exceljs`.
-Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (82 tests, 13 suites).
+Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (83 tests, 13 suites).
 
 ## Puesta en marcha
 ```powershell

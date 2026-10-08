@@ -838,6 +838,46 @@ describe('distribuciones: 3 escenarios por vigencia', () => {
     const check = await (await fetchJ('/api/maestros/distribucion-municipio')).json();
     assert.ok(!check.some((x) => x.id === id), 'borrado verificado');
   });
+  it('limpiar vigencia: botón + modal + borra todo + permisos', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    const { Pool } = require('pg');
+    const p = new Pool({ connectionString: TEST_DB });
+    const Y = 2036;
+    try {
+      // Siembra completa de la vigencia: regla + valor + monto.
+      await p.query(`INSERT INTO regla_oro_anual (vigencia, municipio, regla) VALUES (${Y},'CHA',0.5),(${Y},'ORT',0.5) ON CONFLICT DO NOTHING`);
+      await p.query(`INSERT INTO distribucion_municipio (numero, tipo, ano, municipio, valor) VALUES (1, 1, ${Y}, 'CHA', 100) ON CONFLICT DO NOTHING`);
+      const m = await (await fetchJ('/api/maestros/distribuciones', { method: 'POST', headers: h, body: JSON.stringify({ tipo: 'municipio_actual', vigencia: Y, asignado: 500 }) })).json();
+      assert.equal(m.ok, true);
+      const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=carga&vigencia=${Y}`)).text();
+      assert.ok(html.includes('id="vigResetAsk"'), 'botón reiniciar presente');
+      assert.ok(html.includes('id="vigResetModal" hidden'), 'modal de doble validación');
+      assert.ok(html.includes('Regla de Oro (2 municipios)') && html.includes('Valores individuales (1 municipios)') && html.includes('Montos globales (1)'), 'conteos reales en el modal');
+      assert.ok(html.includes('irreversible'), 'advertencia irreversible');
+      const r = await (await fetchJ('/api/distribucion/vigencia/limpiar', { method: 'POST', headers: h, body: JSON.stringify({ vigencia: Y }) })).json();
+      assert.equal(r.ok, true);
+      assert.deepEqual([r.reglas ?? r.regla, r.valores, r.montos].map(Number), [2, 1, 1], 'conteos borrados');
+      const chk = await p.query(`SELECT (SELECT COUNT(*) FROM regla_oro_anual WHERE vigencia=${Y}) r, (SELECT COUNT(*) FROM distribucion_municipio WHERE ano=${Y}) v, (SELECT COUNT(*) FROM distribuciones WHERE vigencia=${Y}) m`);
+      const row = chk.rows[0];
+      assert.ok(Number(row.r) === 0 && Number(row.v) === 0 && Number(row.m) === 0, 'BD limpia');
+      const vacia = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=carga&vigencia=${Y}`)).text();
+      assert.ok(!vacia.includes('id="vigResetAsk"'), 'sin datos → sin botón');
+      const again = await (await fetchJ('/api/distribucion/vigencia/limpiar', { method: 'POST', headers: h, body: JSON.stringify({ vigencia: Y }) })).json();
+      assert.equal(again.ok, true, 'idempotente');
+    } finally { await p.end(); }
+    assert.equal((await fetchJ('/api/distribucion/vigencia/limpiar', { method: 'POST', headers: h, body: JSON.stringify({ vigencia: 'xx' }) })).status, 400, 'vigencia inválida 400');
+    jarC.cookie = '';
+    const lh = await (await fetchC('/login')).text();
+    const ctok = (lh.match(/name="_csrf" value="([^"]+)"/) || [])[1];
+    await fetchC('/auth/mock', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: ctok }) });
+    const cd = await (await fetchC('/dashboard')).text();
+    const cmt = (cd.match(/name="csrf-token" content="([^"]+)"/) || [])[1];
+    assert.equal((await fetchC('/api/distribucion/vigencia/limpiar', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-csrf-token': cmt }, body: JSON.stringify({ vigencia: 2031 }) })).status, 403, 'consultor 403');
+    const cHtml = await (await fetchC(`/v/rs?f=${tokDist()}&tab=carga&vigencia=2031`)).text();
+    assert.ok(!cHtml.includes('id="vigResetAsk"'), 'consultor sin botón');
+  });
   it('vigencia vacía: marco de incompletos', async () => {
     await loginAsAdmin();
     const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=circ&vigencia=2099`)).text();

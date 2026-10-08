@@ -744,7 +744,17 @@ function distribucionesView(form, fnc) {
   const head = docHead(form);
   if (tab === 'carga') {
     const { upForm, goForm } = reglaCargaForms(form);
-    return `${head}<h3 class="rail-sub">Carga por vigencia</h3>${docPasos(form)}<p id="reglaMsg" class="drawer-msg"></p>${upForm}${goForm}</div>`;
+    const d = form.doc || {};
+    const hasData = d.hayRegla || d.hayValores || d.hayMontos;
+    const canDel = form.perms && form.perms.d;
+    const nRegla = (d.regla || []).length;
+    const nVal = (d.valores || []).length;
+    const nMon = (d.montos || []).length;
+    const reset = canDel && hasData
+      ? `<div class="vig-reset"><button class="btn-danger" id="vigResetAsk" type="button" data-vig="${vy}">⟲ Reiniciar vigencia ${vy}</button></div>
+<div class="modal-overlay" id="vigResetModal" hidden><div class="modal-card" role="dialog" aria-modal="true" aria-label="Confirmar reinicio de vigencia"><h2>Reiniciar vigencia ${vy}</h2><p>Se eliminará todo el ejercicio:</p><ul class="check-list"><li>✗ Regla de Oro (${nRegla} municipios)</li><li>✗ Valores individuales (${nVal} municipios)</li><li>✗ Montos globales (${nMon})</li></ul><p>La vigencia queda vacía para configurarla de nuevo desde el paso 1. <strong>Esta acción es irreversible.</strong></p><button class="btn-danger" id="vigResetGo" type="button" data-vig="${vy}">Confirmar reinicio</button> <button class="btn-logout" id="vigResetNo" type="button">Cancelar</button></div></div>`
+      : '';
+    return `${head}<h3 class="rail-sub">Carga por vigencia</h3>${docPasos(form)}<p id="reglaMsg" class="drawer-msg"></p>${upForm}${goForm}${reset}</div>`;
   }
   if (tab === 'hist') {
     return `${head}${docHistorial(form)}</div>`;
@@ -944,6 +954,20 @@ return fetch('/api/push/subscribe',{method:'DELETE',headers:{'Content-Type':'app
 }).then(function(){paint(false,false);}).catch(function(){pmsg('No se pudo desactivar.');});
 });
 refresh();
+var ra=document.getElementById('vigResetAsk');
+var rm=document.getElementById('vigResetModal');
+var rn=document.getElementById('vigResetNo');
+if(ra&&rm)ra.addEventListener('click',function(){rm.hidden=false;});
+if(rn&&rm)rn.addEventListener('click',function(){rm.hidden=true;});
+var rg=document.getElementById('vigResetGo');
+if(rg)rg.addEventListener('click',function(){
+var vy=rg.getAttribute('data-vig');
+rmsg('Reiniciando…',true);
+fetch('/api/distribucion/vigencia/limpiar',{method:'POST',headers:{'Content-Type':'application/json','x-csrf-token':csrfH(),'Accept':'application/json'},body:JSON.stringify({vigencia:vy})}).then(function(r){return r.json();}).then(function(d){
+if(d&&d.ok){rmsg('Vigencia '+vy+' reiniciada.',true);setTimeout(function(){window.location.reload();},900);return;}
+rmsg((d&&(d.error))||'No se pudo reiniciar.',false);
+}).catch(function(){rmsg('Error de red.',false);});
+});
 }catch(e){}})();</script>`;
 
 // Campana: marcar notificación leída al abrirla + marcar todas leídas.
