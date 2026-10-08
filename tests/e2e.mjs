@@ -894,6 +894,56 @@ describe('distribuciones: 3 escenarios por vigencia', () => {
     const cHtml = await (await fetchC(`/v/rs?f=${tokDist()}&tab=carga&vigencia=2031`)).text();
     assert.ok(!cHtml.includes('id="vigResetAsk"'), 'consultor sin botón');
   });
+  it('documento oficial: xlsx/pdf calcados con valores exactos (mpio y circ 2031)', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    const m = await (await fetchJ('/api/maestros/distribuciones', { method: 'POST', headers: h, body: JSON.stringify({ tipo: 'municipio_anteriores', vigencia: 2031, asignado: 2000 }) })).json();
+    assert.equal(m.ok, true);
+    const mc = await (await fetchJ('/api/maestros/distribuciones', { method: 'POST', headers: h, body: JSON.stringify({ tipo: 'circunscripcion_anteriores', vigencia: 2031, asignado: 2000 }) })).json();
+    assert.equal(mc.ok, true);
+    try {
+      const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=mpio&vigencia=2031`)).text();
+      assert.ok(html.includes('id="btnImprimir"'), 'botón Imprimir');
+      assert.ok(html.includes('/api/distribucion/documento/xlsx?tab=mpio&vigencia=2031') && html.includes('/api/distribucion/documento/pdf?tab=mpio&vigencia=2031'), 'links Excel/PDF del tab mpio');
+
+      const ExcelJS = require('exceljs');
+      const x = await fetchJ('/api/distribucion/documento/xlsx?tab=mpio&vigencia=2031');
+      assert.equal(x.status, 200);
+      assert.match(x.headers.get('content-type'), /spreadsheetml/);
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(Buffer.from(await x.arrayBuffer()));
+      const ws = wb.getWorksheet(1);
+      assert.equal(ws.getRow(1).getCell(1).value, 'FEDERACION NACIONAL DE CAFETEROS DE COLOMBIA - COMITE TOLIMA', 'membrete R1');
+      assert.equal(ws.getRow(2).getCell(1).value, 'LEY 863 DE 2003 TRANSFERENCIA 2031', 'membrete R2');
+      assert.equal(ws.getRow(4).getCell(1).value, 'DISTRIBUCION No. ______ SEGÚN ACTA ______ DE ______', 'R4 con huecos');
+      assert.equal(ws.getRow(5).getCell(3).value, 'DISTRIBUCIÓN', 'encabezado columna');
+      const vals = (r) => [1, 2, 3, 4, 5].map((i) => ws.getRow(r).getCell(i).value);
+      assert.deepEqual(vals(6), ['CHAPARRAL', 50, 1000, 625, 375], 'fila CHAPARRAL exacta');
+      assert.deepEqual(vals(8), ['Circunscripción Chaparral', 80, 1600, 1000, 600], 'subtotal Circunscripción');
+      assert.deepEqual(vals(11), ['TOTAL', 100, 2000, 1500, 500], 'TOTAL exacto');
+
+      const xc = await fetchJ('/api/distribucion/documento/xlsx?tab=circ&vigencia=2031');
+      const wbc = new ExcelJS.Workbook();
+      await wbc.xlsx.load(Buffer.from(await xc.arrayBuffer()));
+      const wsc = wbc.getWorksheet(1);
+      const valsC = (r) => [1, 2, 3, 4, 5].map((i) => wsc.getRow(r).getCell(i).value);
+      assert.deepEqual(valsC(6), ['CHAPARRAL', 50, null, 625, null], 'municipio circ: dist/saldo en blanco (calcado)');
+      assert.deepEqual(valsC(8), ['Circunscripción Chaparral', 80, 1600, 1000, 600], 'fila Circunscripción completa');
+
+      const pdf = await fetchJ('/api/distribucion/documento/pdf?tab=mpio&vigencia=2031');
+      assert.equal(pdf.status, 200);
+      assert.match(pdf.headers.get('content-type'), /application\/pdf/);
+      assert.ok((await pdf.arrayBuffer()).byteLength > 1000, 'pdf con contenido');
+
+      assert.equal((await fetch(`${BASE}/api/distribucion/documento/xlsx?tab=mpio&vigencia=2031`)).status, 401, 'anónimo 401');
+      assert.equal((await fetchJ('/api/distribucion/documento/xlsx?tab=xx&vigencia=2031')).status, 400, 'tab inválido 400');
+      assert.equal((await fetchJ('/api/distribucion/documento/xlsx?tab=mpio&vigencia=2099')).status, 404, 'sin datos 404');
+    } finally {
+      await fetchJ(`/api/maestros/distribuciones/${m.id}`, { method: 'DELETE', headers: h });
+      await fetchJ(`/api/maestros/distribuciones/${mc.id}`, { method: 'DELETE', headers: h });
+    }
+  });
   it('vigencia vacía: marco de incompletos', async () => {
     await loginAsAdmin();
     const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=circ&vigencia=2099`)).text();

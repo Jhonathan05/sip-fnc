@@ -9,7 +9,7 @@ informes contables por periodos — Comité de Cafeteros del Tolima.
 
 ## Stack (PERFIL rendimiento, acta v2 en docs/analisis.md)
 Node 22 + Express 4 + Vanilla + Postgres 16 + `pg` + `multer` + `sharp` + `exceljs`.
-Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (83 tests, 13 suites).
+Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (85 tests, 13 suites).
 
 ## Puesta en marcha
 ```powershell
@@ -81,6 +81,11 @@ worker `setInterval` con `SKIP LOCKED`, scheduler vencimientos 3-1-0, campana po
 oficiales — montos 1,000,000,003/967,151,728 y 500,000,000/471,018,310 + 38 CREADAS
 (Σ exacta); vacía 2027; migrate.js sembró los mismos valores. Cifras: valor EXACTO
 guardado, centavos solo si existen, sin `.00` de relleno ni redondeo (E2E punta a punta).
+- Documento oficial exportable (dev, sin versionar): `src/docdist.js` (datos compartidos)
++ `GET /api/distribucion/documento/{xlsx,pdf}?tab=mpio|circ&vigencia=` calcados al
+formato xlsx (membrete R1–R4 con huecos, encabezados, bloques Circunscripción, TOTAL,
+pie fecha+página; circ con dist/saldo en blanco por municipio) + toolbar
+Imprimir/Excel/PDF en tabs mpio/circ.
 - **Fase 2** ✅ 2026-10-08 — Monitoreo (`fnc-monitoring`): `/api/health|/ready` públicos,
 `maestro.borrar`→Discord, `infra/backup-r2.ps1` (pg_dump|gzip|AES-256-CBC .NET nativo,
 formato `openssl enc` compatible, round-trip hash) + retención R2 30d. Kuma apunta a

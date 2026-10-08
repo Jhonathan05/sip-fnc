@@ -542,6 +542,14 @@ button.hdr-pop-all {
     border-top: 1px dashed var(--border-light);
 }
 
+.doc-tools {
+    margin: 4px 0 12px;
+}
+
+.doc-tools .btn-logout {
+    margin-top: 0;
+}
+
 button {
     font-family: inherit;
 }

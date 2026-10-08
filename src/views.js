@@ -736,6 +736,11 @@ function docPasos(form) {
   return `<h3 class="rail-sub">Pasos vigencia ${vy} ${badge}</h3><ol class="doc-pasos">${items}</ol>`;
 }
 
+// Toolbar del documento oficial (Imprimir/Excel/PDF) en los tabs de datos.
+function docTools(vy, tab) {
+  return `<div class="skl-bar doc-tools"><button class="btn-logout" id="btnImprimir" type="button">Imprimir</button><a class="btn-logout" href="/api/distribucion/documento/xlsx?tab=${tab}&vigencia=${vy}">Excel</a><a class="btn-logout" href="/api/distribucion/documento/pdf?tab=${tab}&vigencia=${vy}">PDF</a></div>`;
+}
+
 // Vista unificada Distribuciones: tabs carga/mpio/circ/hist en una sola card.
 // Sin paginación en las tablas documento; valores editables en línea
 // (botón ✎ por fila de municipio y en la línea de monto global).
@@ -763,10 +768,10 @@ function distribucionesView(form, fnc) {
   }
   if (tab === 'mpio') {
     const dOpts = { total: docTotalFor(form, 'municipio'), circ: false, edit: canW, ano: vy };
-    return `${head}${docMontoLine(form, 'municipio')}<h3 class="rail-sub">Por municipio</h3>${docTablaFrom(docDatos(form), dOpts)}${docFoot()}</div>`;
+    return `${head}${docMontoLine(form, 'municipio')}${docTools(vy, 'mpio')}<h3 class="rail-sub">Por municipio</h3>${docTablaFrom(docDatos(form), dOpts)}${docFoot()}</div>`;
   }
   const cOpts = { total: docTotalFor(form, 'circunscripcion'), circ: true, edit: false, ano: vy };
-  return `${head}${docMontoLine(form, 'circunscripcion')}${docEscenarios(form, cOpts)}${docFoot()}</div>`;
+  return `${head}${docMontoLine(form, 'circunscripcion')}${docTools(vy, 'circ')}${docEscenarios(form, cOpts)}${docFoot()}</div>`;
 }
 
 // Escenarios de la vista unificada: anterior (histórico), actual (checklist +

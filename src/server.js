@@ -1331,6 +1331,164 @@ app.get('/api/regla-oro/pdf', needLogin, needDb, async (req, res) => {
   }
 });
 
+// ── Documento oficial de Distribución (por municipio / por circunscripción) ──
+// Exporta la tabla calcada del .xlsx de referencia: membrete R1–R4,
+// encabezados, bloques con fila Circunscripción, TOTAL y pie fecha+página.
+const { docDistData } = require('./docdist');
+
+function docParams(q) {
+  const vy = vigenciaParam(q);
+  const tab = q.tab === 'circ' ? 'circ' : q.tab === 'mpio' ? 'mpio' : null;
+  return vy && tab ? { vy, tab } : null;
+}
+
+function docFecha() {
+  const d = new Date();
+  const p2 = (n) => String(n).padStart(2, '0');
+  return `${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+function docMembrete(d) {
+  return [
+    'FEDERACION NACIONAL DE CAFETEROS DE COLOMBIA - COMITE TOLIMA',
+    `LEY 863 DE 2003 TRANSFERENCIA ${d.vy}`,
+    'OBRAS DE INFRAESTRUCTURA',
+    'DISTRIBUCION No. ______ SEGÚN ACTA ______ DE ______',
+  ];
+}
+
+async function docXlsxBuffer(d) {
+  const ExcelJS = require('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Table 1');
+  ws.columns = [{ width: 34.8 }, { width: 15.2 }, { width: 28 }, { width: 28 }, { width: 30.2 }];
+  const thin = { style: 'thin', color: { argb: 'FF000000' } };
+  const box = (c) => { c.border = { left: thin, right: thin, top: thin, bottom: thin }; };
+  docMembrete(d).forEach((t, i) => {
+    const c = ws.getRow(i + 1).getCell(1);
+    c.value = t;
+    c.font = { name: 'Courier New', size: i === 1 ? 14 : 9 };
+  });
+  ['MUNICIPIO', 'SICA 2005', 'DISTRIBUCIÓN', 'ASIGNACIONES CREADAS', 'SALDO DISPONIBLE'].forEach((t, i) => {
+    const c = ws.getRow(5).getCell(i + 1);
+    c.value = t;
+    c.font = { name: 'Courier New', size: 9 };
+    box(c);
+    c.alignment = { horizontal: i === 0 ? 'left' : 'right', vertical: 'top' };
+  });
+  const noMonto = d.monto == null;
+  let r = 6;
+  const putRow = (vals, size, bold) => {
+    const row = ws.getRow(r++);
+    vals.forEach((v, i) => {
+      const c = row.getCell(i + 1);
+      if (v !== null && v !== undefined) c.value = v;
+      c.font = { name: 'Courier New', size, ...(bold ? { bold: true } : {}) };
+      box(c);
+      c.alignment = { horizontal: i === 0 ? 'left' : 'right', vertical: 'top' };
+      if (i === 1) c.numFmt = '0.00" %"';
+      if (i > 1) c.numFmt = '#,##0.##';
+    });
+  };
+  for (const b of d.blocks) {
+    for (const it of b.items) {
+      const distV = d.tab === 'circ' || it.dist == null ? null : it.dist / 100;
+      const salV = d.tab === 'circ' || it.saldo == null ? null : it.saldo / 100;
+      putRow([it.nombre, it.pct == null ? null : it.pct * 100, distV, it.creadas / 100, salV], 8, false);
+    }
+    putRow([`Circunscripción ${b.circ}`, b.sub.pct * 100, noMonto ? null : b.sub.dist / 100, b.sub.creadas / 100, noMonto ? null : b.sub.saldo / 100], 9, true);
+  }
+  putRow(['TOTAL', d.total.pct * 100, noMonto ? null : d.total.dist / 100, d.total.creadas / 100, noMonto ? null : d.total.saldo / 100], 10, true);
+  const f = ws.getRow(r).getCell(1);
+  f.value = `${docFecha()}                                                                                                                                                                                                          1`;
+  f.font = { name: 'Courier New', size: 10 };
+  return wb.xlsx.writeBuffer();
+}
+
+function docPdfStream(d, res) {
+  const PDFDocument = require('pdfkit');
+  const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  const chunks = [];
+  doc.on('data', (c) => chunks.push(c));
+  const done = new Promise((resolve) => doc.on('end', resolve));
+  doc.info.Title = `Distribucion ${d.tab === 'circ' ? 'por circunscripcion' : 'por municipio'} ${d.vy}`;
+  docMembrete(d).forEach((t, i) => {
+    doc.font(i === 1 ? 'Helvetica-Bold' : 'Helvetica').fontSize(i === 1 ? 13 : 9).text(t, { align: 'center' });
+  });
+  doc.moveDown(1);
+  const W = doc.page.width - 80;
+  const XS = [40, 40 + W * 0.36, 40 + W * 0.50, 40 + W * 0.68, 40 + W * 0.85];
+  const fmt = (c) => c == null ? '' : (c / 100).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  const pctf = (p) => p == null ? '' : (p * 100).toFixed(2) + ' %';
+  const tableHead = () => {
+    doc.font('Helvetica-Bold').fontSize(7.5);
+    ['MUNICIPIO', 'SICA 2005', 'DISTRIBUCIÓN', 'ASIGNACIONES CREADAS', 'SALDO DISPONIBLE'].forEach((t, i) => {
+      doc.text(t, XS[i], doc.y, { width: i === 0 ? W * 0.36 : W * 0.32, align: i === 0 ? 'left' : 'right', lineBreak: false });
+    });
+    doc.text('', 40, doc.y);
+    doc.moveDown(0.4);
+    doc.font('Helvetica').fontSize(8);
+  };
+  const tableRow = (vals, bold) => {
+    if (doc.y > 750) { doc.addPage(); tableHead(); }
+    doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(bold ? 8.5 : 8);
+    vals.forEach((t, i) => {
+      doc.text(t, XS[i], doc.y, { width: i === 0 ? W * 0.36 : W * 0.32, align: i === 0 ? 'left' : 'right', lineBreak: false });
+    });
+    doc.text('', 40, doc.y);
+    doc.moveDown(0.25);
+  };
+  tableHead();
+  for (const b of d.blocks) {
+    for (const it of b.items) {
+      tableRow([it.nombre, pctf(it.pct), d.tab === 'circ' || it.dist == null ? '' : fmt(it.dist), fmt(it.creadas), d.tab === 'circ' || it.saldo == null ? '' : fmt(it.saldo)], false);
+    }
+    tableRow([`Circunscripción ${b.circ}`, pctf(b.sub.pct), d.monto == null ? '' : fmt(b.sub.dist), fmt(b.sub.creadas), d.monto == null ? '' : fmt(b.sub.saldo)], true);
+  }
+  tableRow(['TOTAL', pctf(d.total.pct), d.monto == null ? '' : fmt(d.total.dist), fmt(d.total.creadas), d.monto == null ? '' : fmt(d.total.saldo)], true);
+  doc.moveDown(1);
+  doc.fontSize(8).text(docFecha(), { align: 'left' });
+  doc.text('1', { align: 'right' });
+  doc.end();
+  return done.then(() => Buffer.concat(chunks));
+}
+
+// GET /api/distribucion/documento/xlsx?tab=mpio|circ&vigencia=YYYY
+app.get('/api/distribucion/documento/xlsx', needLogin, needDb, async (req, res) => {
+  const p = docParams(req.query);
+  if (!p) return res.status(400).json({ ok: false, error: 'Parámetros inválidos (tab, vigencia).' });
+  try {
+    const d = await docDistData(getPool(), p.vy, p.tab);
+    if (!d.hay) return res.status(404).json({ ok: false, error: `Sin datos para ${p.vy}.` });
+    const buf = await docXlsxBuffer(d);
+    await writeAudit(req, { action: 'documento.exportar', modulo: 'distribucion', detalle: `Documento ${p.tab} ${p.vy} xlsx (${d.blocks.reduce((a, b) => a + b.items.length, 0)} municipios)` });
+    res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.set('Content-Disposition', `attachment; filename="sip-distribucion-${p.tab}-${p.vy}.xlsx"`);
+    return res.send(buf);
+  } catch (e) {
+    console.error('[documento:xlsx]', e.message);
+    return res.status(500).json({ ok: false, error: 'No se pudo exportar.' });
+  }
+});
+
+// GET /api/distribucion/documento/pdf?tab=mpio|circ&vigencia=YYYY
+app.get('/api/distribucion/documento/pdf', needLogin, needDb, async (req, res) => {
+  const p = docParams(req.query);
+  if (!p) return res.status(400).json({ ok: false, error: 'Parámetros inválidos (tab, vigencia).' });
+  try {
+    const d = await docDistData(getPool(), p.vy, p.tab);
+    if (!d.hay) return res.status(404).json({ ok: false, error: `Sin datos para ${p.vy}.` });
+    const buf = await docPdfStream(d, res);
+    await writeAudit(req, { action: 'documento.exportar', modulo: 'distribucion', detalle: `Documento ${p.tab} ${p.vy} pdf (${d.blocks.reduce((a, b) => a + b.items.length, 0)} municipios)` });
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="sip-distribucion-${p.tab}-${p.vy}.pdf"`);
+    return res.send(buf);
+  } catch (e) {
+    console.error('[documento:pdf]', e.message);
+    return res.status(500).json({ ok: false, error: 'No se pudo exportar.' });
+  }
+});
+
 // Hojas del árbol: /:modulo/:sub/:item con guard por hoja (planas "Fase 2" por ahora).
 for (const { leaf, sub, mod } of flattenLeaves()) {
   app.get(leaf.path, needLogin, (req, res) => {
