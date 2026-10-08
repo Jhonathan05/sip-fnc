@@ -1091,6 +1091,11 @@ describe('fase 4: licencias + habeas + auth-limit', () => {
     const css = await (await fetchJ('/css/app.css')).text();
     assert.ok(css.includes('#habeasModal:target'), 'apertura por :target');
   });
+  it('sin sacudida al navegar: scrollbar estable + fuente sin swap', async () => {
+    const css = await (await fetchJ('/css/layout.css')).text();
+    assert.ok(css.includes('scrollbar-gutter: stable'), 'sin salto por scrollbar');
+    assert.ok(css.includes('font-display: optional'), 'Inter sin intercambio tardío');
+  });
 });
 
 describe('rate-limit + actividad + perfil + logout', () => {
