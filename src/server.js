@@ -566,6 +566,40 @@ app.delete('/api/maestros/:id/:codigo', needLogin, needDb, async (req, res) => {
     return res.status(500).json({ ok: false, error: 'Error interno.' });
   }
 });
+
+// PUT /api/distribucion-municipio/valor — fija ASIGNACIONES CREADAS por (ano, municipio).
+// 1 fila → UPDATE · 0 filas → INSERT (numero=1, tipo=1) · N filas → 409 (ajustar por lote en Carga).
+app.put('/api/distribucion-municipio/valor', needLogin, needDb, async (req, res) => {
+  if (!canWrite(req.session.fnc)) return res.status(403).json({ ok: false, error: 'Sin permiso.' });
+  const b = req.body || {};
+  const ano = /^\d{4}$/.test(String(b.ano || '')) ? Number(b.ano) : NaN;
+  if (!Number.isInteger(ano) || ano < 2000 || ano > 2100) return res.status(400).json({ ok: false, error: 'Año inválido.' });
+  const mun = String(b.municipio || '').trim().toUpperCase();
+  const valor = normVal(MAESTROS['distribucion-municipio'], 'valor', b.valor);
+  if (valor === undefined || valor === null) return res.status(400).json({ ok: false, error: 'Valor inválido (número ≥ 0).' });
+  try {
+    const mc = await getPool().query('SELECT 1 FROM municipios WHERE codigo = $1', [mun]);
+    if (!mc.rowCount) return res.status(400).json({ ok: false, error: 'Municipio inválido.' });
+    const ex = await getPool().query('SELECT id, numero, tipo FROM distribucion_municipio WHERE ano = $1 AND municipio = $2 ORDER BY id', [ano, mun]);
+    if (ex.rows.length > 1) {
+      const lots = ex.rows.map((r) => `${r.numero}/${r.tipo}`).join(', ');
+      return res.status(409).json({ ok: false, error: `Hay ${ex.rows.length} registros (${lots}): ajuste por lote en Carga.` });
+    }
+    if (ex.rows.length === 1) {
+      await getPool().query('UPDATE distribucion_municipio SET valor = $1 WHERE id = $2', [valor, ex.rows[0].id]);
+      await writeAudit(req, { action: 'maestro.editar', modulo: 'distribucion', entidadId: String(ex.rows[0].id), detalle: `distribucion-municipio valor ${mun}/${ano}` });
+      return res.json({ ok: true, id: ex.rows[0].id });
+    }
+    const ins = await getPool().query(
+      'INSERT INTO distribucion_municipio (numero, tipo, ano, municipio, valor) VALUES (1, 1, $1, $2, $3) RETURNING id',
+      [ano, mun, valor]);
+    await writeAudit(req, { action: 'maestro.crear', modulo: 'distribucion', entidadId: String(ins.rows[0].id), detalle: `distribucion-municipio valor ${mun}/${ano}` });
+    return res.status(201).json({ ok: true, id: ins.rows[0].id });
+  } catch (e) {
+    console.error('[distmun:valor]', e.message);
+    return res.status(500).json({ ok: false, error: 'Error interno.' });
+  }
+});
 const page = (req, fnc, mod, body) => views.layout(APP_NAME, fnc, mod.path, body, ensureToken(req), req.nonce, { nVencidas: (req.res && req.res.locals.nVencidas) || 0, vencidasList: (req.res && req.res.locals.vencidasList) || [] });
 
 app.get('/dashboard', needLogin, needDb, async (req, res) => {
@@ -575,6 +609,12 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
     let form = null;
     const fTok = req.query.f ? realFor(String(req.query.f)) : null;
     const fPath = fTok || (req.query.form ? String(req.query.form) : null);
+    if (fPath === '/distribucion/actualizaciones/distribucion-municipio') {
+      // Legacy: hoja eliminada del nav → vista unificada Distribuciones, tab mpio.
+      const qs = new URLSearchParams({ f: tokenFor('/distribucion/actualizaciones/distribuciones').replace('/v/', ''), tab: 'mpio' });
+      if (/^\d{4}$/.test(String(req.query.vigencia || ''))) qs.set('vigencia', String(req.query.vigencia));
+      return res.redirect(`${tokenFor('/dashboard')}?${qs.toString()}`);
+    }
     if (fPath) {
       const hit = findLeaf(fPath);
       if (!hit || !canAccess(fnc.role, hit.leaf)) {
@@ -583,11 +623,15 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
       if (hit.sub.kind === 'informe') return res.redirect(tokenFor(hit.leaf.path));
       form = hit;
       form.perms = { w: canWrite(fnc), d: canDelete(fnc) };
+      form.tab = ['carga', 'mpio', 'circ'].includes(req.query.tab) ? req.query.tab : 'mpio';
+      form.msg = String(req.query.msg || '');
+      form.msgOk = req.query.ok === '1';
       // Maestros con CRUD real: precarga filas + catálogos para el renderer.
       if (hit.leaf.crud && MAESTROS[hit.leaf.crud]) {
         const mc = MAESTROS[hit.leaf.crud];
         const r = await getPool().query(`SELECT ${mc.cols.join(',')} FROM ${mc.table} ORDER BY ${mc.pk}`);
         form.rows = r.rows;
+        form.pkCol = mc.pk;
         if (hit.leaf.crud === 'municipios') {
           const c = await getPool().query('SELECT codigo, nombre FROM circunscripciones ORDER BY codigo');
           form.catalogs = { circunscripcion: c.rows };
@@ -597,8 +641,8 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
           form.catalogs = { municipio: c.rows };
         }
       }
-      // Tablas documento + 3 escenarios (Distribuciones y Distribución por Municipio).
-      if (hit.leaf.crud === 'distribuciones' || hit.leaf.crud === 'distribucion-municipio') {
+      // Tablas documento + 3 escenarios (vista unificada Distribuciones).
+      if (hit.leaf.crud === 'distribuciones') {
         const yNow = new Date().getFullYear();
         const qv = String(req.query.vigencia || '');
         form.vigSel = /^\d{4}$/.test(qv) ? Number(qv) : yNow;
@@ -619,7 +663,7 @@ app.get('/dashboard', needLogin, needDb, async (req, res) => {
            LEFT JOIN circunscripciones c ON c.codigo = m.circunscripcion
            WHERE d.ano = $1 GROUP BY 1, 2, 3, 4 ORDER BY c.nombre NULLS LAST, m.nombre`, [form.vigSel]);
         const mm = await pool2.query(
-          `SELECT tipo, vigencia, asignado, ejecutado FROM distribuciones WHERE vigencia = $1 ORDER BY tipo`, [form.vigSel]);
+          `SELECT id, tipo, vigencia, asignado, ejecutado FROM distribuciones WHERE vigencia = $1 ORDER BY tipo`, [form.vigSel]);
         const hh = await pool2.query(
           `SELECT tipo, vigencia, asignado, ejecutado FROM distribuciones ORDER BY vigencia, tipo`);
         form.doc = {
@@ -845,8 +889,9 @@ const uploadRegla = multer({
     return cb(new Error('Solo xlsx hasta 5 MB.'));
   },
 });
-const REGLA_TOK = () => tokenFor('/distribucion/actualizaciones/regla-oro').replace('/v/', '');
-const REGLA_BACK = (qs) => `${tokenFor('/dashboard')}?f=${REGLA_TOK()}&${qs}`;
+const DIST_TOK = () => tokenFor('/distribucion/actualizaciones/distribuciones').replace('/v/', '');
+// Fallback no-JS: los forms de carga viven en la pestaña Carga de Distribuciones.
+const REGLA_BACK = (qs) => `${tokenFor('/dashboard')}?f=${DIST_TOK()}&tab=carga&${qs}`;
 
 app.post('/api/regla-oro/cargar', needLogin, needDb, (req, res) => {
   uploadRegla.single('archivo')(req, res, async (err) => {
@@ -856,7 +901,7 @@ app.post('/api/regla-oro/cargar', needLogin, needDb, (req, res) => {
       : res.redirect(REGLA_BACK('msg=' + encodeURIComponent(error)));
     const done = (msg, extra) => wantJson
       ? res.json({ ok: true, msg, ...(extra || {}) })
-      : res.redirect(REGLA_BACK(`vigencia=${vy}&msg=` + encodeURIComponent(msg)));
+      : res.redirect(REGLA_BACK(`vigencia=${vy}&ok=1&msg=` + encodeURIComponent(msg)));
     if (err) return fail(400, 'Archivo inválido o mayor a 5 MB (solo xlsx).');
     const fnc = req.session.fnc;
     if (!canWrite(fnc)) return res.status(403).send(views.errorPage(fnc, 'forbidden'));
@@ -903,7 +948,7 @@ app.post('/api/regla-oro/asignar', needLogin, needDb, async (req, res) => {
     : res.redirect(REGLA_BACK('msg=' + encodeURIComponent(error)));
   const done = (msg, extra) => wantJson
     ? res.json({ ok: true, msg, ...(extra || {}) })
-    : res.redirect(REGLA_BACK('msg=' + encodeURIComponent(msg)));
+    : res.redirect(REGLA_BACK(`vigencia=${vy}&ok=1&msg=` + encodeURIComponent(msg)));
   try {
     const b = req.body || {};
     const vy = Number(b.vigencia);
@@ -1047,6 +1092,13 @@ for (const { leaf, sub, mod } of flattenLeaves()) {
       `<p><a href="${mod.path}">${views.esc(mod.title)}</a> / ${views.esc(sub.title)}</p><div class="card"><h1>${views.esc(leaf.title)}</h1><p>Negocio en Fase 2. Tu acceso actual: <span class="badge">${views.esc(fnc.role)}</span></p></div>`));
   });
 }
+
+// Legacy: hoja Distribución por Municipio eliminada del nav → vista unificada, tab mpio.
+app.get('/distribucion/actualizaciones/distribucion-municipio', needLogin, (req, res) => {
+  const qs = new URLSearchParams({ f: tokenFor('/distribucion/actualizaciones/distribuciones').replace('/v/', ''), tab: 'mpio' });
+  if (/^\d{4}$/.test(String(req.query.vigencia || ''))) qs.set('vigencia', String(req.query.vigencia));
+  return res.redirect(`${tokenFor('/dashboard')}?${qs.toString()}`);
+});
 
 // GET/POST /api/admin/rate-limit — ver y cambiar en caliente (solo ADMIN, auditado).
 app.get('/api/admin/rate-limit', needLogin, needRole('ADMIN'), (req, res) => {

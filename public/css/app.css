@@ -1189,6 +1189,76 @@ a.hdr-icon:hover {
     margin: 8px 0 4px;
 }
 
+.doc-foot {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--fs-meta);
+    color: var(--text-muted);
+    margin: 8px 0 4px;
+}
+
+/* Tabla documento Distribución calcada de los .xlsx de referencia. */
+.doc-table {
+    font-family: 'Courier New', Courier, monospace;
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.doc-table th,
+.doc-table td {
+    border: 1px solid var(--text-muted);
+    padding: 4px 8px;
+    vertical-align: top;
+}
+
+.doc-table thead th {
+    font-weight: 400;
+    text-align: left;
+}
+
+.doc-table td.n,
+.doc-table th.n {
+    text-align: right;
+}
+
+.doc-table .doc-sub td {
+    font-size: 1.06em;
+}
+
+.doc-table .doc-tot td {
+    font-size: 1.12em;
+}
+
+.doc-blank {
+    letter-spacing: .1em;
+    color: var(--text-muted);
+}
+
+/* Edición en línea de las tablas documento. */
+.doc-edit {
+    font-size: var(--fs-meta);
+    padding: 1px 6px;
+    margin-left: 6px;
+    cursor: pointer;
+}
+
+.doc-input {
+    width: 13ch;
+    font: inherit;
+    text-align: right;
+}
+
+.doc-monto {
+    font-size: var(--fs-table);
+    margin: 8px 0 4px;
+}
+
+@media print {
+    .doc-edit {
+        display: none;
+    }
+}
+
 .check-list {
     list-style: none;
     margin: 0 0 12px;

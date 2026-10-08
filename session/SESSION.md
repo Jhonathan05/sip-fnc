@@ -1,4 +1,4 @@
-# Sesión SIP-FNC — contexto de trabajo (2026-09-30, v1.3.1)
+# Sesión SIP-FNC — contexto de trabajo (2026-10-08, v1.9.0)
 
 > Archivo vivo: resume el estado para retomar en cualquier momento.
 > Flujo de ramas: `dev` (trabajo) → `master` (releases) → GitHub.
@@ -9,7 +9,7 @@ informes contables por periodos — Comité de Cafeteros del Tolima.
 
 ## Stack (PERFIL rendimiento, acta v2 en docs/analisis.md)
 Node 22 + Express 4 + Vanilla + Postgres 16 + `pg` + `multer` + `sharp` + `exceljs`.
-Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (24 tests).
+Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (61 tests, 9 suites).
 
 ## Puesta en marcha
 ```powershell
@@ -28,7 +28,7 @@ Flip KC staging: registrar `sip-fnc-client` en `fnc-realm` + `AUTH_PROVIDER=keyc
 `audit.js` (bitácora indefinida) · `task-meta.js` · `prefs.js` (auto-reparo) ·
 `crypto.js` (AES-256-GCM) · `mail.js` (Resend) · `informes.js` (4 + Excel).
 `db/migrate/001` (distribuciones, audit_log, tasks) · `002_user_prefs` ·
-`003_distribucion_maestros` · `004_app_settings`.
+`003_distribucion_maestros` · `004_app_settings` · `005_regla_oro`.
 `tests/e2e.mjs` + `tests/db-admin.cjs` (BD `sip_fnc_test`, cleanup verificado).
 
 ## Decisiones vigentes (no reabrir sin motivo)
@@ -43,6 +43,11 @@ Flip KC staging: registrar `sip-fnc-client` en `fnc-realm` + `AUTH_PROVIDER=keyc
 - SMTP: solo Resend, API key cifrada en BD, módulo Email solo admin.
 - Skills en `G:\Open\appweb-skills-fnc` (sede canónica), nunca por proyecto.
 - Principios Modo B en cada cierre: 1) nada KC a medias, 2) sesión por contrato, 3) re-correr e2e al flipear.
+- Distribuciones unificada (`?tab=` carga/mpio/circ, default mpio; hoja mpio fuera del nav, legacy → 302 a `tab=mpio`); tokens `/v/` congelados (nuevas páginas AL FINAL).
+- Tablas documento calcadas de `docs/formatos/distribucion por {municipio,circunscripcion}.xlsx`: columnas MUNICIPIO|SICA 2005|DISTRIBUCIÓN (%×monto)|ASIGNACIONES CREADAS|SALDO (dist−creadas); fila `Circunscripción X` tras cada bloque + TOTAL; sin `$` (comas); centavos exactos (aritmética en enteros); en tab circ, DISTRIBUCIÓN/SALDO en blanco por municipio. Membrete 4 líneas + huecos `______` para N° distribución/acta (sin fuente en BD aún).
+- Tablas documento SIN paginación (`PAGER_JS` exime `.doc-table`) y editables en línea (botón ✎): CREADAS por fila (tab mpio) + línea de monto global por tab (PUT/POST `distribuciones`); tarjetas CRUD eliminadas. Nuevo `PUT /api/distribucion-municipio/valor` (1 fila→UPDATE, 0→INSERT 1/1, N→409 ir a Carga). Consultor sin botones (server-rendered).
+- Tarjetas KPI `% ejecutado` ocultas del dashboard (función + `/api/saldos` conservados, reversible).
+- Regla de Oro 2 pasos (carga xlsx + asignar por circunscripción) con perimetrales, comparar y export xlsx/pdf; hoja Regla de Oro solo-histórica (carga vive en tab Carga).
 - Tras cada pull/cambio con `--watch`: reinicio + re-login obligatorios (sesiones en memoria se pierden; forms viejos dan 403 CSRF con redirect a login).
 
 ## Pendiente (orden sugerido)
