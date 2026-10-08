@@ -9,7 +9,7 @@ informes contables por periodos — Comité de Cafeteros del Tolima.
 
 ## Stack (PERFIL rendimiento, acta v2 en docs/analisis.md)
 Node 22 + Express 4 + Vanilla + Postgres 16 + `pg` + `multer` + `sharp` + `exceljs`.
-Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (61 tests, 9 suites).
+Puerto dev `3020`, Postgres dev `5433`. Suite e2e: `npm run test:e2e` (65 tests, 10 suites).
 
 ## Puesta en marcha
 ```powershell
@@ -61,7 +61,7 @@ Flip KC staging: registrar `sip-fnc-client` en `fnc-realm` + `AUTH_PROVIDER=keyc
 Fuente: `G:\Open\infra-fnc/skills` (`INDEX.md`). Fuera: `fnc-url-masking`
 (revertida 1.3.1), UI `fnc-admin-panel` (Next/Prisma), `fnc-backend`
 (rige Postgres único).
-- **Fase 1** — Notificaciones: `006_outbox.sql` + `src/notify.js` (encolar transaccional,
+- **Fase 1** ✅ 2026-10-08 — Notificaciones: `006_outbox.sql` + `src/notify.js` (encolar transaccional,
 worker `setInterval` con `SKIP LOCKED`, scheduler vencimientos 3-1-0, campana por rol
 `GET|PUT /api/notificaciones`, email Resend, Discord helper fire-and-forget).
 - **Fase 2** — Monitoreo (`fnc-monitoring`): `/api/health|/ready`, eventos `audit_log`→Discord,

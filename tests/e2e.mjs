@@ -73,6 +73,8 @@ before(async () => {
       AUTH_PROVIDER: 'mock', MOCK_ROLES: 'admin',
       CLIENT_ROLES: 'admin,coordinador,consultor,analista,auxiliar',
       APP_BASE: BASE, RATE_LIMIT_API_PER_MIN: '1000',
+      NOTIFY_MS: '400', NOTIFY_MAX_INTENTOS: '2', NOTIFY_RETRY_MIN: '0',
+      RESEND_API_KEY: '', MAIL_FROM: '', DISCORD_WEBHOOK_URL: '',
       KEYCLOAK_URL: 'http://fnc-keycloak:8080/auth', KEYCLOAK_PUBLIC_URL: 'http://localhost:8080/auth',
       KEYCLOAK_REALM: 'fnc-realm', KEYCLOAK_CLIENT_ID: 'sip-fnc-client', KEYCLOAK_CLIENT_SECRET: 'x',
     },
@@ -91,6 +93,8 @@ before(async () => {
       AUTH_PROVIDER: 'mock', MOCK_ROLES: 'consultor',
       CLIENT_ROLES: 'admin,coordinador,consultor,analista,auxiliar',
       APP_BASE: BASE_C, RATE_LIMIT_API_PER_MIN: '1000',
+      NOTIFY_MS: '400', NOTIFY_MAX_INTENTOS: '2', NOTIFY_RETRY_MIN: '0',
+      RESEND_API_KEY: '', MAIL_FROM: '', DISCORD_WEBHOOK_URL: '',
       KEYCLOAK_URL: 'http://fnc-keycloak:8080/auth', KEYCLOAK_PUBLIC_URL: 'http://localhost:8080/auth',
       KEYCLOAK_REALM: 'fnc-realm', KEYCLOAK_CLIENT_ID: 'sip-fnc-client', KEYCLOAK_CLIENT_SECRET: 'x',
     },
@@ -754,6 +758,119 @@ describe('distribuciones: 3 escenarios por vigencia', () => {
     await loginAsAdmin();
     const html = await (await fetchJ(`/v/rs?f=${tokDist()}&tab=circ&vigencia=2099`)).text();
     assert.match(html, /Sin regla para 2099/, 'marco sin datos');
+  });
+});
+
+describe('notificaciones outbox + campana', () => {
+  const { Pool } = require('pg');
+  const pool = () => new Pool({ connectionString: TEST_DB });
+  async function waitFor(fn, ms = 10000) {
+    const t0 = Date.now();
+    for (;;) {
+      const v = await fn();
+      if (v) return v;
+      if (Date.now() - t0 > ms) throw new Error('timeout esperando condición e2e');
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+  it('scheduler 3-1-0 encola campana idempotente + validar encola discord', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const p = pool();
+    try {
+      const t = await p.query(`INSERT INTO tasks (rol, titulo, fecha_limite, estado) VALUES ('analista','E2E-aviso-3d', CURRENT_DATE + 3, 'pendiente') RETURNING id`);
+      const id = t.rows[0].id;
+      const row = await waitFor(async () => (await p.query(`SELECT * FROM outbox WHERE ref = $1`, [`tarea:${id}:3d`])).rows[0]);
+      assert.equal(row.canal, 'campana');
+      assert.deepEqual(row.roles, ['analista']);
+      assert.match(row.titulo, /vence en 3 días/);
+      await new Promise((r) => setTimeout(r, 1500)); // ~3 ticks × 2 instancias
+      const c = await p.query(`SELECT COUNT(*)::int AS n FROM outbox WHERE ref = $1`, [`tarea:${id}:3d`]);
+      assert.equal(c.rows[0].n, 1, 'sin duplicados entre instancias');
+      const v = await (await fetchJ(`/api/tareas/${id}/validar`, { method: 'POST', headers: { 'x-csrf-token': mt } })).json();
+      assert.equal(v.ok, true);
+      const d = await waitFor(async () => (await p.query(`SELECT * FROM outbox WHERE ref = $1`, [`tarea-validada:${id}`])).rows[0]);
+      assert.equal(d.canal, 'discord');
+      await p.query(`DELETE FROM outbox WHERE ref LIKE $1`, [`tarea:${id}:%`]);
+      await p.query(`DELETE FROM outbox WHERE ref = $1`, [`tarea-validada:${id}`]);
+      await p.query(`DELETE FROM tasks WHERE id = $1`, [id]);
+      const left = await p.query(`SELECT COUNT(*)::int AS n FROM tasks WHERE id = $1`, [id]);
+      assert.equal(left.rows[0].n, 0, 'limpieza verificada');
+    } finally { await p.end(); }
+  });
+  it('campana por rol: ver, leer una, leer todas + badge', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    const p = pool();
+    try {
+      const a = await p.query(`INSERT INTO outbox (canal, titulo, roles, estado) VALUES ('campana','E2E-camp-1','{admin}','enviado') RETURNING id`);
+      const b = await p.query(`INSERT INTO outbox (canal, titulo, roles, estado) VALUES ('campana','E2E-camp-2','{admin}','pendiente') RETURNING id`);
+      await waitFor(async () => (await p.query(`SELECT estado FROM outbox WHERE id = $1`, [b.rows[0].id])).rows[0].estado === 'enviado');
+      let list = await (await fetchJ('/api/notificaciones')).json();
+      assert.ok(list.some((x) => x.titulo === 'E2E-camp-1'), 've campana de su rol');
+      assert.ok(list.some((x) => x.titulo === 'E2E-camp-2'), 'worker entregó pendiente');
+      let html = await (await fetchJ('/dashboard')).text();
+      const bell = html.slice(html.indexOf('hdr-bell'), html.indexOf('hdr-bell') + 1200);
+      assert.ok(bell.includes('aria-label="Campana"'), 'icono campana');
+      assert.match(bell, /hdr-badge[^>]*>2</, 'badge con 2');
+      assert.equal((await fetchJ(`/api/notificaciones/${a.rows[0].id}/leida`, { method: 'PUT', headers: h })).status, 200);
+      list = await (await fetchJ('/api/notificaciones')).json();
+      assert.ok(!list.some((x) => x.id === a.rows[0].id), 'leída sale de la lista');
+      assert.ok(list.some((x) => x.id === b.rows[0].id), 'la otra sigue');
+      assert.equal((await fetchJ(`/api/notificaciones/${a.rows[0].id}/leida`, { method: 'PUT', headers: h })).status, 404, 'releer → 404');
+      assert.equal((await fetchJ('/api/notificaciones/999999/leida', { method: 'PUT', headers: h })).status, 404);
+      assert.equal((await fetchJ('/api/notificaciones/xx/leida', { method: 'PUT', headers: h })).status, 400);
+      const all = await (await fetchJ('/api/notificaciones/leidas', { method: 'PUT', headers: h })).json();
+      assert.equal(all.n, 1);
+      list = await (await fetchJ('/api/notificaciones')).json();
+      assert.equal(list.length, 0, 'bandeja vacía');
+      html = await (await fetchJ('/dashboard')).text();
+      const bell2 = html.slice(html.indexOf('hdr-bell'), html.indexOf('hdr-bell') + 1200);
+      assert.ok(!bell2.includes('hdr-badge'), 'sin badge vacía');
+      assert.ok(bell2.includes('Sin notificaciones.'), 'estado vacío');
+      await p.query(`DELETE FROM outbox WHERE titulo LIKE 'E2E-camp-%'`);
+    } finally { await p.end(); }
+  });
+  it('reintentos → fallido sin SMTP ni webhook', async () => {
+    await loginAsAdmin();
+    const p = pool();
+    try {
+      const e = await p.query(`INSERT INTO outbox (canal, titulo, destino, estado) VALUES ('email','E2E-mail-x','nadie@ejemplo.co','pendiente') RETURNING id`);
+      const d = await p.query(`INSERT INTO outbox (canal, titulo, estado) VALUES ('discord','E2E-disc-x','pendiente') RETURNING id`);
+      const er = await waitFor(async () => {
+        const r = (await p.query(`SELECT estado, intentos FROM outbox WHERE id = $1`, [e.rows[0].id])).rows[0];
+        return r.estado === 'fallido' ? r : null;
+      });
+      assert.equal(er.intentos, 2, 'agota reintentos (NOTIFY_MAX_INTENTOS=2)');
+      const dr = await waitFor(async () => {
+        const r = (await p.query(`SELECT estado FROM outbox WHERE id = $1`, [d.rows[0].id])).rows[0];
+        return r.estado === 'fallido' ? r : null;
+      });
+      assert.ok(dr, 'discord sin webhook → fallido');
+      await p.query(`DELETE FROM outbox WHERE id = ANY($1)`, [[e.rows[0].id, d.rows[0].id]]);
+    } finally { await p.end(); }
+  });
+  it('aislamiento por rol + 401 sin sesión', async () => {
+    await loginAsAdmin();
+    const p = pool();
+    try {
+      await p.query(`INSERT INTO outbox (canal, titulo, roles, estado) VALUES ('campana','E2E-rol-admin','{admin}','enviado')`);
+      await p.query(`INSERT INTO outbox (canal, titulo, roles, estado) VALUES ('campana','E2E-rol-cons','{consultor}','enviado')`);
+      jarC.cookie = '';
+      const lh = await (await fetchC('/login')).text();
+      const ctok = (lh.match(/name="_csrf" value="([^"]+)"/) || [])[1];
+      await fetchC('/auth/mock', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: ctok }) });
+      const clist = await (await fetchC('/api/notificaciones')).json();
+      assert.ok(clist.some((x) => x.titulo === 'E2E-rol-cons'), 'consultor ve las suyas');
+      assert.ok(!clist.some((x) => x.titulo === 'E2E-rol-admin'), 'consultor no ve las de admin');
+      const cd = await (await fetchC('/dashboard')).text();
+      const cmt = (cd.match(/name="csrf-token" content="([^"]+)"/) || [])[1];
+      const adm = await p.query(`SELECT id FROM outbox WHERE titulo = 'E2E-rol-admin'`);
+      assert.equal((await fetchC(`/api/notificaciones/${adm.rows[0].id}/leida`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-csrf-token': cmt } })).status, 404, 'leer ajena → 404');
+      assert.equal((await fetch(`${BASE}/api/notificaciones`)).status, 401, 'sin sesión → 401');
+      await p.query(`DELETE FROM outbox WHERE titulo LIKE 'E2E-rol-%'`);
+    } finally { await p.end(); }
   });
 });
 

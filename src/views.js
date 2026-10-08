@@ -32,6 +32,7 @@ const P = {
   perfil: '<path d="M17.925 20.056a6 6 0 0 0-11.851.001" /> <circle cx="12" cy="11" r="4" /> <circle cx="12" cy="12" r="10" />',
   mail: '<rect width="20" height="16" x="2" y="4" rx="2" /> <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />',
   chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />',
+  campana: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /> <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />',
 };
 
 function icon(name) {
@@ -275,12 +276,16 @@ function layout(appName, fnc, active, body, csrf, nonce, extra) {
   const vencidas = (extra && extra.vencidasList) || [];
   const vencItems = vencidas.map((t) =>
     `<a class="hdr-pop-item" href="/dashboard#tarea-${t.id}"><strong>${esc(t.titulo)}</strong><span class="hdr-pop-meta">Límite ${esc(fmtFechaCorta(t.fecha_limite))} · <span class="badge">${esc(t.rol || '')}</span></span></a>`).join('');
+  const nNotif = (extra && Number(extra.nNotif)) || 0;
+  const notifs = (extra && extra.notifList) || [];
+  const notifItems = notifs.map((n) =>
+    `<a class="hdr-pop-item" href="${esc(n.url || '#')}" data-notif-read="${n.id}"><strong>${esc(n.titulo)}</strong><span class="hdr-pop-meta">${esc(n.detalle || '')}</span></a>`).join('');
   const csrfField = csrf ? `<input type="hidden" name="_csrf" value="${csrf}">` : '';
   const csrfMetaTag = csrf ? `<meta name="csrf-token" content="${csrf}">` : '';
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${csrfMetaTag}${withNonce(A11Y_HEAD_JS, nonce)}<title>${esc(active)} — ${esc(appName)}</title><link rel="icon" type="image/svg+xml" href="/img/logo-sip-mini.svg"><link rel="stylesheet" href="/css/layout.css?v=20260928-doc"><link rel="stylesheet" href="/css/app.css?v=20260928-doc"></head><body>
 <header class="header-fnc"><div class="header-container">
 <div style="display:flex;align-items:center;gap:12px;"><div class="header-brand"><img class="brand-logo brand-logo-light" src="/img/logo-fnc-100.png" alt="Comité de Cafeteros del Tolima" height="30"><img class="brand-logo brand-logo-dark" src="/img/logo-fnc-tolima-white.png" alt="Comité de Cafeteros del Tolima" height="26"><span class="brand-divider" aria-hidden="true"></span><div><span class="header-brand-name"><strong>SIP</strong> Sistema de Información de Proyectos</span></div></div></div>
-<div class="header-user-profile"><div class="hdr-mail"><a class="hdr-icon" href="/dashboard" aria-label="Notificaciones" title="Tareas vencidas: ir al dashboard">${icon('mail')}${nVencidas > 0 ? `<span class="hdr-badge tnum">${nVencidas > 9 ? '9+' : nVencidas}</span>` : ''}</a><div class="hdr-pop" role="menu" aria-label="Tareas vencidas">${vencItems || '<span class="hdr-pop-empty">Sin vencidas.</span>'}<a class="hdr-pop-all" href="/dashboard">Ver todas</a></div></div><span class="hdr-icon" aria-label="Mensajes" title="Mensajes — próximamente" aria-disabled="true">${icon('chat')}</span><div class="user-menu"><button class="user-menu-trigger" aria-haspopup="true" aria-label="Menú de usuario" title="${esc((fnc.displayName || '') + (fnc.email ? ' · ' + fnc.email : ''))}"><span class="user-name">${esc(shownName(fnc))}</span>${fnc?.photo ? `<img class="user-photo" src="${fnc.photo}" alt="${esc(shownName(fnc) || 'Usuario')}">` : `<div class="user-avatar">${esc(initial)}</div>`}</button><div class="user-menu-pop" role="menu"><button class="user-menu-item" data-open-modal="perfil" type="button" role="menuitem">Perfil</button><form method="post" action="/auth/logout" style="margin:0">${csrfField}<button class="user-menu-item" type="submit" role="menuitem">Cerrar Sesión</button></form></div></div></div>
+<div class="header-user-profile"><div class="hdr-mail"><a class="hdr-icon" href="/dashboard" aria-label="Notificaciones" title="Tareas vencidas: ir al dashboard">${icon('mail')}${nVencidas > 0 ? `<span class="hdr-badge tnum">${nVencidas > 9 ? '9+' : nVencidas}</span>` : ''}</a><div class="hdr-pop" role="menu" aria-label="Tareas vencidas">${vencItems || '<span class="hdr-pop-empty">Sin vencidas.</span>'}<a class="hdr-pop-all" href="/dashboard">Ver todas</a></div></div><span class="hdr-icon" aria-label="Mensajes" title="Mensajes — próximamente" aria-disabled="true">${icon('chat')}</span><div class="hdr-bell"><a class="hdr-icon" href="#" aria-label="Campana" title="Notificaciones">${icon('campana')}${nNotif > 0 ? `<span class="hdr-badge tnum">${nNotif > 9 ? '9+' : nNotif}</span>` : ''}</a><div class="hdr-pop" role="menu" aria-label="Notificaciones">${notifItems || '<span class="hdr-pop-empty">Sin notificaciones.</span>'}${nNotif > 0 ? '<button type="button" class="hdr-pop-all" data-notif-all>Marcar leídas</button>' : ''}</div></div><div class="user-menu"><button class="user-menu-trigger" aria-haspopup="true" aria-label="Menú de usuario" title="${esc((fnc.displayName || '') + (fnc.email ? ' · ' + fnc.email : ''))}"><span class="user-name">${esc(shownName(fnc))}</span>${fnc?.photo ? `<img class="user-photo" src="${fnc.photo}" alt="${esc(shownName(fnc) || 'Usuario')}">` : `<div class="user-avatar">${esc(initial)}</div>`}</button><div class="user-menu-pop" role="menu"><button class="user-menu-item" data-open-modal="perfil" type="button" role="menuitem">Perfil</button><form method="post" action="/auth/logout" style="margin:0">${csrfField}<button class="user-menu-item" type="submit" role="menuitem">Cerrar Sesión</button></form></div></div></div>
 </div></header>
 <aside class="app-sidebar" aria-label="Navegacion principal">
 <nav class="sidebar-nav">
@@ -296,7 +301,7 @@ ${inactivityModal()}
 ${taskCreateModal()}
 ${detailDrawer()}
 <div class="conn-overlay" id="connOverlay" hidden><div class="modal-card" role="alert"><h2>Sin conexión</h2><p>Se perdió la conexión con el servidor. Reintentando automáticamente…</p><button class="btn-primary" id="connRetry" type="button" style="margin-top:0">Reintentar ahora</button></div></div>
-${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}${withNonce(PRINT_JS, nonce)}${withNonce(REGLA_JS, nonce)}${withNonce(DOCEDIT_JS, nonce)}</body></html>`;
+${active === '/dashboard' ? withNonce(NAV_RESET_JS, nonce) : ''}${withNonce(NAV_MEMORY_JS, nonce)}${withNonce(A11Y_JS, nonce)}${withNonce(MODAL_JS, nonce)}${withNonce(DRAWER_JS, nonce)}${withNonce(TASK_CREATE_JS, nonce)}${withNonce(INACTIVITY_JS, nonce)}${withNonce(CRUD_JS, nonce)}${withNonce(PAGER_JS, nonce)}${withNonce(PRINT_JS, nonce)}${withNonce(REGLA_JS, nonce)}${withNonce(DOCEDIT_JS, nonce)}${withNonce(NOTIF_JS, nonce)}</body></html>`;
 }
 
 // Regla de Oro en 2 pasos: paso 1 carga xlsx (tabla % sin valores),
@@ -846,6 +851,24 @@ if(p)p.disabled=cur===0;if(n)n.disabled=cur===pages-1;
 bar.querySelector('[data-pg-prev]').addEventListener('click',function(){if(cur>0){cur--;render();}});
 bar.querySelector('[data-pg-next]').addEventListener('click',function(){if(cur<pages-1){cur++;render();}});
 render();
+});
+}catch(e){}})();</script>`;
+
+// Campana: marcar notificación leída al abrirla + marcar todas leídas.
+// Sin inline onclick (CSP nonce).
+const NOTIF_JS = `<script>(function(){try{
+function csrfH(){try{var m=document.querySelector('meta[name="csrf-token"]');return m?m.getAttribute('content')||'':'';}catch(e){return '';}}
+function go(href){if(href&&href!=='#'){window.location.href=href;}else{window.location.reload();}}
+document.querySelectorAll('[data-notif-read]').forEach(function(a){
+a.addEventListener('click',function(ev){
+ev.preventDefault();
+var id=a.getAttribute('data-notif-read');var href=a.getAttribute('href');
+fetch('/api/notificaciones/'+encodeURIComponent(id)+'/leida',{method:'PUT',headers:{'x-csrf-token':csrfH(),'Accept':'application/json'}}).then(function(){go(href);}).catch(function(){go(href);});
+});
+});
+var all=document.querySelector('[data-notif-all]');
+if(all)all.addEventListener('click',function(){
+fetch('/api/notificaciones/leidas',{method:'PUT',headers:{'x-csrf-token':csrfH(),'Accept':'application/json'}}).then(function(){window.location.reload();}).catch(function(){window.location.reload();});
 });
 }catch(e){}})();</script>`;
 
