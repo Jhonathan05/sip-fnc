@@ -41,7 +41,7 @@ Flip KC staging: registrar `sip-fnc-client` en `fnc-realm` + `AUTH_PROVIDER=keyc
 - Foto: jpeg/png/webp ≤5 MB → webp 256px q80, un archivo por `sub`.
 - Actividad en 3 niveles (plataforma / mía / auditoría admin).
 - SMTP: solo Resend, API key cifrada en BD, módulo Email solo admin.
-- Skills en `G:\Open\appweb-skills-fnc` (sede canónica), nunca por proyecto.
+- Skills en `G:\Open\infra-fnc/skills` (sede canónica; `appweb-skills-fnc` congelado), nunca por proyecto. Catálogo: `skills/INDEX.md`.
 - Principios Modo B en cada cierre: 1) nada KC a medias, 2) sesión por contrato, 3) re-correr e2e al flipear.
 - Distribuciones unificada (`?tab=` carga/mpio/circ, default mpio; hoja mpio fuera del nav, legacy → 302 a `tab=mpio`); tokens `/v/` congelados (nuevas páginas AL FINAL).
 - Tablas documento calcadas de `docs/formatos/distribucion por {municipio,circunscripcion}.xlsx`: columnas MUNICIPIO|SICA 2005|DISTRIBUCIÓN (%×monto)|ASIGNACIONES CREADAS|SALDO (dist−creadas); fila `Circunscripción X` tras cada bloque + TOTAL; sin `$` (comas); centavos exactos (aritmética en enteros); en tab circ, DISTRIBUCIÓN/SALDO en blanco por municipio. Membrete 4 líneas + huecos `______` para N° distribución/acta (sin fuente en BD aún).
@@ -56,6 +56,21 @@ Flip KC staging: registrar `sip-fnc-client` en `fnc-realm` + `AUTH_PROVIDER=keyc
 3. Backups cifrados a R2 + monitoreo (skills fnc).
 4. Validar opción A (consola de cuenta KC) para contraseña.
 5. Staging KC: client + secret + flip `AUTH_PROVIDER` + e2e contra staging.
+
+## Plan por fases — skills infra-fnc (2026-10-08)
+Fuente: `G:\Open\infra-fnc/skills` (`INDEX.md`). Fuera: `fnc-url-masking`
+(revertida 1.3.1), UI `fnc-admin-panel` (Next/Prisma), `fnc-backend`
+(rige Postgres único).
+- **Fase 1** — Notificaciones: `006_outbox.sql` + `src/notify.js` (encolar transaccional,
+worker `setInterval` con `SKIP LOCKED`, scheduler vencimientos 3-1-0, campana por rol
+`GET|PUT /api/notificaciones`, email Resend, Discord helper fire-and-forget).
+- **Fase 2** — Monitoreo (`fnc-monitoring`): `/api/health|/ready`, eventos `audit_log`→Discord,
+`pg_dump -Fc`→R2 (30d) + cron, Uptime Kuma → `/api/ready`.
+- **Fase 3** — PWA+push (`fnc-pwa-webpush` v2.1.7, `fnc-pwa`, `fnc-app-icon-badge`):
+manifest dinámico, `sw.js`, consent, `007_push.sql` + endpoints subscribe, `web-push`
+(VAPID + HTTPS vía túnel).
+- **Fase 4** — Transversales: license audit, lockout login+Habeas, CI e2e, flip KC staging,
+design-system al final. `fnc-keycloak-events` solo si se migra a KC.
 
 ## Skills aplicables del ecosistema
 `test-hygiene` (obligatoria), `fnc-url-masking` (revertida: ver release 1.3.1),
