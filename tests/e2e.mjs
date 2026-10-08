@@ -27,7 +27,10 @@ const PORT_C = 3102;
 const BASE_C = `http://localhost:${PORT_C}`;
 
 async function fetchJ(pathname, opts = {}) {
-  const headers = { ...(opts.headers || {}) };
+  // Connection: close — el servidor corta keep-alive a los 5s; tras brechas
+  // largas (p. ej. backup 8s) reutilizar pooled RST ECONNRESET. Los navegadores
+  // reintentan GETs idempotentes; aquí evitamos la carrera directamente.
+  const headers = { Connection: 'close', ...(opts.headers || {}) };
   if (jar.cookie) headers.Cookie = jar.cookie;
   const res = await fetch(BASE + pathname, { redirect: 'manual', ...opts, headers });
   const sets = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
@@ -36,7 +39,7 @@ async function fetchJ(pathname, opts = {}) {
 }
 
 async function fetchC(pathname, opts = {}) {
-  const headers = { ...(opts.headers || {}) };
+  const headers = { Connection: 'close', ...(opts.headers || {}) };
   if (jarC.cookie) headers.Cookie = jarC.cookie;
   const res = await fetch(BASE_C + pathname, { redirect: 'manual', ...opts, headers });
   const sets = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
@@ -871,6 +874,47 @@ describe('notificaciones outbox + campana', () => {
       assert.equal((await fetch(`${BASE}/api/notificaciones`)).status, 401, 'sin sesión → 401');
       await p.query(`DELETE FROM outbox WHERE titulo LIKE 'E2E-rol-%'`);
     } finally { await p.end(); }
+  });
+});
+
+describe('monitoreo health/ready + backup', () => {
+  it('health liviano y ready con BD (públicos, sin sesión)', async () => {
+    const h = await (await fetch(`${BASE}/api/health`)).json();
+    assert.equal(h.ok, true);
+    assert.match(h.version, /^\d+\.\d+\.\d+$/, 'versión semántica');
+    const r = await (await fetch(`${BASE}/api/ready`)).json();
+    assert.equal(r.ok, true);
+    assert.equal(r.db, true);
+    assert.equal(r.version, h.version);
+  });
+  it('maestro.borrar encola aviso Discord', async () => {
+    await loginAsAdmin();
+    const mt = await csrfMeta();
+    const h = { 'Content-Type': 'application/json', 'x-csrf-token': mt };
+    const c = await (await fetchJ('/api/maestros/circunscripciones', { method: 'POST', headers: h, body: JSON.stringify({ codigo: 'E2EDEL', nombre: 'Para borrar' }) })).json();
+    assert.equal(c.ok, true);
+    const d = await (await fetchJ('/api/maestros/circunscripciones/E2EDEL', { method: 'DELETE', headers: h })).json();
+    assert.equal(d.ok, true);
+    const { Pool } = require('pg');
+    const p = new Pool({ connectionString: TEST_DB });
+    try {
+      const row = await p.query(`SELECT canal, estado FROM outbox WHERE ref = 'maestro-borrado:circunscripciones:E2EDEL'`);
+      assert.equal(row.rows.length, 1, 'aviso encolado');
+      assert.equal(row.rows[0].canal, 'discord');
+      await p.query(`DELETE FROM outbox WHERE ref = 'maestro-borrado:circunscripciones:E2EDEL'`);
+    } finally { await p.end(); }
+  });
+  it('backup-r2.ps1 LocalOnly genera .enc verificado (BD de test)', async () => {
+    const out = path.join(fs.mkdtempSync(path.join(require('os').tmpdir(), 'e2e-bak-')));
+    try {
+      const log = execSync(
+        `powershell -NoProfile -ExecutionPolicy Bypass -File "${path.join(ROOT, 'infra', 'backup-r2.ps1')}" -LocalOnly -DbName sip_fnc_test -OutDir "${out}"`,
+        { cwd: ROOT, env: { ...process.env, BACKUP_ENCRYPTION_KEY: 'e2e-local-test-key' }, stdio: 'pipe', timeout: 120000 }).toString();
+      assert.ok(log.includes('OK local'), 'backup verificado con hash');
+      assert.ok(fs.readdirSync(out).some((f) => f.endsWith('.dump.gz.enc')), 'existe .enc');
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true });
+    }
   });
 });
 

@@ -76,6 +76,7 @@ const myRoles = (fnc) => [...new Set([String(fnc.role || '').toLowerCase(), ...(
 
 const crypto = require('crypto');
 const APP_NAME = process.env.APP_NAME || 'app-fnc';
+const APP_VERSION = require('../package.json').version;
 const app = express();
 app.set('trust proxy', 1); // IP real tras nginx (cf-connecting-ip / x-forwarded-for)
 // URLs opacas: /v/:token → ruta real (conserva query). Primero de todo;
@@ -151,6 +152,20 @@ app.use('/api/', apiLimiter);
 function rateLimitMax() {
   return hotMax == null ? ENV_MAX : hotMax;
 }
+
+// Sondas de monitoreo (públicas, sin sesión): Kuma → /api/ready.
+// /health no toca BD; /ready verifica SELECT 1 (503 si la BD cae).
+app.get('/api/health', (req, res) => res.json({ ok: true, version: APP_VERSION }));
+app.get('/api/ready', async (req, res) => {
+  try {
+    const pool = getPool();
+    if (!pool) return res.status(503).json({ ok: false, error: 'Sin BD.' });
+    await pool.query('SELECT 1');
+    return res.json({ ok: true, version: APP_VERSION, db: true });
+  } catch (e) {
+    return res.status(503).json({ ok: false, error: 'BD no disponible.' });
+  }
+});
 
 // CSRF synchronizer en todos los POST (tras parsers y sesión).
 app.use(verifyCsrf);
@@ -587,6 +602,9 @@ app.delete('/api/maestros/:id/:codigo', needLogin, needDb, async (req, res) => {
     const { rowCount } = await getPool().query(`DELETE FROM ${m.table} WHERE ${m.pk} = $1`, [pk]);
     if (!rowCount) return res.status(404).json({ ok: false, error: 'No encontrado.' });
     await writeAudit(req, { action: 'maestro.borrar', modulo: 'distribucion', entidadId: String(pk), detalle: req.params.id });
+    try {
+      await notify.encolar({ canal: 'discord', titulo: `Maestro borrado: ${req.params.id} ${pk}`, detalle: `Por ${req.session.fnc.email || '?'}`, ref: `maestro-borrado:${req.params.id}:${pk}` });
+    } catch { /* aviso best-effort */ }
     return res.json({ ok: true });
   } catch (e) {
     if (e.code === '23503') return res.status(409).json({ ok: false, error: 'En uso: no se puede borrar.' });
