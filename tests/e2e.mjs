@@ -701,6 +701,7 @@ describe('distribuciones: 3 escenarios por vigencia', () => {
     assert.ok(html.includes('data-docedit="monto"'), 'botón editar monto global');
     assert.match(html, /id="docmonto-municipio-\d+-line"/, 'línea monto global municipio');
     assert.match(html, /cfg-tab active[^>]*>Por municipio/, 'tab mpio activo');
+    assert.ok(html.includes('<span class="doc-val">1,250,000,000.00</span>'), 'monto global con centavos (.00 visible)');
   });
   it('mpio: botón ✎ por fila cuando hay municipios (vigencia regla 2031)', async () => {
     await loginAsAdmin();
